@@ -5,13 +5,6 @@ using System.Text.Json;
 
 namespace RpgSceneMaker.Api.Services;
 
-public record SpotifyDevice(string Id, string Name, string Type, bool IsActive);
-public record SpotifyPlaylist(string Id, string Name, string Uri, string? ImageUrl, int TrackCount);
-public record SpotifyTrack(string Id, string Name, string Artist, string Uri, string? ImageUrl);
-public record SpotifyPlaybackState(
-    bool IsPlaying, string? TrackName, string? ArtistName, string? ContextUri, string? DeviceName, int? VolumePercent,
-    double? ProgressSeconds, double? DurationSeconds, bool IsShuffling, string Repeat);
-
 /// <summary>
 /// Shared, process-wide cache of the current Spotify access token. Registered as a singleton so that
 /// the transient-per-resolution <see cref="SpotifyClient"/> (via AddHttpClient) doesn't re-refresh on
