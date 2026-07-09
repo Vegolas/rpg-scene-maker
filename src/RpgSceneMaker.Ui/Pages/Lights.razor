@@ -6,17 +6,17 @@
 
 @if (_registry.Count > 0)
 {
-    <h2 class="rune">Target</h2>
+    <RuneHeading>Target</RuneHeading>
     <div class="chip-row">
-        <button class="chip @(_target is null ? "on" : "")" @onclick="() => _target = null">All</button>
+        <Chip On="_target is null" OnClick="() => _target = null">All</Chip>
         @foreach (var light in _registry)
         {
-            <button class="chip @(_target == light.Key ? "on" : "")" @onclick="() => _target = light.Key">@light.Name</button>
+            <Chip On="_target == light.Key" OnClick="() => _target = light.Key">@light.Name</Chip>
         }
     </div>
 }
 
-<h2 class="rune">Power</h2>
+<RuneHeading>Power</RuneHeading>
 <div class="btn-row">
     <button class="btn big primary" @onclick="@(() => Send(Path("on"), "Light on"))">On</button>
     @if (_target is null)
@@ -26,54 +26,25 @@
     <button class="btn big danger" @onclick="@(() => Send(Path("off"), "Light off"))">Off</button>
 </div>
 
-<h2 class="rune">Mood Colors</h2>
-<div class="swatch-grid">
-    @foreach (var (hex, name) in Moods)
-    {
-        <button class="swatch @(hex == _pickedHex ? "picked" : "")"
-                style="background:@hex; --swc:@hex"
-                title="@name"
-                aria-label="@name"
-                @onclick="() => SetColor(hex, name)"></button>
-    }
-    <input type="color" value="@_pickedHex" title="Custom color"
-           @onchange="@(e => SetColor(e.Value?.ToString() ?? "#ff8c2a", "custom color"))" />
+<RuneHeading>Mood Colors</RuneHeading>
+<SwatchGrid Selected="_pickedHex" OnPick="OnColorPicked" />
+
+<RuneHeading>Brightness</RuneHeading>
+<div class="panel">
+    <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" Value="_brightness"
+               ValueChanged="OnBrightnessChanged" AriaLabel="Brightness" />
 </div>
 
-<h2 class="rune">Brightness</h2>
+<RuneHeading>White Light</RuneHeading>
 <div class="panel">
-    <div class="slider-row">
-        <span class="slider-ico">🔅</span>
-        <input type="range" min="1" max="100" value="@_brightness" @onchange="OnBrightnessChanged" aria-label="Brightness" />
-        <span class="slider-val">@_brightness%</span>
-    </div>
-</div>
-
-<h2 class="rune">White Light</h2>
-<div class="panel">
-    <div class="slider-row">
-        <span class="slider-ico">🕯️</span>
-        <input type="range" min="0" max="100" value="@_temperature" @onchange="OnTemperatureChanged" aria-label="Color temperature" />
-        <span class="slider-ico">❄️</span>
-    </div>
+    <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" Value="_temperature"
+               ValueChanged="OnTemperatureChanged" AriaLabel="Color temperature" />
     <div class="btn-row">
         <button class="btn primary" @onclick="ApplyWhite">Set white (@_brightness%, @TempLabel)</button>
     </div>
 </div>
 
 @code {
-    private static readonly (string Hex, string Name)[] Moods =
-    [
-        ("#ff8c2a", "Candlelight"),
-        ("#ff1e1e", "Blood / combat"),
-        ("#3a7a4a", "Forest / dungeon"),
-        ("#7a3aff", "Arcane"),
-        ("#4aa8ff", "Ice / water"),
-        ("#ff4a8c", "Fey"),
-        ("#ffd84a", "Treasure"),
-        ("#20e0c0", "Poison / ghost"),
-    ];
-
     private List<RegisteredLightInfo> _registry = [];
     private string? _target;   // null = all lights (group endpoints); else a registry key
 
@@ -81,7 +52,7 @@
     private int _brightness = 80;
     private int _temperature = 40;
 
-    private string TempLabel => _temperature < 34 ? "warm" : _temperature > 66 ? "cold" : "neutral";
+    private string TempLabel => LightFormat.TempWord(_temperature);
 
     protected override async Task OnInitializedAsync() =>
         _registry = await Api.GetRegisteredLightsAsync();
@@ -91,23 +62,23 @@
 
     private Task Send(string path, string? ok = null) => Api.CommandAsync(path, ok);
 
-    private async Task SetColor(string hex, string name)
+    private async Task OnColorPicked(string hex)
     {
         _pickedHex = hex;
+        var name = Palette.Moods.FirstOrDefault(m => string.Equals(m.Hex, hex, StringComparison.OrdinalIgnoreCase)).Name
+                   ?? "custom color";
         await Api.CommandAsync($"{Path("color")}?hex={Uri.EscapeDataString(hex.TrimStart('#'))}&brightness={_brightness}", $"Light: {name}");
     }
 
-    private async Task OnBrightnessChanged(ChangeEventArgs e)
+    private async Task OnBrightnessChanged(int value)
     {
-        if (!int.TryParse(e.Value?.ToString(), out var value)) return;
         _brightness = value;
         await Api.CommandAsync($"{Path("brightness")}?value={value}");
     }
 
-    private async Task OnTemperatureChanged(ChangeEventArgs e)
+    private async Task OnTemperatureChanged(int value)
     {
-        if (int.TryParse(e.Value?.ToString(), out var value))
-            _temperature = value;
+        _temperature = value;
         await ApplyWhite();
     }
 

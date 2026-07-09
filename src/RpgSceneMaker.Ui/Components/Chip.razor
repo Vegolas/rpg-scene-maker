@@ -1,0 +1,8 @@
+@* A pill toggle button. Place inside a .chip-row. *@
+<button class="chip @(On ? "on" : "")" @onclick="OnClick">@ChildContent</button>
+
+@code {
+    [Parameter] public bool On { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

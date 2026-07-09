@@ -1,0 +1,34 @@
+@* An icon + range slider row. Shows a numeric value on the right, unless RightIcon is set. *@
+<div class="slider-row">
+    <span class="slider-ico">@LeftIcon</span>
+    <input type="range" min="@Min" max="@Max" value="@Value" @onchange="OnChanged" aria-label="@AriaLabel" />
+    @if (RightIcon is not null)
+    {
+        <span class="slider-ico">@RightIcon</span>
+    }
+    else
+    {
+        <span class="slider-val">@Value@Suffix</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string LeftIcon { get; set; } = "";
+    // When set, the right side shows this icon instead of the numeric value (e.g. warm↔cold).
+    [Parameter] public string? RightIcon { get; set; }
+    [Parameter] public string Suffix { get; set; } = "";
+    [Parameter] public int Min { get; set; }
+    [Parameter] public int Max { get; set; } = 100;
+    [Parameter] public int Value { get; set; }
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private async Task OnChanged(ChangeEventArgs e)
+    {
+        if (e.AsInt() is { } v)
+        {
+            Value = v;
+            await ValueChanged.InvokeAsync(v);
+        }
+    }
+}

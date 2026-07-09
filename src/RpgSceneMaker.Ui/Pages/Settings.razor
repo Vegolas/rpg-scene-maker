@@ -1,5 +1,4 @@
 @page "/settings"
-@using System.Text
 @inject ApiClient Api
 @inject UiState Ui
 @inject NavigationManager Nav
@@ -12,16 +11,16 @@
 }
 else
 {
-    <h2 class="rune">Light System</h2>
+    <RuneHeading>Light System</RuneHeading>
     <div class="chip-row">
-        <button class="chip @(IsHue ? "" : "on")" @onclick="@(() => SetProvider("tuya"))">Tuya bulb</button>
-        <button class="chip @(IsHue ? "on" : "")" @onclick="@(() => SetProvider("hue"))">Philips Hue</button>
+        <Chip On="@(!IsHue)" OnClick="@(() => SetProvider("tuya"))">Tuya bulb</Chip>
+        <Chip On="@(IsHue)" OnClick="@(() => SetProvider("hue"))">Philips Hue</Chip>
     </div>
     <p class="hint">Only the selected system's settings are shown. Scenes and the Lights tab control it.</p>
 
     @if (IsHue)
     {
-    <h2 class="rune">Philips Hue</h2>
+    <RuneHeading>Philips Hue</RuneHeading>
     <div class="panel">
         <div class="field">
             <label for="bridge-ip">Bridge IP</label>
@@ -82,7 +81,7 @@ else
     }
     else
     {
-    <h2 class="rune">Tuya Bulb</h2>
+    <RuneHeading>Tuya Bulb</RuneHeading>
     <div class="panel">
         <div class="field">
             <label for="tuya-ip">Bulb IP</label>
@@ -126,7 +125,7 @@ else
     </div>
     }
 
-    <h2 class="rune">Light Registry</h2>
+    <RuneHeading>Light Registry</RuneHeading>
     <div class="panel">
         <p class="hint">Individually addressable lights that scenes and the Lights tab can target one by one.</p>
 
@@ -140,7 +139,7 @@ else
                 @foreach (var light in _config.Lights)
                 {
                     <div class="reg-row">
-                        <span class="reg-badge @(light.Provider == "hue" ? "hue" : "tuya")">@(light.Provider == "hue" ? "Hue" : "Tuya")</span>
+                        <span class="reg-badge @(light.Provider == "hue" ? "hue" : "tuya")">@LightFormat.ProviderLabel(light.Provider)</span>
                         <input class="reg-name" type="text" @bind="light.Name" placeholder="Light name" />
                         <code class="reg-key" title="Stable key used by scenes and endpoints">@light.Key</code>
                         <button class="reg-remove" aria-label="Remove light" @onclick="() => RemoveLight(light)">✕</button>
@@ -189,7 +188,7 @@ else
         </div>
     </div>
 
-    <h2 class="rune">Spotify</h2>
+    <RuneHeading>Spotify</RuneHeading>
     <div class="panel">
         <div class="field">
             <label for="spotify-client-id">Client ID</label>
@@ -245,7 +244,7 @@ else
             </div>
         }
     </div>
-    <h2 class="rune">This Device</h2>
+    <RuneHeading>This Device</RuneHeading>
     <div class="panel">
         <div class="field">
             <label for="apikey">API key (only if the server has one configured)</label>
@@ -507,7 +506,7 @@ else
             Provider = "hue",
             HueId = hl.Id,
             Name = hl.Name,
-            Key = UniqueKey(Slugify(hl.Name)),
+            Key = UniqueKey(SceneNaming.Slugify(hl.Name)),
         });
     }
 
@@ -525,24 +524,6 @@ else
 
     private void RemoveLight(RegisteredLightEdit light) => _config?.Lights.Remove(light);
 
-    private string UniqueKey(string baseKey)
-    {
-        if (string.IsNullOrEmpty(baseKey)) baseKey = "light";
-        var key = baseKey;
-        var n = 2;
-        while (_config!.Lights.Any(l => l.Key.Equals(key, StringComparison.OrdinalIgnoreCase)))
-            key = $"{baseKey}-{n++}";
-        return key;
-    }
-
-    private static string Slugify(string label)
-    {
-        var sb = new StringBuilder();
-        foreach (var c in label.Trim().ToLowerInvariant())
-        {
-            if (char.IsAsciiLetterOrDigit(c)) sb.Append(c);
-            else if (c is ' ' or '-' or '_' && sb.Length > 0 && sb[^1] != '-') sb.Append('-');
-        }
-        return sb.ToString().Trim('-');
-    }
+    private string UniqueKey(string baseKey) =>
+        SceneNaming.MakeUnique(baseKey, _config!.Lights.Select(l => l.Key).ToList(), "light");
 }

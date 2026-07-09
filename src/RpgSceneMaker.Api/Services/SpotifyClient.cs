@@ -5,13 +5,6 @@ using System.Text.Json;
 
 namespace RpgSceneMaker.Api.Services;
 
-public record SpotifyDevice(string Id, string Name, string Type, bool IsActive);
-public record SpotifyPlaylist(string Id, string Name, string Uri, string? ImageUrl, int TrackCount);
-public record SpotifyTrack(string Id, string Name, string Artist, string Uri, string? ImageUrl);
-public record SpotifyPlaybackState(
-    bool IsPlaying, string? TrackName, string? ArtistName, string? ContextUri, string? DeviceName, int? VolumePercent,
-    double? ProgressSeconds, double? DurationSeconds, bool IsShuffling, string Repeat);
-
 /// <summary>
 /// Shared, process-wide cache of the current Spotify access token. Registered as a singleton so that
 /// the transient-per-resolution <see cref="SpotifyClient"/> (via AddHttpClient) doesn't re-refresh on
@@ -242,13 +235,8 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
                 foreach (var p in items.EnumerateArray())
                 {
                     if (p.ValueKind != JsonValueKind.Object) continue;
-                    var trackCount = p.TryGetProperty("tracks", out var tr)
-                                     && tr.ValueKind == JsonValueKind.Object
-                                     && tr.TryGetProperty("total", out var tot)
-                                     && tot.ValueKind == JsonValueKind.Number
-                        ? tot.GetInt32() : 0;
                     list.Add(new SpotifyPlaylist(Str(p, "id"), Str(p, "name"), Str(p, "uri"),
-                        FirstImageUrl(p), trackCount));
+                        FirstImageUrl(p), PlaylistTrackTotal(p)));
                 }
             path = NextPath(root);
         }
@@ -425,6 +413,17 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
                     return u.GetString();
         return null;
     }
+
+    // Spotify deprecated the per-playlist "tracks" ref object in favour of "items"; on many accounts the
+    // legacy "tracks.total" now reports 0 while the new "items.total" carries the real count. Read both
+    // and take whichever is populated so the count is right regardless of which field Spotify fills.
+    private static int PlaylistTrackTotal(JsonElement playlist) =>
+        Math.Max(TotalOf(playlist, "items"), TotalOf(playlist, "tracks"));
+
+    private static int TotalOf(JsonElement playlist, string prop) =>
+        playlist.TryGetProperty(prop, out var o) && o.ValueKind == JsonValueKind.Object
+        && o.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number
+            ? t.GetInt32() : 0;
 
     private static string? NextPath(JsonElement root)
     {

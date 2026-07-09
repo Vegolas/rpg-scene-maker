@@ -1,0 +1,40 @@
+using RpgSceneMaker.Api.Models;
+using RpgSceneMaker.Api.Services;
+using RpgSceneMaker.Api.Validation;
+
+namespace RpgSceneMaker.Api.Endpoints;
+
+public static class SceneEndpoints
+{
+    public static void MapSceneEndpoints(this WebApplication app)
+    {
+        var scenes = app.MapGroup("/scenes");
+
+        scenes.MapGet("/", (SceneStore store) => store.GetAllAsync());
+
+        scenes.MapGet("/active", (CurrentState state) =>
+            new { id = state.ActiveSceneId, activatedAt = state.ActivatedAt });
+
+        scenes.MapGet("/{id}", async (string id, SceneStore store) =>
+            await store.GetAsync(id) is { } scene ? Results.Ok(scene) : Results.NotFound());
+
+        scenes.MapPut("/{id}", async (string id, Scene scene, SceneStore store) =>
+        {
+            scene.Id = id;
+            SceneValidation.Validate(scene);
+            await store.UpsertAsync(scene);
+            return Results.Ok(scene);
+        });
+
+        scenes.MapDelete("/{id}", async (string id, SceneStore store) =>
+            await store.DeleteAsync(id) ? Results.NoContent() : Results.NotFound());
+
+        scenes.MapMethods("/{id}/activate", EndpointHelpers.GetOrPost, async (string id, SceneStore store, SceneActivator activator) =>
+        {
+            if (await store.GetAsync(id) is not { } scene)
+                return Results.NotFound(new { error = $"No scene with id '{id}'. See GET /scenes." });
+            var result = await activator.ActivateAsync(scene);
+            return Results.Json(result, statusCode: result.FullySucceeded ? 200 : 207);
+        });
+    }
+}

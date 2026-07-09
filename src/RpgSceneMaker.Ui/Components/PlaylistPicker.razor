@@ -1,0 +1,29 @@
+@* The Spotify playlist list, with loading and empty states. Raises OnPick with the chosen playlist.
+   SelectedUri highlights the current pick (leave null when clicking should act immediately). *@
+@if (Playlists is null)
+{
+    <p class="empty-note">Reading your Spotify playlists…</p>
+}
+else if (Playlists.Count == 0)
+{
+    @EmptyContent
+}
+else
+{
+    <div class="klist" style="@ListStyle">
+        @foreach (var pl in Playlists)
+        {
+            var hint = $"{pl.TrackCount} tracks";
+            <KRow Icon="🎧" Title="@pl.Name" Hint="@hint"
+                  Selected="@(SelectedUri == pl.Uri)" OnClick="() => OnPick.InvokeAsync(pl)" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<SpotifyPlaylistDto>? Playlists { get; set; }
+    [Parameter] public string? SelectedUri { get; set; }
+    [Parameter] public EventCallback<SpotifyPlaylistDto> OnPick { get; set; }
+    [Parameter] public RenderFragment? EmptyContent { get; set; }
+    [Parameter] public string? ListStyle { get; set; }
+}

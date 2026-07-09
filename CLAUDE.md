@@ -11,12 +11,16 @@ See [README.md](README.md) for the user-facing setup walkthrough (Tuya, Hue, Spo
 Two projects under `src/`; the solution file lives at
 [src/RpgSceneMaker.Api/RpgSceneMaker.slnx](src/RpgSceneMaker.Api/RpgSceneMaker.slnx).
 
-- **RpgSceneMaker.Api** — Minimal API (all routes in [Program.cs](src/RpgSceneMaker.Api/Program.cs)).
+- **RpgSceneMaker.Api** — Minimal API. [Program.cs](src/RpgSceneMaker.Api/Program.cs) wires up DI +
+  middleware and calls the endpoint groups in `Endpoints/` (`Scene`/`Light`/`Music`/`Setup`Endpoints, one
+  `Map…Endpoints()` extension method each); wire DTOs live in `Contracts/`, request guards in `Validation/`.
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Music, Lights,
-  Settings). All server calls go through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs).
+- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Music, Lights, Settings, Logs);
+  reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
+  constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions). All server calls go
+  through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs).
 
 ## Build & run
 
@@ -37,18 +41,22 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 - **`SpotifyClient` / `SpotifyStore`** — music is Spotify-only. `SpotifyClient` wraps the Spotify Web
   API (Authorization Code + PKCE, no client secret) to drive a Spotify Connect device on the LAN;
   `SpotifyStore` persists the Client ID, refresh token and preferred device (in SQLite). The OAuth
-  connect flow lives under `/setup/spotify/*` in [Program.cs](src/RpgSceneMaker.Api/Program.cs), and
-  `/music/*` maps straight onto `SpotifyClient` (play/pause/resume/next/previous/volume/shuffle/repeat +
+  connect flow lives under `/setup/spotify/*` in [SetupEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SetupEndpoints.cs),
+  and `/music/*` ([MusicEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/MusicEndpoints.cs)) maps straight onto `SpotifyClient` (play/pause/resume/next/previous/volume/shuffle/repeat +
   playlists/search/state). Playing requires a `spotify:` URI or `open.spotify.com` link.
 - **`SceneActivator`** — applies a scene's light/music **concurrently**; each part reports
   ok/skipped/error independently (activation returns HTTP 207 if any part failed).
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
+- **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
+  bounded ring buffer of recent log entries, fed by `InMemoryLoggerProvider` (our logs at Information,
+  everything else at Warning+) and surfaced by `/logs/list` + the panel's Logs tab. The error middleware
+  logs every caught failure here.
 - **`SceneStore` / `SettingsStore`** — persistence (see below).
 
 ### Conventions
 
-- **Every command endpoint accepts both GET and POST** (`getOrPost`) so the Stream Deck *System →
-  Website* action works without a plugin. Keep this when adding command routes.
+- **Every command endpoint accepts both GET and POST** (`EndpointHelpers.GetOrPost`) so the Stream Deck
+  *System → Website* action works without a plugin. Keep this when adding command routes.
 - **Errors → status codes**: integration failures are thrown as typed exceptions
   (`SpotifyException`, `HueException`, `ArgumentException`, socket/timeout, etc.) and mapped to HTTP
   status + Problem responses by the first middleware in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
@@ -56,8 +64,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   returning ad-hoc error bodies.
 - **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /setup` require it
   (`X-Api-Key` header or `?apiKey=`). The panel stores it in browser localStorage.
-- **DTOs are duplicated**, not shared: the UI has its own copies of the request/response shapes in
-  [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs) (there is no shared contracts project).
+- **DTOs are duplicated**, not shared: the API's wire DTOs live in `Contracts/` and the UI keeps its own
+  copies in [its own `Contracts/`](src/RpgSceneMaker.Ui/Contracts) (there is no shared contracts project).
   If you change an API DTO, update the matching UI DTO by hand.
 
 ## Persistence

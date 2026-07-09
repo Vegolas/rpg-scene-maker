@@ -1,0 +1,17 @@
+@* A segmented control: one button per option, the one equal to Value is highlighted. *@
+@typeparam TValue
+
+<div class="segmented" style="@Style">
+    @foreach (var opt in Options)
+    {
+        <button class="seg @(Equals(opt.Value, Value) ? "on" : "")"
+                @onclick="() => ValueChanged.InvokeAsync(opt.Value)">@opt.Label</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<(TValue Value, string Label)> Options { get; set; } = [];
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter] public string? Style { get; set; }
+}

@@ -2,7 +2,6 @@
    otherwise match the API's GET /scenes/{id} on a full page load and 404 instead of the app. *@
 @page "/editor"
 @page "/editor/{SceneId}"
-@using System.Text
 @implements IDisposable
 @inject ApiClient Api
 @inject UiState Ui
@@ -16,20 +15,18 @@
 }
 else
 {
-    <h2 class="rune">@(_isNew ? "New Scene" : "Edit Scene")</h2>
+    <RuneHeading>@(_isNew ? "New Scene" : "Edit Scene")</RuneHeading>
 
     <div class="panel">
         <div class="emoji-row">
-            @foreach (var e in Emojis)
+            @foreach (var e in Palette.Emojis)
             {
-                <button class="emoji-pick @(e == _emoji ? "picked" : "")"
-                        @onclick="() => ToggleEmoji(e)">@e</button>
+                <button class="emoji-pick @(e == _emoji ? "picked" : "")" @onclick="() => ToggleEmoji(e)">@e</button>
             }
         </div>
         <div class="field" style="margin-top:1rem;margin-bottom:0">
             <label for="scene-label">Name</label>
-            <input id="scene-label" type="text" value="@_label" @oninput="OnLabelInput"
-                   placeholder="e.g. Tavern" />
+            <input id="scene-label" type="text" value="@_label" @oninput="OnLabelInput" placeholder="e.g. Tavern" />
         </div>
         <p class="hint" style="margin-top:0.6rem">
             @if (_isNew)
@@ -43,55 +40,23 @@ else
         </p>
     </div>
 
-    <h2 class="rune">Lights</h2>
+    <RuneHeading>Lights</RuneHeading>
     <div class="panel">
-        <div class="segmented">
-            <button class="seg @(_scope == LightScope.None ? "on" : "")" @onclick="() => SetScope(LightScope.None)">Leave alone</button>
-            <button class="seg @(_scope == LightScope.All ? "on" : "")" @onclick="() => SetScope(LightScope.All)">All lights</button>
-            <button class="seg @(_scope == LightScope.PerLight ? "on" : "")" @onclick="() => SetScope(LightScope.PerLight)">Per light</button>
-        </div>
+        <Segmented TValue="LightScope" Options="ScopeOptions" Value="_scope" ValueChanged="SetScope" />
 
         @if (_scope == LightScope.All)
         {
-            <div class="segmented" style="margin-top:1rem">
-                <button class="seg @(_lightMode == LightMode.Color ? "on" : "")" @onclick="() => _lightMode = LightMode.Color">Color</button>
-                <button class="seg @(_lightMode == LightMode.White ? "on" : "")" @onclick="() => _lightMode = LightMode.White">White</button>
-                <button class="seg @(_lightMode == LightMode.Off ? "on" : "")" @onclick="() => _lightMode = LightMode.Off">Turn off</button>
-            </div>
+            <Segmented TValue="LightMode" Options="ModeOptions" Value="_lightMode" ValueChanged="@(m => _lightMode = m)" Style="margin-top:1rem" />
 
             @if (_lightMode == LightMode.Color)
             {
-                <div class="swatch-grid" style="margin-top:1rem">
-                    @foreach (var (hex, name) in Moods)
-                    {
-                        <button class="swatch @(string.Equals(hex, _color, StringComparison.OrdinalIgnoreCase) ? "picked" : "")"
-                                style="background:@hex; --swc:@hex" title="@name" aria-label="@name"
-                                @onclick="() => _color = hex"></button>
-                    }
-                    <input type="color" value="@_color" title="Custom color"
-                           @onchange="e => _color = e.Value?.ToString() ?? _color" />
-                </div>
-                <div class="slider-row">
-                    <span class="slider-ico">🔅</span>
-                    <input type="range" min="1" max="100" value="@_brightness"
-                           @onchange="e => SetBrightness(e)" aria-label="Brightness" />
-                    <span class="slider-val">@_brightness%</span>
-                </div>
+                <SwatchGrid Selected="_color" OnPick="@(hex => _color = hex)" Style="margin-top:1rem" />
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="_brightness" AriaLabel="Brightness" />
             }
             else if (_lightMode == LightMode.White)
             {
-                <div class="slider-row">
-                    <span class="slider-ico">🕯️</span>
-                    <input type="range" min="0" max="100" value="@_temperature"
-                           @onchange="e => SetTemperature(e)" aria-label="Color temperature" />
-                    <span class="slider-ico">❄️</span>
-                </div>
-                <div class="slider-row">
-                    <span class="slider-ico">🔅</span>
-                    <input type="range" min="1" max="100" value="@_brightness"
-                           @onchange="e => SetBrightness(e)" aria-label="Brightness" />
-                    <span class="slider-val">@_brightness%</span>
-                </div>
+                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="_temperature" AriaLabel="Color temperature" />
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="_brightness" AriaLabel="Brightness" />
             }
             else
             {
@@ -111,7 +76,7 @@ else
                     {
                         <div class="light-row @(row.Expanded ? "open" : "")">
                             <button class="light-head" @onclick="() => row.Expanded = !row.Expanded">
-                                <span class="reg-badge @(row.Provider == "hue" ? "hue" : "tuya")">@ProviderLabel(row.Provider)</span>
+                                <span class="reg-badge @(row.Provider == "hue" ? "hue" : "tuya")">@LightFormat.ProviderLabel(row.Provider)</span>
                                 <span class="light-name">@row.Name @(row.Known ? "" : "(unknown light)")</span>
                                 <span class="light-summary">@Summary(row)</span>
                                 <span class="light-caret">@(row.Expanded ? "▾" : "▸")</span>
@@ -120,46 +85,17 @@ else
                             @if (row.Expanded)
                             {
                                 <div class="light-body">
-                                    <div class="segmented">
-                                        <button class="seg @(row.Edit.Mode == "skip" ? "on" : "")" @onclick='() => SetRowMode(row, "skip")'>Skip</button>
-                                        <button class="seg @(row.Edit.Mode == "color" ? "on" : "")" @onclick='() => SetRowMode(row, "color")'>Color</button>
-                                        <button class="seg @(row.Edit.Mode == "white" ? "on" : "")" @onclick='() => SetRowMode(row, "white")'>White</button>
-                                        <button class="seg @(row.Edit.Mode == "off" ? "on" : "")" @onclick='() => SetRowMode(row, "off")'>Off</button>
-                                    </div>
+                                    <Segmented TValue="string" Options="RowModeOptions" Value="row.Edit.Mode" ValueChanged="@(m => SetRowMode(row, m))" />
 
                                     @if (row.Edit.Mode == "color")
                                     {
-                                        <div class="swatch-grid" style="margin-top:1rem">
-                                            @foreach (var (hex, name) in Moods)
-                                            {
-                                                <button class="swatch @(string.Equals(hex, row.Edit.Color, StringComparison.OrdinalIgnoreCase) ? "picked" : "")"
-                                                        style="background:@hex; --swc:@hex" title="@name" aria-label="@name"
-                                                        @onclick="() => row.Edit.Color = hex"></button>
-                                            }
-                                            <input type="color" value="@row.Edit.Color" title="Custom color"
-                                                   @onchange="e => row.Edit.Color = e.Value?.ToString() ?? row.Edit.Color" />
-                                        </div>
-                                        <div class="slider-row">
-                                            <span class="slider-ico">🔅</span>
-                                            <input type="range" min="1" max="100" value="@row.Edit.Brightness"
-                                                   @onchange="e => SetRowBrightness(row, e)" aria-label="Brightness" />
-                                            <span class="slider-val">@row.Edit.Brightness%</span>
-                                        </div>
+                                        <SwatchGrid Selected="row.Edit.Color" OnPick="@(hex => row.Edit.Color = hex)" Style="margin-top:1rem" />
+                                        <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
                                     }
                                     else if (row.Edit.Mode == "white")
                                     {
-                                        <div class="slider-row">
-                                            <span class="slider-ico">🕯️</span>
-                                            <input type="range" min="0" max="100" value="@row.Edit.Temperature"
-                                                   @onchange="e => SetRowTemperature(row, e)" aria-label="Color temperature" />
-                                            <span class="slider-ico">❄️</span>
-                                        </div>
-                                        <div class="slider-row">
-                                            <span class="slider-ico">🔅</span>
-                                            <input type="range" min="1" max="100" value="@row.Edit.Brightness"
-                                                   @onchange="e => SetRowBrightness(row, e)" aria-label="Brightness" />
-                                            <span class="slider-val">@row.Edit.Brightness%</span>
-                                        </div>
+                                        <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="row.Edit.Temperature" AriaLabel="Color temperature" />
+                                        <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
                                     }
                                     else if (row.Edit.Mode == "off")
                                     {
@@ -174,27 +110,16 @@ else
                                     {
                                         <p class="kgroup-title">Effect</p>
                                         <div class="chip-row">
-                                            @foreach (var (type, label) in Effects)
+                                            @foreach (var (type, label) in Palette.Effects)
                                             {
-                                                <button class="chip @(row.Edit.Effect.Type == type ? "on" : "")"
-                                                        @onclick="() => SetEffect(row, type)">@label</button>
+                                                <Chip On="row.Edit.Effect.Type == type" OnClick="() => SetEffect(row, type)">@label</Chip>
                                             }
                                         </div>
 
                                         @if (row.Edit.Effect.Type != "none")
                                         {
-                                            <div class="slider-row">
-                                                <span class="slider-ico">🏃</span>
-                                                <input type="range" min="1" max="10" value="@row.Edit.Effect.Speed"
-                                                       @onchange="e => SetEffectSpeed(row, e)" aria-label="Speed" />
-                                                <span class="slider-val">@row.Edit.Effect.Speed</span>
-                                            </div>
-                                            <div class="slider-row">
-                                                <span class="slider-ico">🔆</span>
-                                                <input type="range" min="1" max="10" value="@row.Edit.Effect.Intensity"
-                                                       @onchange="e => SetEffectIntensity(row, e)" aria-label="Intensity" />
-                                                <span class="slider-val">@row.Edit.Effect.Intensity</span>
-                                            </div>
+                                            <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="row.Edit.Effect.Speed" AriaLabel="Speed" />
+                                            <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="row.Edit.Effect.Intensity" AriaLabel="Intensity" />
 
                                             @if (row.Edit.Effect.Type == "drift")
                                             {
@@ -211,13 +136,7 @@ else
                                                         }
                                                     </div>
                                                 }
-                                                <div class="swatch-grid" style="margin-top:0.6rem">
-                                                    @foreach (var (hex, name) in Moods)
-                                                    {
-                                                        <button class="swatch" style="background:@hex; --swc:@hex" title="@name" aria-label="@name"
-                                                                @onclick="() => AddPaletteColor(row, hex)"></button>
-                                                    }
-                                                </div>
+                                                <SwatchGrid Selected="null" ShowCustom="false" OnPick="@(hex => AddPaletteColor(row, hex))" Style="margin-top:0.6rem" />
                                             }
                                         }
                                     }
@@ -234,13 +153,9 @@ else
         }
     </div>
 
-    <h2 class="rune">Music</h2>
+    <RuneHeading>Music</RuneHeading>
     <div class="panel">
-        <div class="segmented">
-            <button class="seg @(_music == MusicChoice.None ? "on" : "")" @onclick="() => _music = MusicChoice.None">None</button>
-            <button class="seg @(_music == MusicChoice.Play ? "on" : "")" @onclick="() => _music = MusicChoice.Play">Play</button>
-            <button class="seg @(_music == MusicChoice.Pause ? "on" : "")" @onclick="() => _music = MusicChoice.Pause">Pause</button>
-        </div>
+        <Segmented TValue="MusicChoice" Options="MusicOptions" Value="_music" ValueChanged="@(m => _music = m)" />
 
         @if (_music == MusicChoice.Play)
         {
@@ -250,38 +165,18 @@ else
                        placeholder="spotify:playlist:… or https://open.spotify.com/…" />
             </div>
 
-            @if (_playlists is null)
-            {
-                <p class="empty-note">Reading your Spotify playlists…</p>
-            }
-            else if (_playlists.Count == 0)
-            {
-                <p class="hint" style="margin-top:0.8rem">Connect Spotify in <a href="settings">Settings</a> to pick from your playlists, or paste a link above.</p>
-            }
-            else
-            {
-                <div class="klist" style="margin-top:1rem">
-                    @foreach (var pl in _playlists)
-                    {
-                        <button class="krow @(_playId == pl.Uri ? "selected" : "")" @onclick="() => _playId = pl.Uri">
-                            <span class="krow-ico">🎧</span>
-                            <span class="krow-title">@pl.Name <small class="hint">@pl.TrackCount tracks</small></span>
-                        </button>
-                    }
-                </div>
-            }
+            <PlaylistPicker Playlists="_playlists" SelectedUri="_playId" OnPick="pl => _playId = pl.Uri" ListStyle="margin-top:1rem">
+                <EmptyContent>
+                    <p class="hint" style="margin-top:0.8rem">Connect Spotify in <a href="settings">Settings</a> to pick from your playlists, or paste a link above.</p>
+                </EmptyContent>
+            </PlaylistPicker>
 
             <div class="chip-row" style="margin-top:1rem">
-                <button class="chip @(_setVolume ? "on" : "")" @onclick="() => _setVolume = !_setVolume">Set volume</button>
+                <Chip On="_setVolume" OnClick="() => _setVolume = !_setVolume">Set volume</Chip>
             </div>
             @if (_setVolume)
             {
-                <div class="slider-row">
-                    <span class="slider-ico">🔉</span>
-                    <input type="range" min="0" max="100" value="@_volumePercent"
-                           @onchange="e => SetVolume(e)" aria-label="Volume" />
-                    <span class="slider-val">@_volumePercent%</span>
-                </div>
+                <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" @bind-Value="_volumePercent" AriaLabel="Volume" />
             }
         }
         else if (_music == MusicChoice.Pause)
@@ -290,7 +185,7 @@ else
         }
     </div>
 
-    <h2 class="rune">Save</h2>
+    <RuneHeading>Save</RuneHeading>
     <div class="btn-row">
         <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
@@ -312,6 +207,16 @@ else
     private enum LightMode { Color, White, Off }
     private enum MusicChoice { None, Play, Pause }
 
+    // Segmented control options.
+    private static readonly (LightScope, string)[] ScopeOptions =
+        [(LightScope.None, "Leave alone"), (LightScope.All, "All lights"), (LightScope.PerLight, "Per light")];
+    private static readonly (LightMode, string)[] ModeOptions =
+        [(LightMode.Color, "Color"), (LightMode.White, "White"), (LightMode.Off, "Turn off")];
+    private static readonly (MusicChoice, string)[] MusicOptions =
+        [(MusicChoice.None, "None"), (MusicChoice.Play, "Play"), (MusicChoice.Pause, "Pause")];
+    private static readonly (string, string)[] RowModeOptions =
+        [("skip", "Skip"), ("color", "Color"), ("white", "White"), ("off", "Off")];
+
     // One editable per-light row: the persisted fields plus registry display metadata.
     private class LightRow
     {
@@ -322,30 +227,6 @@ else
         public bool Expanded;
         public SceneLightEdit Edit = new();
     }
-
-    private static readonly string[] Emojis =
-        ["🍺", "🔥", "🌲", "⚔️", "🕯️", "🌊", "👻", "💰", "🎻", "🌙", "⛺", "🐉", "❄️", "🏰", "🎲"];
-
-    private static readonly (string Type, string Label)[] Effects =
-    [
-        ("none", "None"),
-        ("flicker", "🕯️ Flicker"),
-        ("glow", "✨ Glow"),
-        ("storm", "⛈️ Storm"),
-        ("drift", "🌀 Drift"),
-    ];
-
-    private static readonly (string Hex, string Name)[] Moods =
-    [
-        ("#ff8c2a", "Candlelight"),
-        ("#ff1e1e", "Blood / combat"),
-        ("#3a7a4a", "Forest / dungeon"),
-        ("#7a3aff", "Arcane"),
-        ("#4aa8ff", "Ice / water"),
-        ("#ff4a8c", "Fey"),
-        ("#ffd84a", "Treasure"),
-        ("#20e0c0", "Poison / ghost"),
-    ];
 
     private bool _loading = true;
     private bool _busy;
@@ -409,7 +290,7 @@ else
     private void LoadFrom(SceneDto scene)
     {
         _edit.Id = scene.Id;
-        (_emoji, _label) = SplitName(scene.Name);
+        (_emoji, _label) = SceneNaming.SplitName(scene.Name);
 
         // Per-light entries win over the legacy single block (matching the server).
         if (scene.Lights is { Count: > 0 } sceneLights)
@@ -464,26 +345,11 @@ else
 
     private void OnLabelInput(ChangeEventArgs e) => _label = e.Value?.ToString() ?? "";
 
-    private void SetBrightness(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) _brightness = v;
-    }
-
-    private void SetTemperature(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) _temperature = v;
-    }
-
-    private void SetVolume(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) _volumePercent = v;
-    }
-
     private string ComposedName =>
         string.IsNullOrEmpty(_emoji) ? _label.Trim() : $"{_emoji} {_label.Trim()}";
 
     // On create the id follows the label; on edit it's fixed.
-    private string CurrentId => _isNew ? MakeUniqueId(Slugify(_label)) : _edit.Id;
+    private string CurrentId => _isNew ? SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _existingIds) : _edit.Id;
 
     private async Task Save(bool test)
     {
@@ -538,10 +404,7 @@ else
                 }
                 else
                 {
-                    var problems = new[] { ("light", result.Light), ("music", result.Music) }
-                        .Where(p => p.Item2.StartsWith("error"))
-                        .Select(p => $"{p.Item1}: {p.Item2[7..]}");
-                    Ui.ReportError($"Saved, but partially applied. {string.Join(" | ", problems)}");
+                    Ui.ReportError($"Saved, but partially applied. {result.ProblemSummary()}");
                 }
                 // On create, keep editing the freshly-made scene rather than re-creating it.
                 if (_isNew)
@@ -613,27 +476,7 @@ else
 
     private void SetRowMode(LightRow row, string mode) => row.Edit.Mode = mode;
 
-    private void SetRowBrightness(LightRow row, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) row.Edit.Brightness = v;
-    }
-
-    private void SetRowTemperature(LightRow row, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) row.Edit.Temperature = v;
-    }
-
     private void SetEffect(LightRow row, string type) => row.Edit.Effect.Type = type;
-
-    private void SetEffectSpeed(LightRow row, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) row.Edit.Effect.Speed = v;
-    }
-
-    private void SetEffectIntensity(LightRow row, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v)) row.Edit.Effect.Intensity = v;
-    }
 
     private void AddPaletteColor(LightRow row, string hex)
     {
@@ -665,27 +508,15 @@ else
         Ui.ReportOk("Copied to every light");
     }
 
-    private static string ProviderLabel(string provider) => provider switch
-    {
-        "hue" => "Hue",
-        "tuya" => "Tuya",
-        _ => "?",
-    };
-
-    private static string EffectLabel(string type) =>
-        Effects.FirstOrDefault(e => e.Type == type).Label ?? "";
-
-    private static string TempWord(int t) => t < 34 ? "warm" : t > 66 ? "cold" : "neutral";
-
     // Collapsed one-line summary, e.g. "🕯️ Flicker · #FF8C2A 80%" or "White · warm 60%" or "Skip".
     private static string Summary(LightRow row)
     {
         var e = row.Edit;
-        var fx = e.Effect.Type == "none" ? "" : $"{EffectLabel(e.Effect.Type)} · ";
+        var fx = e.Effect.Type == "none" ? "" : $"{LightFormat.EffectLabel(e.Effect.Type)} · ";
         return e.Mode switch
         {
             "color" => $"{fx}{e.Color.ToUpperInvariant()} {e.Brightness}%",
-            "white" => $"{fx}White · {TempWord(e.Temperature)} {e.Brightness}%",
+            "white" => $"{fx}White · {LightFormat.TempWord(e.Temperature)} {e.Brightness}%",
             "off" => "Off",
             _ => "Skip",
         };
@@ -735,38 +566,7 @@ else
         }
     }
 
-    private string MakeUniqueId(string baseId)
-    {
-        if (string.IsNullOrEmpty(baseId)) return "";
-        var id = baseId;
-        var n = 2;
-        while (_existingIds.Contains(id, StringComparer.OrdinalIgnoreCase))
-            id = $"{baseId}-{n++}";
-        return id;
-    }
-
     private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-    private static string Slugify(string label)
-    {
-        var sb = new StringBuilder();
-        foreach (var c in label.Trim().ToLowerInvariant())
-        {
-            if (char.IsAsciiLetterOrDigit(c)) sb.Append(c);
-            else if (c is ' ' or '-' or '_' && sb.Length > 0 && sb[^1] != '-') sb.Append('-');
-        }
-        return sb.ToString().Trim('-');
-    }
-
-    // "🍺 Tavern" -> ("🍺", "Tavern"); a name with no leading symbol keeps an empty emoji.
-    private static (string Emoji, string Label) SplitName(string name)
-    {
-        var trimmed = name.Trim();
-        var space = trimmed.IndexOf(' ');
-        if (space > 0 && trimmed[..space].Any(c => c > (char)0x2000))
-            return (trimmed[..space], trimmed[(space + 1)..]);
-        return ("", trimmed);
-    }
 
     public void Dispose() => _confirmTimer?.Dispose();
 }

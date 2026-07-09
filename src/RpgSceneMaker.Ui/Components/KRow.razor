@@ -1,0 +1,13 @@
+@* A clickable list row: leading icon, title, and a muted hint. Use inside a .klist. *@
+<button class="krow @(Selected ? "selected" : "")" @onclick="OnClick">
+    <span class="krow-ico">@Icon</span>
+    <span class="krow-title">@Title @if (!string.IsNullOrEmpty(Hint)) {<small class="hint">@Hint</small>}</span>
+</button>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+}

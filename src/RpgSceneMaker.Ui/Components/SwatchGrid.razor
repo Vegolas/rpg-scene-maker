@@ -1,0 +1,32 @@
+@* The mood colour palette. Highlights Selected (when set) and, unless ShowCustom is false,
+   offers a custom colour picker. Every pick — swatch or custom — raises OnPick with the hex. *@
+<div class="swatch-grid" style="@Style">
+    @foreach (var (hex, name) in Palette.Moods)
+    {
+        <button class="swatch @(IsPicked(hex) ? "picked" : "")"
+                style="background:@hex; --swc:@hex" title="@name" aria-label="@name"
+                @onclick="() => OnPick.InvokeAsync(hex)"></button>
+    }
+    @if (ShowCustom)
+    {
+        <input type="color" value="@CustomValue" title="Custom color" @onchange="OnCustomChanged" />
+    }
+</div>
+
+@code {
+    private const string Fallback = "#ff8c2a";
+
+    // The currently-selected hex, highlighted with the "picked" class. Null = no highlight (palette-builder mode).
+    [Parameter] public string? Selected { get; set; }
+    [Parameter] public EventCallback<string> OnPick { get; set; }
+    [Parameter] public bool ShowCustom { get; set; } = true;
+    [Parameter] public string? Style { get; set; }
+
+    private string CustomValue => Selected ?? Fallback;
+
+    private bool IsPicked(string hex) =>
+        Selected is not null && string.Equals(hex, Selected, StringComparison.OrdinalIgnoreCase);
+
+    private Task OnCustomChanged(ChangeEventArgs e) =>
+        OnPick.InvokeAsync(e.Value?.ToString() ?? CustomValue);
+}

@@ -711,6 +711,46 @@ ol.steps li { margin: 0.3rem 0; }
 #blazor-error-ui .reload { color: #1b0808; }
 #blazor-error-ui .dismiss { position: absolute; right: 0.9rem; top: 0.7rem; cursor: pointer; }
 
+/* ---------- logs tab ---------- */
+.log-list {
+    display: flex;
+    flex-direction: column;
+    font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+    font-size: 0.82rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.log-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    padding: 0.4rem 0.7rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.log-row:last-child { border-bottom: none; }
+.log-time { color: var(--ink-dim); flex: 0 0 auto; }
+.log-level { flex: 0 0 64px; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.04em; }
+.log-cat { color: var(--ink-dim); flex: 0 0 auto; max-width: 28%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-msg { flex: 1; min-width: 0; color: var(--ink); word-break: break-word; }
+.log-exc {
+    margin: 0;
+    padding: 0.5rem 0.7rem 0.7rem;
+    background: var(--bg-deep);
+    color: var(--ink-dim);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.log-row.log-error, .log-row.log-critical { background: rgba(255, 93, 93, 0.06); }
+.log-row.log-warning { background: rgba(232, 163, 61, 0.05); }
+.log-row.log-error .log-level, .log-row.log-critical .log-level { color: var(--danger); }
+.log-row.log-warning .log-level { color: var(--ember); }
+.log-row.log-information .log-level { color: var(--ok); }
+.log-row.log-debug .log-level, .log-row.log-trace .log-level { color: var(--ink-dim); }
+
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }

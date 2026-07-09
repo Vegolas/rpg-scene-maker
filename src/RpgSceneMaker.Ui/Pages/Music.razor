@@ -7,12 +7,12 @@
 
 @if (_connected == false)
 {
-    <h2 class="rune">Music</h2>
+    <RuneHeading>Music</RuneHeading>
     <p class="empty-note">Spotify isn't connected yet — open <a href="settings">Settings</a> to connect it.</p>
 }
 else
 {
-    <h2 class="rune">Now Playing</h2>
+    <RuneHeading>Now Playing</RuneHeading>
 
     <div class="panel">
         <p class="now-title">@(_state?.TrackName ?? "Nothing playing")</p>
@@ -49,22 +49,16 @@ else
             <button class="btn" @onclick="@(() => Send("music/next"))" aria-label="Next">⏭</button>
         </div>
 
-        <div class="slider-row">
-            <span class="slider-ico">🔉</span>
-            <input type="range" min="0" max="100" value="@_volumePercent"
-                   @onchange="OnVolumeChanged" aria-label="Volume" />
-            <span class="slider-val">@_volumePercent%</span>
-        </div>
+        <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" Value="_volumePercent"
+                   ValueChanged="OnVolumeChanged" AriaLabel="Volume" />
 
         <div class="chip-row">
-            <button class="chip @(_state?.IsShuffling == true ? "on" : "")"
-                    @onclick="@(() => Send($"music/shuffle?value={(_state?.IsShuffling == true ? "false" : "true")}"))">🔀 Shuffle</button>
-            <button class="chip @(_state is { Repeat: "playlist" or "track" } ? "on" : "")"
-                    @onclick="CycleRepeat">@RepeatLabel()</button>
+            <Chip On="ShuffleOn" OnClick="ToggleShuffle">🔀 Shuffle</Chip>
+            <Chip On="RepeatOn" OnClick="CycleRepeat">@RepeatLabel()</Chip>
         </div>
     </div>
 
-    <h2 class="rune">Search</h2>
+    <RuneHeading>Search</RuneHeading>
     <div class="panel">
         <div class="field">
             <label for="spotify-search">Search tracks</label>
@@ -80,36 +74,18 @@ else
                 @foreach (var t in _results)
                 {
                     var label = string.IsNullOrEmpty(t.Artist) ? t.Name : $"{t.Name} — {t.Artist}";
-                    <button class="krow" @onclick="() => Play(t.Uri, label)">
-                        <span class="krow-ico">♪</span>
-                        <span class="krow-title">@t.Name <small class="hint">@t.Artist</small></span>
-                    </button>
+                    <KRow Icon="♪" Title="@t.Name" Hint="@t.Artist" OnClick="() => Play(t.Uri, label)" />
                 }
             </div>
         }
     </div>
 
-    <h2 class="rune">Playlists</h2>
-    @if (_playlists is null)
-    {
-        <p class="empty-note">Reading your Spotify playlists…</p>
-    }
-    else if (_playlists.Count == 0)
-    {
-        <p class="empty-note">No Spotify playlists found.</p>
-    }
-    else
-    {
-        <div class="klist">
-            @foreach (var pl in _playlists)
-            {
-                <button class="krow" @onclick="() => Play(pl.Uri, pl.Name)">
-                    <span class="krow-ico">🎧</span>
-                    <span class="krow-title">@pl.Name <small class="hint">@pl.TrackCount tracks</small></span>
-                </button>
-            }
-        </div>
-    }
+    <RuneHeading>Playlists</RuneHeading>
+    <PlaylistPicker Playlists="_playlists" OnPick="pl => Play(pl.Uri, pl.Name)">
+        <EmptyContent>
+            <p class="empty-note">No Spotify playlists found.</p>
+        </EmptyContent>
+    </PlaylistPicker>
 }
 
 @code {
@@ -121,6 +97,9 @@ else
     private bool _searching;
     private int _volumePercent = 50;
     private Timer? _timer;
+
+    private bool ShuffleOn => _state?.IsShuffling == true;
+    private bool RepeatOn => _state is { Repeat: "playlist" or "track" };
 
     protected override async Task OnInitializedAsync()
     {
@@ -162,6 +141,8 @@ else
         return Send($"music/repeat?mode={next}");
     }
 
+    private Task ToggleShuffle() => Send($"music/shuffle?value={(ShuffleOn ? "false" : "true")}");
+
     private async Task Send(string path)
     {
         if (await Api.CommandAsync(path))
@@ -174,9 +155,8 @@ else
             await PollAsync();
     }
 
-    private async Task OnVolumeChanged(ChangeEventArgs e)
+    private async Task OnVolumeChanged(int percent)
     {
-        if (!int.TryParse(e.Value?.ToString(), out var percent)) return;
         _volumePercent = percent;
         var volume = (percent / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
         await Api.CommandAsync($"music/volume?value={volume}");
