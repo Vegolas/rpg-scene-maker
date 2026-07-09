@@ -2,6 +2,7 @@
 @using System.Text
 @inject ApiClient Api
 @inject UiState Ui
+@inject NavigationManager Nav
 
 <PageTitle>Scene Maker — Settings</PageTitle>
 
@@ -188,6 +189,62 @@ else
         </div>
     </div>
 
+    <h2 class="rune">Spotify</h2>
+    <div class="panel">
+        <div class="field">
+            <label for="spotify-client-id">Client ID</label>
+            <input id="spotify-client-id" type="text" @bind="_spotify.ClientId" placeholder="from developer.spotify.com" />
+        </div>
+        <div class="btn-row">
+            <button class="btn primary" @onclick="SaveSpotify" disabled="@_busy">Save Client ID</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_spotify.RedirectUri))
+        {
+            <div class="field" style="margin-top:1rem">
+                <label for="spotify-redirect">Redirect URI</label>
+                <input id="spotify-redirect" type="text" readonly value="@_spotify.RedirectUri" />
+            </div>
+        }
+        <p class="hint">Add this exact Redirect URI to your app at developer.spotify.com. Connect from a browser on this machine (<code>http://127.0.0.1:5252</code>) — Spotify only allows loopback addresses over http. Spotify Premium is required for playback.</p>
+
+        @if (_spotify.Connected)
+        {
+            <p class="status ok">✓ Connected to Spotify</p>
+            <div class="field" style="margin-top:1rem">
+                <label for="spotify-device">Playback device (empty = whatever is active)</label>
+                <div class="field-row">
+                    <select id="spotify-device" @onchange="OnSpotifyDeviceChanged">
+                        <option value="" selected="@string.IsNullOrEmpty(_spotify.PreferredDeviceId)">Active device (automatic)</option>
+                        @if (_spotifyDevices is not null)
+                        {
+                            @foreach (var d in _spotifyDevices)
+                            {
+                                <option value="@d.Id" selected="@(d.Id == _spotify.PreferredDeviceId)">@d.Name (@d.Type)@(d.IsActive ? " — active" : "")</option>
+                            }
+                        }
+                        @if (!string.IsNullOrEmpty(_spotify.PreferredDeviceId) &&
+                             (_spotifyDevices is null || !_spotifyDevices.Any(d => d.Id == _spotify.PreferredDeviceId)))
+                        {
+                            <option value="@_spotify.PreferredDeviceId" selected>@_spotify.PreferredDeviceName (offline)</option>
+                        }
+                    </select>
+                    <button class="btn" @onclick="RefreshSpotifyDevices" disabled="@_busy">Refresh</button>
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="btn danger" @onclick="DisconnectSpotify" disabled="@_busy">Disconnect Spotify</button>
+            </div>
+        }
+        else
+        {
+            <p class="status">Not connected yet.</p>
+            <div class="btn-row">
+                <button class="btn primary big" @onclick="ConnectSpotify"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_spotify.ClientId))">Connect Spotify</button>
+            </div>
+        }
+    </div>
     <h2 class="rune">This Device</h2>
     <div class="panel">
         <div class="field">
@@ -210,6 +267,8 @@ else
     private string? _apiKeyInput;
     private bool _busy;
     private bool _showHueAdd;
+    private SpotifyConfigDto _spotify = new();
+    private List<SpotifyDeviceDto>? _spotifyDevices;
 
     private bool IsHue => _config?.Provider.Equals("hue", StringComparison.OrdinalIgnoreCase) == true;
     private bool HueIsPaired => !string.IsNullOrWhiteSpace(_config?.Hue.AppKey);
@@ -226,6 +285,79 @@ else
         }
         _config = config;
         if (HueIsPaired) await LoadHueLights();
+
+        var (spotify, _) = await Api.GetSpotifyConfigAsync();
+        if (spotify is not null) _spotify = spotify;
+        if (_spotify.Connected) await RefreshSpotifyDevices();
+
+        // Show the result of a just-completed connect attempt (from the OAuth callback redirect).
+        switch (QueryValue("spotify"))
+        {
+            case "connected":
+                Ui.ReportOk("Spotify connected");
+                break;
+            case { } s when s.StartsWith("error", StringComparison.Ordinal):
+                Ui.ReportError($"Spotify connection failed: {s[(s.IndexOf(':') + 1)..]}");
+                break;
+        }
+    }
+
+    private async Task SaveSpotify()
+    {
+        if (await Api.SaveSpotifyConfigAsync(_spotify))
+        {
+            Ui.ReportOk("Spotify Client ID saved");
+            var (spotify, _) = await Api.GetSpotifyConfigAsync();
+            if (spotify is not null) _spotify = spotify;
+        }
+    }
+
+    private async Task ConnectSpotify()
+    {
+        // Full-page navigation: the login endpoint redirects the browser to Spotify's consent screen.
+        var url = await Api.GetSpotifyLoginUrlAsync();
+        Nav.NavigateTo(url, forceLoad: true);
+    }
+
+    private async Task RefreshSpotifyDevices()
+    {
+        var (devices, error) = await Api.GetSpotifyDevicesAsync();
+        if (devices is not null) _spotifyDevices = devices;
+        else if (error is not null) Ui.ReportError(error);
+    }
+
+    private async Task OnSpotifyDeviceChanged(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString() ?? "";
+        _spotify.PreferredDeviceId = id;
+        _spotify.PreferredDeviceName = _spotifyDevices?.FirstOrDefault(d => d.Id == id)?.Name ?? "";
+        if (await Api.SaveSpotifyConfigAsync(_spotify))
+            Ui.ReportOk(id == "" ? "Using the active Spotify device" : $"Playback device set to {_spotify.PreferredDeviceName}");
+    }
+
+    private async Task DisconnectSpotify()
+    {
+        if (await Api.DisconnectSpotifyAsync())
+        {
+            _spotify.Connected = false;
+            _spotify.PreferredDeviceId = "";
+            _spotify.PreferredDeviceName = "";
+            _spotifyDevices = null;
+        }
+    }
+
+    private string? QueryValue(string key)
+    {
+        var query = new Uri(Nav.Uri).Query;
+        if (string.IsNullOrEmpty(query)) return null;
+        foreach (var pair in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var idx = pair.IndexOf('=');
+            var k = Uri.UnescapeDataString(idx >= 0 ? pair[..idx] : pair);
+            if (k == key)
+                return idx >= 0 ? Uri.UnescapeDataString(pair[(idx + 1)..]) : "";
+        }
+        return null;
     }
 
     private async Task SetProvider(string provider)

@@ -126,6 +126,22 @@ public record KenkuGroup(string Id, string Title, List<KenkuItem> Items);
 public record MusicState(bool Playing, double Volume, bool Muted, bool Shuffle, string Repeat,
     string? TrackTitle, string? PlaylistTitle, double Progress, double Duration);
 
+public record SpotifyDeviceDto(string Id, string Name, string Type, bool IsActive);
+public record SpotifyPlaylistDto(string Id, string Name, string Uri, string? ImageUrl, int TrackCount);
+public record SpotifyTrackDto(string Id, string Name, string Artist, string Uri, string? ImageUrl);
+public record SpotifyStateDto(bool IsPlaying, string? TrackName, string? ArtistName,
+    string? ContextUri, string? DeviceName, int? VolumePercent);
+
+// Mutable class — the settings form binds the Client ID input straight to it.
+public class SpotifyConfigDto
+{
+    public string ClientId { get; set; } = "";
+    public bool Connected { get; set; }
+    public string PreferredDeviceId { get; set; } = "";
+    public string PreferredDeviceName { get; set; } = "";
+    public string RedirectUri { get; set; } = "";
+}
+
 /// <summary>All communication with the Scene Maker API, with the optional API key attached.</summary>
 public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
 {
@@ -320,6 +336,45 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
                 if (sound?["id"]?.GetValue<string>() is { } id)
                     ids.Add(id);
         return ids;
+    }
+
+    // ---------- spotify ----------
+
+    public Task<(SpotifyConfigDto? Result, string? Error)> GetSpotifyConfigAsync() =>
+        FetchAsync<SpotifyConfigDto>(HttpMethod.Get, "setup/spotify/config");
+
+    public async Task<bool> SaveSpotifyConfigAsync(SpotifyConfigDto config)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Put, "setup/spotify/config", config);
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<(List<SpotifyDeviceDto>? Result, string? Error)> GetSpotifyDevicesAsync() =>
+        FetchAsync<List<SpotifyDeviceDto>>(HttpMethod.Get, "setup/spotify/devices");
+
+    public Task<bool> DisconnectSpotifyAsync() =>
+        CommandAsync("setup/spotify/disconnect", "Spotify disconnected");
+
+    public Task<(List<SpotifyPlaylistDto>? Result, string? Error)> GetSpotifyPlaylistsAsync() =>
+        FetchAsync<List<SpotifyPlaylistDto>>(HttpMethod.Get, "music/spotify/playlists");
+
+    public Task<(List<SpotifyTrackDto>? Result, string? Error)> SearchSpotifyTracksAsync(string query) =>
+        FetchAsync<List<SpotifyTrackDto>>(HttpMethod.Get, $"music/spotify/search?q={Uri.EscapeDataString(query)}");
+
+    public Task<SpotifyStateDto?> GetSpotifyStateAsync() => GetAsync<SpotifyStateDto?>("music/spotify/state");
+
+    /// <summary>URL for a full-page redirect to start the Spotify login (with the API key when set).</summary>
+    public async Task<string> GetSpotifyLoginUrlAsync()
+    {
+        const string path = "setup/spotify/login";
+        return await GetApiKeyAsync() is { } key
+            ? $"{path}?apiKey={Uri.EscapeDataString(key)}"
+            : path;
     }
 
     // ---------- plumbing ----------

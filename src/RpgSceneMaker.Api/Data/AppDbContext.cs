@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
+    public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +34,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             config.OwnsMany(c => c.Lights, b => b.ToJson());
             config.Navigation(c => c.Hue).IsRequired();
             config.Navigation(c => c.Tuya).IsRequired();
+        });
+
+        modelBuilder.Entity<SpotifyConfig>(config =>
+        {
+            config.HasKey(c => c.Id);
+            config.Property(c => c.Id).ValueGeneratedNever();
+            // Computed convenience flags — never stored.
+            config.Ignore(c => c.IsConfigured);
+            config.Ignore(c => c.IsConnected);
         });
     }
 }

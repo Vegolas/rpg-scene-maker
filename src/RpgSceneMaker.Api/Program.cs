@@ -1,4 +1,6 @@
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api;
 using RpgSceneMaker.Api.Data;
@@ -26,6 +28,12 @@ builder.Services.AddSingleton<LightRegistry>();
 builder.Services.AddSingleton<EffectEngine>();
 builder.Services.AddScoped<SceneActivator>();
 builder.Services.AddHttpClient<KenkuClient>(client => client.Timeout = TimeSpan.FromSeconds(5));
+
+// Spotify: cloud Web API (PKCE) to control a Spotify Connect device on the LAN.
+builder.Services.AddSingleton<SpotifyStore>();
+builder.Services.AddSingleton<SpotifyTokenCache>();
+builder.Services.AddSingleton<SpotifyAuthState>();
+builder.Services.AddHttpClient<SpotifyClient>(client => client.Timeout = TimeSpan.FromSeconds(10));
 
 // The configured provider picks which system scenes and /lights control ("tuya" or "hue").
 builder.Services.AddScoped<ILightService>(sp =>
@@ -59,6 +67,7 @@ app.Use(async (context, next) =>
             InvalidOperationException => (StatusCodes.Status503ServiceUnavailable, "Not configured"),
             KenkuException => (StatusCodes.Status502BadGateway, "Kenku FM error"),
             HueException => (StatusCodes.Status502BadGateway, "Philips Hue error"),
+            SpotifyException => (StatusCodes.Status502BadGateway, "Spotify error"),
             HttpRequestException or TaskCanceledException =>
                 (StatusCodes.Status502BadGateway, "Kenku FM unreachable — is Kenku FM running with Remote enabled (Settings > Remote)?"),
             SocketException or IOException or TimeoutException =>
@@ -90,9 +99,12 @@ app.Use(async (context, next) =>
     await next();
 
     static bool IsProtectedPath(PathString path) =>
-        path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
-        path.StartsWithSegments("/music") || path.StartsWithSegments("/sfx") ||
-        path.StartsWithSegments("/setup");
+        // The Spotify OAuth callback is a top-level browser redirect from Spotify and cannot carry
+        // the API key; the opaque state value (validated server-side) guards it instead.
+        !path.StartsWithSegments("/setup/spotify/callback") &&
+        (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
+         path.StartsWithSegments("/music") || path.StartsWithSegments("/sfx") ||
+         path.StartsWithSegments("/setup"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -100,6 +112,14 @@ app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
 string[] getOrPost = ["GET", "POST"];
+
+// Fire a cross-provider pause/stop without letting its failure surface (the other player may be
+// off, unconfigured, or have no active device — none of which should fail the primary action).
+static async Task BestEffort(Func<Task> action)
+{
+    try { await action(); }
+    catch { /* ignored — best effort */ }
+}
 
 app.MapGet("/health", () => new { status = "ok" });
 
@@ -234,13 +254,35 @@ lights.MapMethods("/{key}/brightness", getOrPost, async (string key, int value, 
 // ---------- Music (Kenku FM playlists) ----------
 var music = app.MapGroup("/music");
 
-music.MapMethods("/play", getOrPost, async (string id, KenkuClient kenku) =>
+music.MapMethods("/play", getOrPost, async (string id, KenkuClient kenku, SpotifyClient spotify) =>
 {
-    await kenku.PlayAsync(id);
+    if (SpotifyClient.IsSpotifyUri(id))
+    {
+        await spotify.PlayAsync(id);
+        await BestEffort(kenku.PauseAsync); // stop Kenku if it happens to be running
+    }
+    else
+    {
+        await kenku.PlayAsync(id);
+        await BestEffort(() => spotify.PauseAsync(throwOnNoDevice: false)); // stop Spotify if connected
+    }
     return new { playing = id };
 });
 
-music.MapMethods("/pause", getOrPost, async (KenkuClient kenku) => { await kenku.PauseAsync(); return new { music = "paused" }; });
+music.MapMethods("/pause", getOrPost, async (KenkuClient kenku, SpotifyClient spotify, SpotifyStore spotifyStore) =>
+{
+    // With Spotify connected, Kenku may legitimately be off — pause it best-effort only.
+    if (spotifyStore.Current.IsConnected)
+    {
+        await BestEffort(kenku.PauseAsync);
+        await spotify.PauseAsync(throwOnNoDevice: false);
+    }
+    else
+    {
+        await kenku.PauseAsync();
+    }
+    return new { music = "paused" };
+});
 music.MapMethods("/resume", getOrPost, async (KenkuClient kenku) => { await kenku.ResumeAsync(); return new { music = "playing" }; });
 music.MapMethods("/next", getOrPost, async (KenkuClient kenku) => { await kenku.NextAsync(); return new { music = "next" }; });
 music.MapMethods("/previous", getOrPost, async (KenkuClient kenku) => { await kenku.PreviousAsync(); return new { music = "previous" }; });
@@ -275,6 +317,16 @@ music.MapMethods("/repeat", getOrPost, async (string mode, KenkuClient kenku) =>
 
 music.MapGet("/playlists", (KenkuClient kenku) => kenku.GetPlaylistsAsync());
 music.MapGet("/state", (KenkuClient kenku) => kenku.GetPlaylistStateAsync());
+
+// Spotify (cloud Web API) — playlists, track search and current playback state.
+music.MapGet("/spotify/playlists", (SpotifyClient spotify) => spotify.GetPlaylistsAsync());
+music.MapGet("/spotify/search", (string q, SpotifyClient spotify) =>
+{
+    if (string.IsNullOrWhiteSpace(q))
+        throw new ArgumentException("Provide a search term with ?q=");
+    return spotify.SearchTracksAsync(q);
+});
+music.MapGet("/spotify/state", (SpotifyClient spotify) => spotify.GetStateAsync());
 
 // ---------- Sound effects (Kenku FM soundboard) ----------
 var sfx = app.MapGroup("/sfx");
@@ -322,6 +374,84 @@ setup.MapPut("/config", (LightingConfigDto config, SettingsStore store) =>
 setup.MapGet("/hue/discover", (HueSetupService hue) => hue.DiscoverAsync());
 setup.MapMethods("/hue/register", getOrPost, (string bridgeIp, HueSetupService hue) => hue.RegisterAsync(bridgeIp));
 setup.MapGet("/hue/lights", (string? bridgeIp, string? appKey, HueSetupService hue) => hue.GetLightsAsync(bridgeIp, appKey));
+
+// Spotify: Client-ID config + Authorization Code (PKCE) connect flow.
+static string SpotifyRedirectUri(HttpRequest request) =>
+    $"{request.Scheme}://{request.Host}/setup/spotify/callback";
+
+setup.MapGet("/spotify/config", (HttpRequest request, SpotifyStore store) =>
+{
+    var c = store.Current;
+    return new
+    {
+        clientId = c.ClientId,
+        connected = c.IsConnected,
+        preferredDeviceId = c.PreferredDeviceId,
+        preferredDeviceName = c.PreferredDeviceName,
+        redirectUri = SpotifyRedirectUri(request),
+    };
+});
+
+setup.MapPut("/spotify/config", (SpotifyConfigInput config, SpotifyStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(config.ClientId))
+        throw new ArgumentException("A Spotify Client ID is required.");
+    store.SaveConfig(config.ClientId.Trim());
+    if (config.PreferredDeviceId is not null || config.PreferredDeviceName is not null)
+        store.SaveDevice(config.PreferredDeviceId ?? "", config.PreferredDeviceName ?? "");
+    var c = store.Current;
+    return Results.Ok(new { clientId = c.ClientId, connected = c.IsConnected });
+});
+
+setup.MapGet("/spotify/login", (HttpRequest request, SpotifyStore store, SpotifyAuthState auth) =>
+{
+    var config = store.Current;
+    if (!config.IsConfigured)
+        throw new InvalidOperationException("Set your Spotify Client ID in Settings before connecting.");
+
+    // PKCE: random verifier, S256 challenge, random state.
+    var verifier = Base64Url(RandomNumberGenerator.GetBytes(64));
+    var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+    var state = Base64Url(RandomNumberGenerator.GetBytes(32));
+    var redirectUri = SpotifyRedirectUri(request);
+    auth.Add(state, verifier, redirectUri);
+
+    const string scope = "user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative";
+    var authorizeUrl =
+        "https://accounts.spotify.com/authorize?response_type=code" +
+        $"&client_id={Uri.EscapeDataString(config.ClientId)}" +
+        $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+        "&code_challenge_method=S256" +
+        $"&code_challenge={Uri.EscapeDataString(challenge)}" +
+        $"&state={Uri.EscapeDataString(state)}" +
+        $"&scope={Uri.EscapeDataString(scope)}";
+    return Results.Redirect(authorizeUrl);
+});
+
+setup.MapGet("/spotify/callback", async (string? code, string? state, string? error,
+    SpotifyAuthState auth, SpotifyClient spotify) =>
+{
+    if (!string.IsNullOrEmpty(error))
+        return Results.Redirect($"/settings?spotify=error:{Uri.EscapeDataString(error)}");
+    if (string.IsNullOrEmpty(state) || auth.Take(state) is not { } entry)
+        throw new ArgumentException("Login expired or invalid — try connecting again.");
+    if (string.IsNullOrEmpty(code))
+        throw new ArgumentException("Spotify did not return an authorization code.");
+
+    await spotify.ExchangeCodeAsync(code, entry.RedirectUri, entry.Verifier);
+    return Results.Redirect("/settings?spotify=connected");
+});
+
+setup.MapGet("/spotify/devices", (SpotifyClient spotify) => spotify.GetDevicesAsync());
+
+setup.MapMethods("/spotify/disconnect", getOrPost, (SpotifyStore store) =>
+{
+    store.Disconnect();
+    return new { spotify = "disconnected" };
+});
+
+static string Base64Url(byte[] bytes) =>
+    Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
 // Everything that isn't an API route is the Blazor control panel.
 app.MapFallbackToFile("index.html");
@@ -423,3 +553,6 @@ static class LightValidation
         return "#" + s.ToUpperInvariant();
     }
 }
+
+// Body of PUT /setup/spotify/config (device fields optional — omitted keeps the saved value).
+record SpotifyConfigInput(string ClientId, string? PreferredDeviceId, string? PreferredDeviceName);

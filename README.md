@@ -3,7 +3,7 @@
 A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor WASM)** that switches your whole table mood with one tap — from a Stream Deck, an iPad, or any browser:
 
 - **Lighting** — a Tuya smart bulb (e.g. Polux GU10) **or Philips Hue lights**, controlled **directly over your LAN** (fast, works without internet). Pick the system on the panel's ⚙ Settings page — scenes and endpoints are identical for both.
-- **Music & sound effects** — [Kenku FM](https://www.kenku.fm/) via its Remote API (playlists for ambience, soundboard for one-shot effects).
+- **Music & sound effects** — [Kenku FM](https://www.kenku.fm/) via its Remote API (playlists for ambience, soundboard for one-shot effects), and optionally **Spotify** (Premium) to drive a Spotify Connect device on your LAN.
 - **Scenes** — named presets combining light color/brightness + playlist + sound effects, stored in a local SQLite database.
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
@@ -14,7 +14,7 @@ Every command endpoint accepts **both GET and POST**, so the built-in Stream Dec
 dotnet run --project src/RpgSceneMaker.Api
 ```
 
-This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel has four tabs: **Scenes** (one-tap presets with live active highlight), **Music** (now playing, transport, volume, playlists), **Sounds** (soundboard with playing indicators), **Lights** (mood colors, brightness, white temperature).
+This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel has four tabs: **Scenes** (one-tap presets with live active highlight), **Music** (now playing, transport, volume, playlists — plus Spotify playlists and track search once connected), **Sounds** (soundboard with playing indicators), **Lights** (mood colors, brightness, white temperature).
 
 ## Using it from an iPad (or any tablet/phone)
 
@@ -73,6 +73,36 @@ Settings changed in the panel are saved to the SQLite database (see Persistence 
 
 Tip: give the bridge a fixed IP (DHCP reservation in your router) so the saved address doesn't go stale.
 
+### 2c. Spotify (optional, alongside Kenku FM)
+
+Spotify has no local API, so this uses the Spotify Web API to remote-control a **Spotify Connect** device on your LAN (a phone, desktop app, speaker, etc.). **Spotify Premium is required** for playback control. Setup is a one-time OAuth connect from the control panel:
+
+1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → **Create app**. Give it any name, tick the **Web API**, and set the **Redirect URI** to exactly:
+
+   ```
+   http://127.0.0.1:5252/setup/spotify/callback
+   ```
+
+   (Spotify only allows `http` on loopback addresses — use `127.0.0.1`, not `localhost` or your LAN IP.) Save, then copy the app's **Client ID** (no client secret is needed — this uses PKCE).
+2. Open the panel's **⚙ Settings → Spotify**, paste the Client ID and tap **Save Client ID**. The exact Redirect URI to register is shown there too.
+3. **Connect from a browser on the PC running the server**, at `http://127.0.0.1:5252` — tap **Connect Spotify** and approve the Spotify consent screen. You are redirected back and the panel shows *Connected*.
+4. Optionally pick a **playback device** from the dropdown (Refresh lists your currently reachable Spotify Connect devices). Leave it on *Active device* to target whatever is playing.
+
+Once connected, Spotify plays from the **Music** tab (playlist list + track search) and from scenes: a scene's `music.playId` — or `/music/play?id=…` — accepts Spotify URIs and links, e.g. `spotify:playlist:37i9dQZF1DX…` or `https://open.spotify.com/playlist/37i9dQZF1DX…`. Playing Spotify pauses Kenku and vice-versa, so the two never overlap.
+
+Stream Deck example (System → Website action):
+
+```
+http://localhost:5252/music/play?id=spotify:playlist:37i9dQZF1DX8NTLI2TtZa6
+```
+
+**Troubleshooting**
+
+- *"No active Spotify device"* — Spotify must be **open** somewhere (the desktop app, phone, or a speaker). Open it, tap Refresh next to the device dropdown in Settings, and pick it as the playback device — then scenes can wake it even when nothing is playing.
+- *"Spotify Premium is required"* — playback control over the Web API is a Premium-only feature; free accounts can't be remote-controlled.
+- *Connect button loops back with an error* — check the Redirect URI in the Spotify dashboard matches the one shown in Settings **character for character**, and that you started the connect from `http://127.0.0.1:5252` on the server PC.
+- *Worked for weeks, now "Spotify error"* — the saved token can be revoked (password change, "remove access" in your Spotify account). Tap **Disconnect** and connect again.
+
 ### 3. Stream Deck
 
 Use the built-in **System → Website** action (untick "Open in browser" / GET is fine), or the *Web Requests* plugin for POST:
@@ -100,8 +130,19 @@ Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 }
 ```
 
+Or with Spotify as the music source:
+
+```json
+{
+  "id": "tavern",
+  "name": "🍺 Tavern",
+  "light": { "power": true, "color": "#FF8C2A", "brightness": 70 },
+  "music": { "playId": "spotify:playlist:37i9dQZF1DX8NTLI2TtZa6", "volume": 0.5 }
+}
+```
+
 - `light`: `color` (hex) **or** white via `brightness` + `temperature` (0 = warm, 100 = cold); `power: false` turns it off.
-- `music`: `playId` starts a playlist/track, `volume` is 0–1, or `"pause": true` to stop the music.
+- `music`: `playId` starts a playlist/track — a Kenku id, or a `spotify:` URI / `open.spotify.com` link (a pasted share link works as-is); `volume` is 0–1 (on Spotify it maps to the device volume), or `"pause": true` to stop the music on both sources.
 - `soundEffects`: soundboard ids fired on activation.
 - Any part can be omitted — light, music and effects are applied concurrently, and the response reports each part separately (HTTP 207 if something failed).
 
@@ -111,17 +152,19 @@ Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 |---|---|
 | Scenes | `GET /scenes`, `GET /scenes/active`, `GET/PUT/DELETE /scenes/{id}`, `GET\|POST /scenes/{id}/activate` |
 | Lights | `/lights/on`, `/lights/off`, `/lights/toggle`, `/lights/color?hex=FF8C2A&brightness=80`, `/lights/white?brightness=80&temperature=30`, `/lights/brightness?value=50`, `GET /lights/status` |
-| Music | `/music/play?id=…`, `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/mute`, `/music/shuffle`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/state` |
+| Music | `/music/play?id=…` (Kenku id **or** a `spotify:` URI / `open.spotify.com` link), `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/mute`, `/music/shuffle`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/state` |
+| Spotify | `GET /music/spotify/playlists`, `GET /music/spotify/search?q=…`, `GET /music/spotify/state` |
 | SFX | `/sfx/play?id=…`, `/sfx/stop?id=…`, `GET /sfx/sounds`, `GET /sfx/state` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
+| Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |
 | Setup (config) | `GET /setup/config`, `PUT /setup/config` — read/update provider + Hue/Tuya settings at runtime (persisted to the database) |
 
 All command endpoints accept GET or POST; parameters go in the query string.
 
 ## Persistence
 
-Scenes and lighting settings (provider, Hue, Tuya) live in a SQLite database at `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path` in `appsettings.json`). The schema is created/upgraded automatically at startup via EF Core migrations.
+Scenes, lighting settings (provider, Hue, Tuya) and the Spotify connection (Client ID, refresh token, preferred device) live in a SQLite database at `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path` in `appsettings.json`). The schema is created/upgraded automatically at startup via EF Core migrations. Note the Spotify token in that file grants control of your Spotify account's playback — treat backups of the database accordingly.
 
 On first run with an empty database, the legacy JSON files are imported once: `scenes.json` (also the starter template on a fresh clone) and `settings.local.json` (the pre-SQLite settings overlay). After that the database is the source of truth — the legacy files are never read again and can be kept as a backup or deleted.
 

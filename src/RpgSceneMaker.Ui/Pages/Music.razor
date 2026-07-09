@@ -81,17 +81,82 @@ else
     </div>
 }
 
+@if (_spotifyConnected)
+{
+    <h2 class="rune">Spotify</h2>
+    <div class="panel">
+        <div class="field">
+            <label for="spotify-search">Search tracks</label>
+            <div class="field-row">
+                <input id="spotify-search" type="text" @bind="_spotifyQuery" @bind:event="oninput"
+                       @onkeydown="OnSearchKeyDown" placeholder="song or artist…" />
+                <button class="btn" @onclick="SearchSpotify" disabled="@_searching">Search</button>
+            </div>
+        </div>
+        @if (_spotifyResults is { Count: > 0 })
+        {
+            <div class="klist">
+                @foreach (var t in _spotifyResults)
+                {
+                    var label = string.IsNullOrEmpty(t.Artist) ? t.Name : $"{t.Name} — {t.Artist}";
+                    <button class="krow" @onclick="() => PlaySpotify(t.Uri, label)">
+                        <span class="krow-ico">♪</span>
+                        <span class="krow-title">@t.Name <small class="hint">@t.Artist</small></span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    <h2 class="rune">Spotify Playlists</h2>
+    @if (_spotifyPlaylists is null)
+    {
+        <p class="empty-note">Reading your Spotify playlists…</p>
+    }
+    else if (_spotifyPlaylists.Count == 0)
+    {
+        <p class="empty-note">No Spotify playlists found.</p>
+    }
+    else
+    {
+        <div class="klist">
+            @foreach (var pl in _spotifyPlaylists)
+            {
+                <button class="krow" @onclick="() => PlaySpotify(pl.Uri, pl.Name)">
+                    <span class="krow-ico">🎧</span>
+                    <span class="krow-title">@pl.Name <small class="hint">@pl.TrackCount tracks</small></span>
+                </button>
+            }
+        </div>
+    }
+}
+
 @code {
     private MusicState? _state;
     private List<KenkuGroup>? _playlists;
     private int _volumePercent = 50;
     private Timer? _timer;
 
+    private bool _spotifyConnected;
+    private List<SpotifyPlaylistDto>? _spotifyPlaylists;
+    private List<SpotifyTrackDto>? _spotifyResults;
+    private string _spotifyQuery = "";
+    private bool _searching;
+
     protected override async Task OnInitializedAsync()
     {
         await PollAsync();
         _playlists = await Api.GetPlaylistsAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 3000, 3000);
+
+        var (spotify, _) = await Api.GetSpotifyConfigAsync();
+        if (spotify?.Connected == true)
+        {
+            _spotifyConnected = true;
+            var (playlists, error) = await Api.GetSpotifyPlaylistsAsync();
+            _spotifyPlaylists = playlists ?? [];
+            if (playlists is null && error is not null) Ui.ReportError(error);
+        }
     }
 
     private async Task PollAsync()
@@ -120,6 +185,30 @@ else
         _volumePercent = percent;
         var volume = (percent / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
         await Api.CommandAsync($"music/volume?value={volume}");
+    }
+
+    private async Task PlaySpotify(string uri, string title)
+    {
+        if (await Api.CommandAsync($"music/play?id={Uri.EscapeDataString(uri)}", $"Playing {title}"))
+            await PollAsync();
+    }
+
+    private async Task SearchSpotify()
+    {
+        if (string.IsNullOrWhiteSpace(_spotifyQuery)) return;
+        _searching = true;
+        try
+        {
+            var (results, error) = await Api.SearchSpotifyTracksAsync(_spotifyQuery);
+            if (results is not null) _spotifyResults = results;
+            else if (error is not null) Ui.ReportError(error);
+        }
+        finally { _searching = false; }
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchSpotify();
     }
 
     public void Dispose() => _timer?.Dispose();

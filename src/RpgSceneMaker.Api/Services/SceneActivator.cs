@@ -14,6 +14,8 @@ public class SceneActivator(
     LightRegistry registry,
     EffectEngine effects,
     KenkuClient kenku,
+    SpotifyClient spotify,
+    SpotifyStore spotifyStore,
     CurrentState state,
     ILogger<SceneActivator> logger)
 {
@@ -102,23 +104,59 @@ public class SceneActivator(
     {
         if (music is null) return false;
 
+        if (music.Pause)
+        {
+            // With Spotify connected, Kenku may legitimately be off — don't let it fail the scene.
+            if (spotifyStore.Current.IsConnected)
+            {
+                await BestEffort(kenku.PauseAsync);
+                await spotify.PauseAsync(throwOnNoDevice: false);
+            }
+            else
+            {
+                await kenku.PauseAsync();
+            }
+            return true;
+        }
+
+        // Spotify track/playlist/album/artist reference → play on Spotify, best-effort pause Kenku.
+        if (!string.IsNullOrWhiteSpace(music.PlayId) && SpotifyClient.IsSpotifyUri(music.PlayId))
+        {
+            // Play first: it wakes the preferred device, while volume on an idle device can 404.
+            await spotify.PlayAsync(music.PlayId);
+            if (music.Volume is double spotifyVolume)
+                await spotify.SetVolumeAsync(spotifyVolume);
+            await BestEffort(kenku.PauseAsync);
+            return true;
+        }
+
+        // Kenku (default): set volume / play, and best-effort pause Spotify if it's connected.
         var didSomething = false;
         if (music.Volume is double volume)
         {
             await kenku.SetVolumeAsync(volume);
             didSomething = true;
         }
-        if (music.Pause)
-        {
-            await kenku.PauseAsync();
-            didSomething = true;
-        }
-        else if (!string.IsNullOrWhiteSpace(music.PlayId))
+        if (!string.IsNullOrWhiteSpace(music.PlayId))
         {
             await kenku.PlayAsync(music.PlayId);
+            await BestEffortPauseSpotifyAsync();
             didSomething = true;
         }
         return didSomething;
+    }
+
+    /// <summary>Pause Spotify without failing the scene: only when connected, and never throwing.</summary>
+    private async Task BestEffortPauseSpotifyAsync()
+    {
+        if (!spotifyStore.Current.IsConnected) return;
+        await BestEffort(() => spotify.PauseAsync(throwOnNoDevice: false));
+    }
+
+    private async Task BestEffort(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception ex) { logger.LogDebug(ex, "Best-effort music cross-pause failed (ignored)"); }
     }
 
     private async Task<bool> ApplySoundEffectsAsync(List<string> soundIds)
