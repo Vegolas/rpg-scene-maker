@@ -432,8 +432,16 @@ input[type="range"]::-moz-range-thumb {
 
 /* sound board grid */
 .sound-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.7rem; }
-.sound-grid .krow { flex-direction: column; justify-content: center; text-align: center; min-height: 84px; gap: 0.3rem; }
+.sound-grid .krow { position: relative; flex-direction: column; justify-content: center; text-align: center; min-height: 84px; gap: 0.3rem; }
 .sound-grid .krow .krow-title { white-space: normal; font-size: 0.92rem; }
+/* corner "edit" affordance on a sound tile (same idea as scene cards) */
+.sound-grid .krow .card-edit {
+    position: absolute; top: 0; right: 0; width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    border: 0; background: none; color: var(--ink-dim); font-size: 0.95rem;
+}
+.sound-grid .krow .card-edit:hover { color: var(--ember); }
+.sound-grid .krow .card-edit:active { transform: scale(0.9); }
 
 /* ---------- color swatches ---------- */
 .swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 0.7rem; }

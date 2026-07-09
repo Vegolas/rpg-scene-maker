@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using RpgSceneMaker.Ui.Contracts;
 
@@ -210,6 +211,60 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         await GetAsync<List<LogEntryDto>>("logs/list") ?? [];
 
     public Task<bool> ClearLogsAsync() => CommandAsync("logs/clear", "Logs cleared");
+
+    // ---------- sounds (soundboard) ----------
+
+    public async Task<List<SoundDto>> GetSoundsAsync() =>
+        await GetAsync<List<SoundDto>>("sounds/list") ?? [];
+
+    /// <summary>Ids of sounds currently playing on the server; silent on failure like other pollers.</summary>
+    public async Task<List<string>> GetPlayingSoundIdsAsync() =>
+        (await GetAsync<SoundStateDto>("sounds/state"))?.Playing ?? [];
+
+    /// <summary>Import a file as a new sound (multipart upload).</summary>
+    public async Task<(SoundDto? Result, string? Error)> UploadSoundAsync(IBrowserFile file, string name, string category)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            // 50 MB matches the server's upload cap.
+            content.Add(new StreamContent(file.OpenReadStream(50L * 1024 * 1024)), "file", file.Name);
+            if (!string.IsNullOrWhiteSpace(name)) content.Add(new StringContent(name), "name");
+            if (!string.IsNullOrWhiteSpace(category)) content.Add(new StringContent(category), "category");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "sounds/import") { Content = content };
+            if (await GetApiKeyAsync() is { } key) request.Headers.Add("X-Api-Key", key);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode
+                ? (await response.Content.ReadFromJsonAsync<SoundDto>(Json), null)
+                : (null, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    public Task<(SoundDto? Result, string? Error)> UpdateSoundAsync(string id, string name, string category, double volume, bool loop) =>
+        FetchAsync<SoundDto>(HttpMethod.Put, $"sounds/{Uri.EscapeDataString(id)}", new { name, category, volume, loop });
+
+    public async Task<(bool Ok, string? Error)> DeleteSoundAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"sounds/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
 
     // ---------- plumbing ----------
 

@@ -185,6 +185,32 @@ else
         }
     </div>
 
+    <RuneHeading>Sound Effects</RuneHeading>
+    <div class="panel">
+        @if (_sounds is null || _sounds.Count == 0)
+        {
+            <p class="hint" style="margin:0">
+                No sounds imported yet. Add some on the <a href="sounds">Sounds</a> tab, then pick them here.
+            </p>
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0">Activating the scene stops current playback, then fires the picked sounds (each with its own volume/loop).</p>
+            @foreach (var group in _sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+            {
+                <p class="kgroup-title">@group.Key</p>
+                <div class="klist">
+                    @foreach (var sound in group)
+                    {
+                        var picked = _soundEffects.Contains(sound.Id);
+                        <KRow Icon="@(picked ? "☑" : "☐")" Title="@sound.Name" Hint="@(sound.Loop ? "🔁 loop" : null)"
+                              Selected="picked" OnClick="() => ToggleSound(sound.Id)" />
+                    }
+                </div>
+            }
+        }
+    </div>
+
     <RuneHeading>Save</RuneHeading>
     <div class="btn-row">
         <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
@@ -254,8 +280,9 @@ else
     private int _volumePercent = 50;
     private List<SpotifyPlaylistDto>? _playlists;
 
-    // Sound effects are no longer edited here (Kenku removed), but existing values are preserved on save.
+    // Ids of soundboard sounds this scene fires; picked from the imported library below.
     private List<string> _soundEffects = [];
+    private List<SoundDto>? _sounds;
 
     // delete
     private bool _confirmDelete;
@@ -284,6 +311,9 @@ else
         // Spotify playlists are optional — the free-text URI field always works when not connected.
         var (playlists, _) = await Api.GetSpotifyPlaylistsAsync();
         _playlists = playlists ?? [];
+
+        // Sound library to pick scene sound effects from (empty/silent when none imported yet).
+        _sounds = await Api.GetSoundsAsync();
         _loading = false;
     }
 
@@ -337,7 +367,6 @@ else
             }
         }
 
-        // Preserve any stored sound effects even though the editor no longer shows them.
         _soundEffects = [.. scene.SoundEffects ?? []];
     }
 
@@ -532,6 +561,12 @@ else
         },
         _ => null,
     };
+
+    private void ToggleSound(string id)
+    {
+        if (!_soundEffects.Remove(id))
+            _soundEffects.Add(id);
+    }
 
     private async Task DeleteTapped()
     {

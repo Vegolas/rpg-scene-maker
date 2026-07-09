@@ -4,7 +4,8 @@ A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor
 
 - **Lighting** — a Tuya smart bulb (e.g. Polux GU10) **or Philips Hue lights**, controlled **directly over your LAN** (fast, works without internet). Pick the system on the panel's ⚙ Settings page — scenes and endpoints are identical for both.
 - **Music** — **Spotify** (Premium) via the Spotify Web API, driving a Spotify Connect device on your LAN.
-- **Scenes** — named presets combining light color/brightness + a Spotify playlist/track, stored in a local SQLite database.
+- **Sound effects** — a built-in **soundboard**: import your own audio (MP3/WAV/OGG) and fire one-shots or looping ambience, played on the machine running the app. Each sound has its own volume and loop setting, and scenes can trigger sounds too.
+- **Scenes** — named presets combining light color/brightness + a Spotify playlist/track + sound effects, stored in a local SQLite database.
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
 
@@ -14,7 +15,7 @@ Every command endpoint accepts **both GET and POST**, so the built-in Stream Dec
 dotnet run --project src/RpgSceneMaker.Api
 ```
 
-This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel has three tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify now-playing, transport, volume, shuffle/repeat, playlist list and track search), **Lights** (mood colors, brightness, white temperature).
+This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify now-playing, transport, volume, shuffle/repeat, playlist list and track search), **Lights** (mood colors, brightness, white temperature), **Sounds** (import + soundboard), and **Logs**.
 
 ## Using it from an iPad (or any tablet/phone)
 
@@ -109,6 +110,8 @@ Use the built-in **System → Website** action (untick "Open in browser" / GET i
 | Pause music | `http://localhost:5252/music/pause` |
 | Light toggle | `http://localhost:5252/lights/toggle` |
 | Dim to 20% | `http://localhost:5252/lights/brightness?value=20` |
+| Play a sound | `http://localhost:5252/sounds/thunder/play` |
+| Stop all sounds | `http://localhost:5252/sounds/stop` |
 
 ## Scenes
 
@@ -125,7 +128,19 @@ Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 
 - `light`: `color` (hex) **or** white via `brightness` + `temperature` (0 = warm, 100 = cold); `power: false` turns it off.
 - `music`: `playId` starts a playlist/track/album/artist — a `spotify:` URI or `open.spotify.com` link (a pasted share link works as-is); `volume` is 0–1 (mapped to the Spotify device volume), or `"pause": true` to stop playback.
-- Any part can be omitted — light and music are applied concurrently, and the response reports each part separately (HTTP 207 if something failed).
+- `soundEffects`: a list of sound ids (from the Sounds tab) to fire — e.g. `"soundEffects": ["thunder", "rain"]`.
+- Any part can be omitted — light, music and sound effects are applied concurrently, and the response reports each part separately (HTTP 207 if something failed).
+
+## Soundboard
+
+Import your own sound effects and fire them from the panel's **Sounds** tab or from a Stream Deck. Audio plays on the **machine running the app** (like the old Kenku FM setup) — so it comes out of the same speakers no matter which panel or button triggered it, including scene activations.
+
+- **Import** — Sounds tab → *Import a sound* → pick an **MP3, WAV or OGG** file. It's uploaded to the server and stored under `%LocalAppData%\RpgSceneMaker\sounds`.
+- **Tune** — each sound has a **volume** and a **loop** toggle (one-shot vs. continuous ambience). Tap ✎ on a sound to rename it, set its category, adjust volume/looping, and *Preview*.
+- **Play** — tap a sound to play, tap again to stop. Sounds **overlap** (thunder over rain); **Stop all** stops everything.
+- **From scenes** — in the scene editor's *Sound Effects* section, pick which sounds a scene fires. Activating the scene stops current playback, then plays the picked sounds with their own volume/loop.
+
+> Sound playback uses NAudio and is **Windows-only** (lighting and Spotify work cross-platform).
 
 ## Endpoint reference
 
@@ -134,6 +149,7 @@ Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 | Scenes | `GET /scenes`, `GET /scenes/active`, `GET/PUT/DELETE /scenes/{id}`, `GET\|POST /scenes/{id}/activate` |
 | Lights | `/lights/on`, `/lights/off`, `/lights/toggle`, `/lights/color?hex=FF8C2A&brightness=80`, `/lights/white?brightness=80&temperature=30`, `/lights/brightness?value=50`, `GET /lights/status` |
 | Music (Spotify) | `/music/play?id=…` (a `spotify:` URI / `open.spotify.com` link), `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/shuffle?value=true`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/search?q=…`, `GET /music/state` |
+| Sounds (soundboard) | `GET /sounds/list`, `POST /sounds/import` (multipart), `PUT\|DELETE /sounds/{id}`, `/sounds/{id}/play?volume=0.8`, `/sounds/{id}/stop`, `/sounds/stop` (all), `GET /sounds/state` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
 | Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |
@@ -156,5 +172,6 @@ Deployment-level config only — everything else is managed from the panel and s
 | `Urls` | Listen address, default `http://0.0.0.0:5252` so tablets on your Wi-Fi can reach the panel. Change to `http://localhost:5252` to lock it to this PC. |
 | `Security:ApiKey` | Optional shared secret. When set, all control endpoints require it (`X-Api-Key` header or `?apiKey=`); the panel asks for it under ⚙. |
 | `Database:Path` | SQLite file location, default `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db`. |
+| `Sounds:Path` | Folder for imported sound-effect audio files, default `%LocalAppData%\RpgSceneMaker\sounds`. |
 
 > ⚠️ The API listens on your whole LAN by default so the iPad can reach it. On a home network the worst case is someone toggling your lights, but set `Security:ApiKey` anyway — one line of config, and the panel + Stream Deck both support it. Never expose the port to the internet.

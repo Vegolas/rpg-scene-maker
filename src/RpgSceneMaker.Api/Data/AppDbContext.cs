@@ -6,6 +6,7 @@ namespace RpgSceneMaker.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Scene> Scenes => Set<Scene>();
+    public DbSet<Sound> Sounds => Set<Sound>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
 
@@ -23,6 +24,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 lights.ToJson();
                 lights.OwnsOne(l => l.Effect);
             });
+        });
+
+        modelBuilder.Entity<Sound>(sound =>
+        {
+            sound.HasKey(s => s.Id);
+            // Sound ids appear in hand-typed /sounds/{id}/play URLs, so match them case-insensitively too.
+            sound.Property(s => s.Id).UseCollation("NOCASE");
         });
 
         modelBuilder.Entity<LightingConfig>(config =>

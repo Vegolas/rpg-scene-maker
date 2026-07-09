@@ -14,11 +14,22 @@ var dbPath = builder.Configuration["Database:Path"] ?? Path.Combine(
     "RpgSceneMaker", "rpg-scene-maker.db");
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 
+// Sound-effect audio files live next to the database; Sounds:Path overrides the location.
+var soundsPath = builder.Configuration["Sounds:Path"] ?? Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "RpgSceneMaker", "sounds");
+
 builder.Services.AddSingleton<TuyaLightService>();
 builder.Services.AddSingleton<TuyaSetupService>();
 builder.Services.AddHttpClient<HueLightService>(client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddHttpClient<HueSetupService>(client => client.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddSingleton<SceneStore>();
+
+// Soundboard: metadata in SQLite, audio files on disk, playback on the server's own audio device.
+builder.Services.AddSingleton<SoundStore>();
+builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
+builder.Services.AddSingleton<SoundboardPlayer>();
+
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<CurrentState>();
 builder.Services.AddSingleton<LightRegistry>();
@@ -71,6 +82,7 @@ app.Use(async (context, next) =>
             InvalidOperationException => (StatusCodes.Status503ServiceUnavailable, "Not configured"),
             HueException => (StatusCodes.Status502BadGateway, "Philips Hue error"),
             SpotifyException => (StatusCodes.Status502BadGateway, "Spotify error"),
+            SoundboardException => (StatusCodes.Status503ServiceUnavailable, "Soundboard error"),
             HttpRequestException or TaskCanceledException =>
                 (StatusCodes.Status502BadGateway, "Spotify unreachable — check the internet connection"),
             SocketException or IOException or TimeoutException =>
@@ -112,8 +124,8 @@ app.Use(async (context, next) =>
         // the API key; the opaque state value (validated server-side) guards it instead.
         !path.StartsWithSegments("/setup/spotify/callback") &&
         (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
-         path.StartsWithSegments("/music") || path.StartsWithSegments("/setup") ||
-         path.StartsWithSegments("/logs"));
+         path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
+         path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -126,6 +138,7 @@ app.MapGet("/health", () => new { status = "ok" });
 app.MapSceneEndpoints();
 app.MapLightEndpoints();
 app.MapMusicEndpoints();
+app.MapSoundEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
 
