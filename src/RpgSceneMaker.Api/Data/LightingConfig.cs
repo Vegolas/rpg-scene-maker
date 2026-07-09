@@ -1,3 +1,5 @@
+using RpgSceneMaker.Api.Models;
+
 namespace RpgSceneMaker.Api.Data;
 
 /// <summary>
@@ -19,6 +21,12 @@ public class LightingConfig
 
     /// <summary>Individually addressable lights that scenes and /lights/{key} endpoints control.</summary>
     public List<RegisteredLight> Lights { get; set; } = [];
+
+    /// <summary>
+    /// The "default state" the panel's always-visible reset button (GET/POST /lights/default) restores —
+    /// e.g. bright white "house lights up" for a break. Null = not configured (the reset button then 400s).
+    /// </summary>
+    public LightSettings? DefaultLight { get; set; }
 }
 
 /// <summary>One addressable light in the registry. Key is a stable slug used by scenes and endpoints.</summary>

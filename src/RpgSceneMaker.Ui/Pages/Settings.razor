@@ -188,6 +188,42 @@ else
         </div>
     </div>
 
+    <RuneHeading>Default Lighting</RuneHeading>
+    <div class="panel">
+        <p class="hint">The state the top-bar 💡 reset button restores — e.g. bright white “house lights up” for a break.</p>
+
+        <Segmented TValue="string" Options="DefaultModes" Value="@(DefaultMode ?? "")" ValueChanged="SetDefaultMode" />
+
+        @if (DefaultMode == "color")
+        {
+            <div style="margin-top:1rem">
+                <SwatchGrid Selected="_config.DefaultLight?.Color" OnPick="OnDefaultColorPicked" />
+            </div>
+            <SliderRow LeftIcon="🔆" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
+                       ValueChanged="OnDefaultBrightnessChanged" AriaLabel="Default brightness" />
+        }
+        else if (DefaultMode == "white")
+        {
+            <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" Value="@(_config.DefaultLight?.Temperature ?? 50)"
+                       ValueChanged="OnDefaultTemperatureChanged" AriaLabel="Default color temperature" />
+            <SliderRow LeftIcon="🔆" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
+                       ValueChanged="OnDefaultBrightnessChanged" AriaLabel="Default brightness" />
+        }
+        else if (DefaultMode == "off")
+        {
+            <p class="hint">The reset button will switch all lights off.</p>
+        }
+        else
+        {
+            <p class="empty-note" style="margin:0.8rem 0">No default set yet — pick Colour, White or Off above.</p>
+        }
+
+        <div class="btn-row" style="margin-top:1rem">
+            <button class="btn primary" @onclick="SaveConfig" disabled="@_busy">Save default</button>
+            <button class="btn" @onclick="TestDefault" disabled="@(_busy || _config.DefaultLight is null)">Test</button>
+        </div>
+    </div>
+
     <RuneHeading>Spotify</RuneHeading>
     <div class="panel">
         <div class="field">
@@ -526,4 +562,56 @@ else
 
     private string UniqueKey(string baseKey) =>
         SceneNaming.MakeUnique(baseKey, _config!.Lights.Select(l => l.Key).ToList(), "light");
+
+    // ---------- default lighting (the header's reset button) ----------
+
+    private static readonly IReadOnlyList<(string, string)> DefaultModes =
+        [("color", "Colour"), ("white", "White"), ("off", "Off")];
+
+    // Derive the editor mode from the stored default (null = nothing configured yet).
+    private string? DefaultMode => _config?.DefaultLight switch
+    {
+        null => null,
+        { Power: false } => "off",
+        { Color: not null } => "color",
+        _ => "white",
+    };
+
+    private void SetDefaultMode(string mode)
+    {
+        if (_config is null) return;
+        var d = _config.DefaultLight;
+        _config.DefaultLight = mode switch
+        {
+            "color" => new DefaultLightEdit { Power = true, Color = d?.Color ?? "#ff8c2a", Brightness = d?.Brightness ?? 80 },
+            "white" => new DefaultLightEdit { Power = true, Brightness = d?.Brightness ?? 80, Temperature = d?.Temperature ?? 50 },
+            "off" => new DefaultLightEdit { Power = false },
+            _ => d,
+        };
+    }
+
+    private void OnDefaultColorPicked(string hex)
+    {
+        if (_config?.DefaultLight is not { } d) return;
+        d.Color = hex;
+        d.Power = true;
+    }
+
+    private void OnDefaultBrightnessChanged(int value)
+    {
+        if (_config?.DefaultLight is { } d) d.Brightness = value;
+    }
+
+    private void OnDefaultTemperatureChanged(int value)
+    {
+        if (_config?.DefaultLight is { } d) d.Temperature = value;
+    }
+
+    private async Task TestDefault()
+    {
+        if (_config is null) return;
+        // Persist first so the server applies exactly what's on screen, then fire the reset.
+        if (await Api.SaveConfigAsync(_config))
+            await Api.ResetLightsToDefaultAsync();
+    }
 }

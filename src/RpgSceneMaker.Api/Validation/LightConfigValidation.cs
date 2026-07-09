@@ -21,4 +21,15 @@ public static class LightConfigValidation
                 throw new ArgumentException($"Hue light '{l.Key}' needs a HueId.");
         }
     }
+
+    /// <summary>Guards the default light state; returns it with the colour normalised (or null when unset).</summary>
+    public static DefaultLightDto? ValidateDefault(DefaultLightDto? d)
+    {
+        if (d is null) return null;
+        if (d.Brightness is < 0 or > 100)
+            throw new ArgumentException("Default light brightness must be between 0 and 100.");
+        if (d.Temperature is < 0 or > 100)
+            throw new ArgumentException("Default light temperature must be between 0 and 100.");
+        return d.Color is null ? d : d with { Color = LightValidation.NormalizeHex(d.Color) };
+    }
 }

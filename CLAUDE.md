@@ -20,7 +20,10 @@ Two projects under `src/`; the solution file lives at
 - **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Music, Lights, Sounds, Settings, Logs);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions). All server calls go
-  through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs).
+  through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). The top bar (in
+  [MainLayout.razor](src/RpgSceneMaker.Ui/Layout/MainLayout.razor)) hosts always-visible
+  [QuickControls.razor](src/RpgSceneMaker.Ui/Components/QuickControls.razor): music play/pause + volume
+  (shown only when Spotify is connected) and a reset-lights button, on every tab.
 
 ## Build & run
 
@@ -38,6 +41,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `HueLightService` (Hue Bridge REST). The provider is chosen per-request in
   [Program.cs](src/RpgSceneMaker.Api/Program.cs) from `SettingsStore.Current.Provider`. The
   `ApplyAsync(LightSettings)` default-interface method maps a scene's light block to power/colour/white.
+  A configurable **default state** (`LightingConfig.DefaultLight`) is applied by `GET/POST /lights/default`
+  — the panel's always-visible "reset lights" button; set it on the Settings page (400s until then).
 - **`SpotifyClient` / `SpotifyStore`** — music is Spotify-only. `SpotifyClient` wraps the Spotify Web
   API (Authorization Code + PKCE, no client secret) to drive a Spotify Connect device on the LAN;
   `SpotifyStore` persists the Client ID, refresh token and preferred device (in SQLite). The OAuth
@@ -82,8 +87,8 @@ Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.jso
 `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path`). Context:
 [AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
 as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`) and a
-single-row `LightingConfig`. The Spotify connection (Client ID, refresh token, preferred device) is
-also persisted here via `SpotifyStore`.
+single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`). The Spotify
+connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 
 Sound-effect **audio files** live on disk, not in the DB, at `%LocalAppData%\RpgSceneMaker\sounds\`
 (override with `Sounds:Path`); each `Sound` row references its file by name via `SoundFileStorage`.

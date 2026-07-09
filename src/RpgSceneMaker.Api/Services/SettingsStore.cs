@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api.Contracts;
 using RpgSceneMaker.Api.Data;
+using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -29,7 +30,8 @@ public class SettingsStore(IDbContextFactory<AppDbContext> dbFactory)
             c.Provider,
             new HueConfigDto(c.Hue.BridgeIp, c.Hue.AppKey, c.Hue.LightIds),
             new TuyaConfigDto(c.Tuya.Ip, c.Tuya.DeviceId, c.Tuya.LocalKey, c.Tuya.ProtocolVersion, c.Tuya.DpProfile),
-            c.Lights.Select(l => new RegisteredLightDto(l.Key, l.Name, l.Provider, l.HueId)).ToList());
+            c.Lights.Select(l => new RegisteredLightDto(l.Key, l.Name, l.Provider, l.HueId)).ToList(),
+            c.DefaultLight is { } d ? new DefaultLightDto(d.Power, d.Color, d.Brightness, d.Temperature) : null);
     }
 
     public void Save(LightingConfigDto dto)
@@ -62,6 +64,9 @@ public class SettingsStore(IDbContextFactory<AppDbContext> dbFactory)
             entity.Lights = (dto.Lights ?? [])
                 .Select(l => new RegisteredLight { Key = l.Key, Name = l.Name, Provider = l.Provider, HueId = l.HueId })
                 .ToList();
+            entity.DefaultLight = dto.DefaultLight is { } d
+                ? new LightSettings { Power = d.Power, Color = d.Color, Brightness = d.Brightness, Temperature = d.Temperature }
+                : null;
 
             db.SaveChanges();
             _current = entity;

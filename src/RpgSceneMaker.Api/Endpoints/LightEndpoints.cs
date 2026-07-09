@@ -53,6 +53,17 @@ public static class LightEndpoints
             return new { brightness = value };
         });
 
+        // Restore the configured "default state" (set on the Settings page) — the panel's reset button.
+        // A literal segment, so it never collides with the /{key}/... per-light routes below.
+        lights.MapMethods("/default", EndpointHelpers.GetOrPost, async (ILightService bulb, EffectEngine effects, SettingsStore settings) =>
+        {
+            var def = settings.Current.DefaultLight
+                ?? throw new ArgumentException("No default lighting is set — configure it on the Settings page first.");
+            effects.StopAll();
+            await bulb.ApplyAsync(def);
+            return new { light = "default" };
+        });
+
         lights.MapGet("/status", (ILightService bulb) => bulb.GetStatusAsync());
 
         // Registered lights the per-light endpoints and scenes can target.

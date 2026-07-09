@@ -84,7 +84,7 @@ body::after {
     z-index: 20;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.55rem;
     padding: calc(0.6rem + env(safe-area-inset-top, 0px)) 1.1rem 0.6rem;
     background: linear-gradient(rgba(14, 11, 19, 0.92), rgba(14, 11, 19, 0.75));
     backdrop-filter: blur(10px);
@@ -102,7 +102,38 @@ body::after {
     background-clip: text;
     color: transparent;
     flex: 1;
+    /* Yield space to the quick controls on narrow panels rather than pushing them off-screen. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
+
+/* ---------- always-visible quick controls (header) ---------- */
+.quick { display: flex; align-items: center; gap: 0.4rem; flex: 0 0 auto; }
+.quick .q-btn {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(160deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--ink);
+    font-size: 1.15rem;
+    cursor: pointer;
+    transition: transform 0.08s, border-color 0.2s;
+}
+.quick .q-btn.primary { color: var(--ember); border-color: var(--line-strong); }
+.quick .q-btn:active { transform: scale(0.92); border-color: var(--line-strong); }
+.quick .q-vol {
+    flex: 0 0 auto;
+    width: 92px;
+    height: 34px;
+}
+/* Below this width the header is too tight for a usable slider — the Music tab keeps the full one. */
+@media (max-width: 430px) { .quick .q-vol { display: none; } }
 
 .conn-dot {
     width: 11px;

@@ -48,6 +48,9 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     public async Task<List<RegisteredLightInfo>> GetRegisteredLightsAsync() =>
         await GetAsync<List<RegisteredLightInfo>>("lights/list") ?? [];
 
+    /// <summary>Restore the configured default lighting (the header's reset button). 400s if none is set.</summary>
+    public Task<bool> ResetLightsToDefaultAsync() => CommandAsync("lights/default", "Lights reset to default");
+
     public Task<SceneDto?> GetSceneAsync(string id) => GetAsync<SceneDto?>($"scenes/{Uri.EscapeDataString(id)}");
 
     /// <summary>Upsert a scene; the editor shows the returned error inline / via toast.</summary>

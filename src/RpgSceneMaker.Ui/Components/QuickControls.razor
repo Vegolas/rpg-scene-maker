@@ -1,0 +1,66 @@
+@* Always-visible steering in the top bar: play/pause + volume for music, and a reset-lights
+   button that restores the configured default state. Lives in MainLayout, so it stays mounted
+   for the whole session and one poll timer covers every tab. *@
+@implements IDisposable
+@inject ApiClient Api
+
+<div class="quick">
+    @if (_musicConnected)
+    {
+        <button class="q-btn primary" @onclick="PlayPause"
+                title="@(Playing ? "Pause music" : "Play music")"
+                aria-label="@(Playing ? "Pause music" : "Play music")">@(Playing ? "⏸" : "▶")</button>
+        <input class="q-vol" type="range" min="0" max="100" value="@_volume"
+               @onchange="OnVolumeChanged" title="Music volume" aria-label="Music volume" />
+    }
+    <button class="q-btn" @onclick="ResetLights"
+            title="Reset lights to default" aria-label="Reset lights to default">💡</button>
+</div>
+
+@code {
+    private bool _musicConnected;
+    private SpotifyStateDto? _state;
+    private int _volume = 50;
+    private long _volumeTouchedAt;   // Environment.TickCount64 of the last manual drag
+    private Timer? _timer;
+
+    private bool Playing => _state?.IsPlaying == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (spotify, _) = await Api.GetSpotifyConfigAsync();
+        _musicConnected = spotify?.Connected == true;
+        if (!_musicConnected) return;
+
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 5000, 5000);
+    }
+
+    private async Task PollAsync()
+    {
+        _state = await Api.GetSpotifyStateAsync();
+        // Don't yank the slider back while the user is dragging it — Spotify's reported volume lags a beat.
+        if (_state?.VolumePercent is { } vp && Environment.TickCount64 - _volumeTouchedAt > 3000)
+            _volume = vp;
+        StateHasChanged();
+    }
+
+    private async Task PlayPause()
+    {
+        if (await Api.CommandAsync(Playing ? "music/pause" : "music/resume"))
+            await PollAsync();
+    }
+
+    private async Task OnVolumeChanged(ChangeEventArgs e)
+    {
+        if (e.AsInt() is not { } percent) return;
+        _volume = percent;
+        _volumeTouchedAt = Environment.TickCount64;
+        var value = (percent / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Api.CommandAsync($"music/volume?value={value}");
+    }
+
+    private Task ResetLights() => Api.ResetLightsToDefaultAsync();
+
+    public void Dispose() => _timer?.Dispose();
+}

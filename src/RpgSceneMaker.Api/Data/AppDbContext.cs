@@ -40,6 +40,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             config.OwnsOne(c => c.Hue, b => b.ToJson());
             config.OwnsOne(c => c.Tuya, b => b.ToJson());
             config.OwnsMany(c => c.Lights, b => b.ToJson());
+            config.OwnsOne(c => c.DefaultLight, b => b.ToJson());
             config.Navigation(c => c.Hue).IsRequired();
             config.Navigation(c => c.Tuya).IsRequired();
         });

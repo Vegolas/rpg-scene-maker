@@ -24,6 +24,17 @@ public class LightingConfigDto
     public TuyaConfigDto Tuya { get; set; } = new();
     // Registered, individually addressable lights the registry section edits.
     public List<RegisteredLightEdit> Lights { get; set; } = [];
+    // The state the header's "reset lights" button restores; null until configured.
+    public DefaultLightEdit? DefaultLight { get; set; }
+}
+
+// Mutable form model for the default light state (mirrors the API's DefaultLightDto).
+public class DefaultLightEdit
+{
+    public bool? Power { get; set; }
+    public string? Color { get; set; }
+    public int? Brightness { get; set; }
+    public int? Temperature { get; set; }
 }
 
 // Mutable form model for one registered light in the Settings registry list.

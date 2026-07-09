@@ -29,6 +29,8 @@ public static class SetupEndpoints
             if (config.Provider.ToLowerInvariant() is not ("tuya" or "hue"))
                 throw new ArgumentException("Provider must be 'tuya' or 'hue'.");
             LightConfigValidation.Validate(config.Lights);
+            // Persist the default light with its colour normalised to canonical #RRGGBB.
+            config = config with { DefaultLight = LightConfigValidation.ValidateDefault(config.DefaultLight) };
             store.Save(config);
             return Results.Ok(config);
         });
