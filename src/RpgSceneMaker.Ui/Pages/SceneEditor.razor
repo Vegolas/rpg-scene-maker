@@ -244,35 +244,29 @@ else
 
         @if (_music == MusicChoice.Play)
         {
+            <div class="field" style="margin-top:1rem;margin-bottom:0">
+                <label for="music-uri">Spotify URI or link</label>
+                <input id="music-uri" type="text" value="@_playId" @oninput="e => _playId = e.Value?.ToString() ?? string.Empty"
+                       placeholder="spotify:playlist:… or https://open.spotify.com/…" />
+            </div>
+
             @if (_playlists is null)
             {
-                <p class="empty-note">Reading the songbook…</p>
+                <p class="empty-note">Reading your Spotify playlists…</p>
             }
             else if (_playlists.Count == 0)
             {
-                <p class="hint" style="margin-top:1rem">Kenku FM isn't answering — enter a playlist / track id by hand.</p>
-                <div class="field" style="margin-top:0.6rem;margin-bottom:0">
-                    <input type="text" value="@_manualPlayId" @oninput="e => _manualPlayId = e.Value?.ToString() ?? string.Empty"
-                           placeholder="playlist or track id" />
-                </div>
+                <p class="hint" style="margin-top:0.8rem">Connect Spotify in <a href="settings">Settings</a> to pick from your playlists, or paste a link above.</p>
             }
             else
             {
                 <div class="klist" style="margin-top:1rem">
-                    @foreach (var group in _playlists)
+                    @foreach (var pl in _playlists)
                     {
-                        <p class="kgroup-title">@group.Title</p>
-                        <button class="krow @(_playId == group.Id ? "selected" : "")" @onclick="() => _playId = group.Id">
-                            <span class="krow-ico">📁</span>
-                            <span class="krow-title">Play all — @group.Title</span>
+                        <button class="krow @(_playId == pl.Uri ? "selected" : "")" @onclick="() => _playId = pl.Uri">
+                            <span class="krow-ico">🎧</span>
+                            <span class="krow-title">@pl.Name <small class="hint">@pl.TrackCount tracks</small></span>
                         </button>
-                        @foreach (var track in group.Items)
-                        {
-                            <button class="krow @(_playId == track.Id ? "selected" : "")" @onclick="() => _playId = track.Id">
-                                <span class="krow-ico">♪</span>
-                                <span class="krow-title">@track.Title</span>
-                            </button>
-                        }
                     }
                 </div>
             }
@@ -293,36 +287,6 @@ else
         else if (_music == MusicChoice.Pause)
         {
             <p class="hint" style="margin-top:0.8rem">The scene pauses whatever is playing.</p>
-        }
-    </div>
-
-    <h2 class="rune">Sound Effects</h2>
-    <div class="panel">
-        @if (_boards is null)
-        {
-            <p class="empty-note">Uncorking the sound vials…</p>
-        }
-        else if (_boards.Count == 0)
-        {
-            <p class="hint">Kenku FM isn't answering — enter sound ids separated by commas.</p>
-            <div class="field" style="margin-top:0.6rem;margin-bottom:0">
-                <input type="text" value="@_manualSounds" @oninput="e => _manualSounds = e.Value?.ToString() ?? string.Empty"
-                       placeholder="id1, id2, id3" />
-            </div>
-        }
-        else
-        {
-            @foreach (var board in _boards)
-            {
-                <p class="kgroup-title">@board.Title</p>
-                <div class="chip-row">
-                    @foreach (var sound in board.Items)
-                    {
-                        <button class="chip @(_soundIds.Contains(sound.Id) ? "on" : "")"
-                                @onclick="() => ToggleSound(sound.Id)">@sound.Title</button>
-                    }
-                </div>
-            }
         }
     </div>
 
@@ -405,15 +369,12 @@ else
     // music
     private MusicChoice _music = MusicChoice.None;
     private string? _playId;
-    private string _manualPlayId = "";
     private bool _setVolume;
     private int _volumePercent = 50;
-    private List<KenkuGroup>? _playlists;
+    private List<SpotifyPlaylistDto>? _playlists;
 
-    // sfx
-    private HashSet<string> _soundIds = [];
-    private string _manualSounds = "";
-    private List<KenkuGroup>? _boards;
+    // Sound effects are no longer edited here (Kenku removed), but existing values are preserved on save.
+    private List<string> _soundEffects = [];
 
     // delete
     private bool _confirmDelete;
@@ -439,9 +400,9 @@ else
             LoadFrom(scene);
         }
 
-        // Kenku lists are optional — offline just falls back to the manual inputs.
-        _playlists = await Api.GetPlaylistsAsync();
-        _boards = await Api.GetSoundboardsAsync();
+        // Spotify playlists are optional — the free-text URI field always works when not connected.
+        var (playlists, _) = await Api.GetSpotifyPlaylistsAsync();
+        _playlists = playlists ?? [];
         _loading = false;
     }
 
@@ -487,7 +448,6 @@ else
             {
                 _music = MusicChoice.Play;
                 _playId = playId;
-                _manualPlayId = playId;
                 if (music.Volume is { } vol)
                 {
                     _setVolume = true;
@@ -496,8 +456,8 @@ else
             }
         }
 
-        _soundIds = [.. scene.SoundEffects ?? []];
-        _manualSounds = string.Join(", ", _soundIds); // keeps ids if Kenku is offline (manual fallback shown)
+        // Preserve any stored sound effects even though the editor no longer shows them.
+        _soundEffects = [.. scene.SoundEffects ?? []];
     }
 
     private void ToggleEmoji(string e) => _emoji = _emoji == e ? "" : e;
@@ -517,11 +477,6 @@ else
     private void SetVolume(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out var v)) _volumePercent = v;
-    }
-
-    private void ToggleSound(string id)
-    {
-        if (!_soundIds.Add(id)) _soundIds.Remove(id);
     }
 
     private string ComposedName =>
@@ -561,7 +516,7 @@ else
         _edit.Name = ComposedName;
         (_edit.Light, _edit.Lights) = BuildLights();
         _edit.Music = BuildMusic();
-        _edit.SoundEffects = BuildSounds();
+        _edit.SoundEffects = _soundEffects;
 
         _busy = true;
         try
@@ -583,7 +538,7 @@ else
                 }
                 else
                 {
-                    var problems = new[] { ("light", result.Light), ("music", result.Music), ("sfx", result.SoundEffects) }
+                    var problems = new[] { ("light", result.Light), ("music", result.Music) }
                         .Where(p => p.Item2.StartsWith("error"))
                         .Select(p => $"{p.Item1}: {p.Item2[7..]}");
                     Ui.ReportError($"Saved, but partially applied. {string.Join(" | ", problems)}");
@@ -741,18 +696,11 @@ else
         MusicChoice.Pause => new MusicEdit { Pause = true },
         MusicChoice.Play => new MusicEdit
         {
-            PlayId = string.IsNullOrWhiteSpace(_playId) ? NullIfBlank(_manualPlayId) : _playId,
+            PlayId = NullIfBlank(_playId),
             Volume = _setVolume ? _volumePercent / 100.0 : null,
         },
         _ => null,
     };
-
-    private List<string> BuildSounds()
-    {
-        if (_boards is { Count: > 0 })
-            return [.. _soundIds];
-        return [.. _manualSounds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
-    }
 
     private async Task DeleteTapped()
     {
@@ -797,7 +745,7 @@ else
         return id;
     }
 
-    private static string? NullIfBlank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     private static string Slugify(string label)
     {

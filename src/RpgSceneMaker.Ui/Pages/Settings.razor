@@ -206,7 +206,7 @@ else
                 <input id="spotify-redirect" type="text" readonly value="@_spotify.RedirectUri" />
             </div>
         }
-        <p class="hint">Add this exact Redirect URI to your app at developer.spotify.com. Connect from a browser on this machine (<code>http://127.0.0.1:5252</code>) — Spotify only allows loopback addresses over http. Spotify Premium is required for playback.</p>
+        <p class="hint">Add this exact Redirect URI to your app at developer.spotify.com — character for character, no trailing slash. Connect from a browser on this machine (<code>http://localhost:5252</code> or <code>http://127.0.0.1:5252</code> both work). Spotify Premium is required for playback.</p>
 
         @if (_spotify.Connected)
         {

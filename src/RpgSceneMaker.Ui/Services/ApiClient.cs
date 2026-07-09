@@ -11,7 +11,7 @@ public record SceneLightDto(string LightKey, bool? Power, int? Brightness, strin
 public record EffectDto(string Type, int Speed, int Intensity, List<string>? Colors);
 public record MusicDto(string? PlayId, double? Volume, bool Pause);
 public record RegisteredLightInfo(string Key, string Name, string Provider);
-public record ActivationDto(string Scene, string Light, string Music, string SoundEffects, bool FullySucceeded);
+public record ActivationDto(string Scene, string Light, string Music, bool FullySucceeded);
 public record ActiveSceneDto(string? Id, DateTimeOffset? ActivatedAt);
 
 // Mutable classes (not records) — the settings form binds inputs straight to them.
@@ -121,16 +121,12 @@ public record HueLightDto(string Id, string Name, string Type, bool On, bool Rea
 public record HueRegistrationDto(string BridgeIp, string AppKey, string Hint);
 public record DiscoveredTuyaDto(string Ip, string DeviceId, string ProtocolVersion, string? ProductKey);
 
-public record KenkuItem(string Id, string Title);
-public record KenkuGroup(string Id, string Title, List<KenkuItem> Items);
-public record MusicState(bool Playing, double Volume, bool Muted, bool Shuffle, string Repeat,
-    string? TrackTitle, string? PlaylistTitle, double Progress, double Duration);
-
 public record SpotifyDeviceDto(string Id, string Name, string Type, bool IsActive);
 public record SpotifyPlaylistDto(string Id, string Name, string Uri, string? ImageUrl, int TrackCount);
 public record SpotifyTrackDto(string Id, string Name, string Artist, string Uri, string? ImageUrl);
 public record SpotifyStateDto(bool IsPlaying, string? TrackName, string? ArtistName,
-    string? ContextUri, string? DeviceName, int? VolumePercent);
+    string? ContextUri, string? DeviceName, int? VolumePercent,
+    double? ProgressSeconds, double? DurationSeconds, bool IsShuffling, string Repeat);
 
 // Mutable class — the settings form binds the Client ID input straight to it.
 public class SpotifyConfigDto
@@ -300,45 +296,7 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
-    // ---------- kenku data ----------
-
-    public async Task<List<KenkuGroup>> GetPlaylistsAsync() =>
-        ParseGroups(await GetNodeAsync("music/playlists"), "playlists", "tracks");
-
-    public async Task<List<KenkuGroup>> GetSoundboardsAsync() =>
-        ParseGroups(await GetNodeAsync("sfx/sounds"), "soundboards", "sounds");
-
-    public async Task<MusicState?> GetMusicStateAsync()
-    {
-        var node = await GetNodeAsync("music/state");
-        if (node is null) return null;
-
-        var track = node["track"];
-        var playlist = node["playlist"];
-        return new MusicState(
-            Playing: node["playing"]?.GetValue<bool>() ?? false,
-            Volume: node["volume"]?.GetValue<double>() ?? 0.5,
-            Muted: node["muted"]?.GetValue<bool>() ?? false,
-            Shuffle: node["shuffle"]?.GetValue<bool>() ?? false,
-            Repeat: node["repeat"]?.GetValue<string>() ?? "playlist",
-            TrackTitle: track?["title"]?.GetValue<string>(),
-            PlaylistTitle: playlist?["title"]?.GetValue<string>(),
-            Progress: track?["progress"]?.GetValue<double>() ?? 0,
-            Duration: track?["duration"]?.GetValue<double>() ?? 0);
-    }
-
-    public async Task<HashSet<string>> GetPlayingSoundIdsAsync()
-    {
-        var node = await GetNodeAsync("sfx/state");
-        var ids = new HashSet<string>();
-        if (node?["sounds"] is JsonArray sounds)
-            foreach (var sound in sounds)
-                if (sound?["id"]?.GetValue<string>() is { } id)
-                    ids.Add(id);
-        return ids;
-    }
-
-    // ---------- spotify ----------
+    // ---------- spotify (music) ----------
 
     public Task<(SpotifyConfigDto? Result, string? Error)> GetSpotifyConfigAsync() =>
         FetchAsync<SpotifyConfigDto>(HttpMethod.Get, "setup/spotify/config");
@@ -361,12 +319,12 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         CommandAsync("setup/spotify/disconnect", "Spotify disconnected");
 
     public Task<(List<SpotifyPlaylistDto>? Result, string? Error)> GetSpotifyPlaylistsAsync() =>
-        FetchAsync<List<SpotifyPlaylistDto>>(HttpMethod.Get, "music/spotify/playlists");
+        FetchAsync<List<SpotifyPlaylistDto>>(HttpMethod.Get, "music/playlists");
 
     public Task<(List<SpotifyTrackDto>? Result, string? Error)> SearchSpotifyTracksAsync(string query) =>
-        FetchAsync<List<SpotifyTrackDto>>(HttpMethod.Get, $"music/spotify/search?q={Uri.EscapeDataString(query)}");
+        FetchAsync<List<SpotifyTrackDto>>(HttpMethod.Get, $"music/search?q={Uri.EscapeDataString(query)}");
 
-    public Task<SpotifyStateDto?> GetSpotifyStateAsync() => GetAsync<SpotifyStateDto?>("music/spotify/state");
+    public Task<SpotifyStateDto?> GetSpotifyStateAsync() => GetAsync<SpotifyStateDto?>("music/state");
 
     /// <summary>URL for a full-page redirect to start the Spotify login (with the API key when set).</summary>
     public async Task<string> GetSpotifyLoginUrlAsync()
@@ -402,50 +360,6 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             ui.SetConnected(false);
             return default;
         }
-    }
-
-    private async Task<JsonNode?> GetNodeAsync(string path)
-    {
-        try
-        {
-            using var response = await SendAsync(HttpMethod.Get, path);
-            ui.SetConnected(true);
-            if (!response.IsSuccessStatusCode) return null;
-            return JsonNode.Parse(await response.Content.ReadAsStringAsync());
-        }
-        catch (Exception)
-        {
-            ui.SetConnected(false);
-            return null;
-        }
-    }
-
-    private static List<KenkuGroup> ParseGroups(JsonNode? node, string groupsKey, string itemsKey)
-    {
-        var groups = new List<KenkuGroup>();
-        if (node is null) return groups;
-
-        // Kenku returns { "<groupsKey>": [{id,title,<itemsKey>:[ids]}], "<itemsKey>": [{id,title,...}] }
-        var itemLookup = new Dictionary<string, KenkuItem>();
-        if (node[itemsKey] is JsonArray allItems)
-            foreach (var item in allItems)
-                if (item?["id"]?.GetValue<string>() is { } id)
-                    itemLookup[id] = new KenkuItem(id, item["title"]?.GetValue<string>() ?? id);
-
-        if (node[groupsKey] is JsonArray groupArray)
-        {
-            foreach (var group in groupArray)
-            {
-                if (group?["id"]?.GetValue<string>() is not { } groupId) continue;
-                var items = new List<KenkuItem>();
-                if (group[itemsKey] is JsonArray memberIds)
-                    foreach (var memberId in memberIds)
-                        if (memberId?.GetValue<string>() is { } mid && itemLookup.TryGetValue(mid, out var item))
-                            items.Add(item);
-                groups.Add(new KenkuGroup(groupId, group["title"]?.GetValue<string>() ?? groupId, items));
-            }
-        }
-        return groups;
     }
 
     private static async Task<string> ExtractProblemAsync(HttpResponseMessage response)

@@ -3,21 +3,21 @@
     "id": "tavern",
     "name": "🍺 Tavern",
     "light": { "power": true, "color": "#FF8C2A", "brightness": 70 },
-    "music": { "playId": "PASTE-KENKU-PLAYLIST-ID-HERE", "volume": 0.4 },
+    "music": { "playId": "PASTE-SPOTIFY-URI-OR-LINK-HERE", "volume": 0.4 },
     "soundEffects": []
   },
   {
     "id": "combat",
     "name": "⚔️ Combat",
     "light": { "power": true, "color": "#FF1E1E", "brightness": 100 },
-    "music": { "playId": "PASTE-KENKU-PLAYLIST-ID-HERE", "volume": 0.7 },
-    "soundEffects": [ "PASTE-KENKU-SOUND-ID-HERE" ]
+    "music": { "playId": "PASTE-SPOTIFY-URI-OR-LINK-HERE", "volume": 0.7 },
+    "soundEffects": []
   },
   {
     "id": "dungeon",
     "name": "🕯️ Dungeon",
     "light": { "power": true, "color": "#3A7A4A", "brightness": 25 },
-    "music": { "playId": "PASTE-KENKU-PLAYLIST-ID-HERE", "volume": 0.5 },
+    "music": { "playId": "PASTE-SPOTIFY-URI-OR-LINK-HERE", "volume": 0.5 },
     "soundEffects": []
   },
   {

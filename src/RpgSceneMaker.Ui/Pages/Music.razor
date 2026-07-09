@@ -5,101 +5,82 @@
 
 <PageTitle>Scene Maker — Music</PageTitle>
 
-<h2 class="rune">Now Playing</h2>
-
-<div class="panel">
-    <p class="now-title">@(_state?.TrackTitle ?? "Nothing playing")</p>
-    <p class="now-sub">@(_state?.PlaylistTitle ?? "Pick a playlist below")</p>
-
-    @if (_state is { Duration: > 0 })
-    {
-        <div class="progress"><div style="width:@(Math.Clamp(_state.Progress / _state.Duration * 100, 0, 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
-    }
-
-    <div class="transport">
-        <button class="btn" @onclick="@(() => Send("music/previous"))" aria-label="Previous">⏮</button>
-        @if (_state?.Playing == true)
-        {
-            <button class="btn primary play" @onclick="@(() => Send("music/pause"))" aria-label="Pause">⏸</button>
-        }
-        else
-        {
-            <button class="btn primary play" @onclick="@(() => Send("music/resume"))" aria-label="Play">▶</button>
-        }
-        <button class="btn" @onclick="@(() => Send("music/next"))" aria-label="Next">⏭</button>
-    </div>
-
-    <div class="slider-row">
-        <span class="slider-ico">🔉</span>
-        <input type="range" min="0" max="100" value="@_volumePercent"
-               @onchange="OnVolumeChanged" aria-label="Volume" />
-        <span class="slider-val">@_volumePercent%</span>
-    </div>
-
-    <div class="chip-row">
-        <button class="chip @(_state?.Muted == true ? "on" : "")"
-                @onclick="@(() => Send($"music/mute?value={(_state?.Muted == true ? "false" : "true")}"))">Mute</button>
-        <button class="chip @(_state?.Shuffle == true ? "on" : "")"
-                @onclick="@(() => Send($"music/shuffle?value={(_state?.Shuffle == true ? "false" : "true")}"))">Shuffle</button>
-        <button class="chip @(_state?.Repeat == "playlist" ? "on" : "")"
-                @onclick="@(() => Send("music/repeat?mode=playlist"))">Repeat list</button>
-        <button class="chip @(_state?.Repeat == "track" ? "on" : "")"
-                @onclick="@(() => Send("music/repeat?mode=track"))">Repeat track</button>
-        <button class="chip @(_state?.Repeat == "off" ? "on" : "")"
-                @onclick="@(() => Send("music/repeat?mode=off"))">No repeat</button>
-    </div>
-</div>
-
-<h2 class="rune">Playlists</h2>
-
-@if (_playlists is null)
+@if (_connected == false)
 {
-    <p class="empty-note">Reading the songbook…</p>
-}
-else if (_playlists.Count == 0)
-{
-    <p class="empty-note">No playlists found — is Kenku FM running with Remote enabled?</p>
+    <h2 class="rune">Music</h2>
+    <p class="empty-note">Spotify isn't connected yet — open <a href="settings">Settings</a> to connect it.</p>
 }
 else
 {
-    <div class="klist">
-        @foreach (var group in _playlists)
-        {
-            <p class="kgroup-title">@group.Title</p>
-            <button class="krow" @onclick="() => Play(group.Id, group.Title)">
-                <span class="krow-ico">📁</span>
-                <span class="krow-title">Play all — @group.Title</span>
-            </button>
-            @foreach (var track in group.Items)
-            {
-                <button class="krow" @onclick="() => Play(track.Id, track.Title)">
-                    <span class="krow-ico">♪</span>
-                    <span class="krow-title">@track.Title</span>
-                </button>
-            }
-        }
-    </div>
-}
+    <h2 class="rune">Now Playing</h2>
 
-@if (_spotifyConnected)
-{
-    <h2 class="rune">Spotify</h2>
+    <div class="panel">
+        <p class="now-title">@(_state?.TrackName ?? "Nothing playing")</p>
+        <p class="now-sub">
+            @if (_state is not null)
+            {
+                @(_state.ArtistName ?? "—")
+                @if (!string.IsNullOrEmpty(_state.DeviceName))
+                {
+                    <span class="hint"> · @_state.DeviceName</span>
+                }
+            }
+            else
+            {
+                <span>Open Spotify on a device to start</span>
+            }
+        </p>
+
+        @if (_state is { DurationSeconds: > 0 })
+        {
+            <div class="progress"><div style="width:@(ProgressPercent().ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+        }
+
+        <div class="transport">
+            <button class="btn" @onclick="@(() => Send("music/previous"))" aria-label="Previous">⏮</button>
+            @if (_state?.IsPlaying == true)
+            {
+                <button class="btn primary play" @onclick="@(() => Send("music/pause"))" aria-label="Pause">⏸</button>
+            }
+            else
+            {
+                <button class="btn primary play" @onclick="@(() => Send("music/resume"))" aria-label="Play">▶</button>
+            }
+            <button class="btn" @onclick="@(() => Send("music/next"))" aria-label="Next">⏭</button>
+        </div>
+
+        <div class="slider-row">
+            <span class="slider-ico">🔉</span>
+            <input type="range" min="0" max="100" value="@_volumePercent"
+                   @onchange="OnVolumeChanged" aria-label="Volume" />
+            <span class="slider-val">@_volumePercent%</span>
+        </div>
+
+        <div class="chip-row">
+            <button class="chip @(_state?.IsShuffling == true ? "on" : "")"
+                    @onclick="@(() => Send($"music/shuffle?value={(_state?.IsShuffling == true ? "false" : "true")}"))">🔀 Shuffle</button>
+            <button class="chip @(_state is { Repeat: "playlist" or "track" } ? "on" : "")"
+                    @onclick="CycleRepeat">@RepeatLabel()</button>
+        </div>
+    </div>
+
+    <h2 class="rune">Search</h2>
     <div class="panel">
         <div class="field">
             <label for="spotify-search">Search tracks</label>
             <div class="field-row">
-                <input id="spotify-search" type="text" @bind="_spotifyQuery" @bind:event="oninput"
+                <input id="spotify-search" type="text" @bind="_query" @bind:event="oninput"
                        @onkeydown="OnSearchKeyDown" placeholder="song or artist…" />
-                <button class="btn" @onclick="SearchSpotify" disabled="@_searching">Search</button>
+                <button class="btn" @onclick="SearchAsync" disabled="@_searching">Search</button>
             </div>
         </div>
-        @if (_spotifyResults is { Count: > 0 })
+        @if (_results is { Count: > 0 })
         {
             <div class="klist">
-                @foreach (var t in _spotifyResults)
+                @foreach (var t in _results)
                 {
                     var label = string.IsNullOrEmpty(t.Artist) ? t.Name : $"{t.Name} — {t.Artist}";
-                    <button class="krow" @onclick="() => PlaySpotify(t.Uri, label)">
+                    <button class="krow" @onclick="() => Play(t.Uri, label)">
                         <span class="krow-ico">♪</span>
                         <span class="krow-title">@t.Name <small class="hint">@t.Artist</small></span>
                     </button>
@@ -108,21 +89,21 @@ else
         }
     </div>
 
-    <h2 class="rune">Spotify Playlists</h2>
-    @if (_spotifyPlaylists is null)
+    <h2 class="rune">Playlists</h2>
+    @if (_playlists is null)
     {
         <p class="empty-note">Reading your Spotify playlists…</p>
     }
-    else if (_spotifyPlaylists.Count == 0)
+    else if (_playlists.Count == 0)
     {
         <p class="empty-note">No Spotify playlists found.</p>
     }
     else
     {
         <div class="klist">
-            @foreach (var pl in _spotifyPlaylists)
+            @foreach (var pl in _playlists)
             {
-                <button class="krow" @onclick="() => PlaySpotify(pl.Uri, pl.Name)">
+                <button class="krow" @onclick="() => Play(pl.Uri, pl.Name)">
                     <span class="krow-ico">🎧</span>
                     <span class="krow-title">@pl.Name <small class="hint">@pl.TrackCount tracks</small></span>
                 </button>
@@ -132,39 +113,53 @@ else
 }
 
 @code {
-    private MusicState? _state;
-    private List<KenkuGroup>? _playlists;
+    private bool? _connected;
+    private SpotifyStateDto? _state;
+    private List<SpotifyPlaylistDto>? _playlists;
+    private List<SpotifyTrackDto>? _results;
+    private string _query = "";
+    private bool _searching;
     private int _volumePercent = 50;
     private Timer? _timer;
 
-    private bool _spotifyConnected;
-    private List<SpotifyPlaylistDto>? _spotifyPlaylists;
-    private List<SpotifyTrackDto>? _spotifyResults;
-    private string _spotifyQuery = "";
-    private bool _searching;
-
     protected override async Task OnInitializedAsync()
     {
+        var (spotify, _) = await Api.GetSpotifyConfigAsync();
+        _connected = spotify?.Connected == true;
+        if (_connected != true) return;
+
         await PollAsync();
-        _playlists = await Api.GetPlaylistsAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 3000, 3000);
 
-        var (spotify, _) = await Api.GetSpotifyConfigAsync();
-        if (spotify?.Connected == true)
-        {
-            _spotifyConnected = true;
-            var (playlists, error) = await Api.GetSpotifyPlaylistsAsync();
-            _spotifyPlaylists = playlists ?? [];
-            if (playlists is null && error is not null) Ui.ReportError(error);
-        }
+        var (playlists, error) = await Api.GetSpotifyPlaylistsAsync();
+        _playlists = playlists ?? [];
+        if (playlists is null && error is not null) Ui.ReportError(error);
     }
 
     private async Task PollAsync()
     {
-        _state = await Api.GetMusicStateAsync();
-        if (_state is not null)
-            _volumePercent = (int)Math.Round(_state.Volume * 100);
+        _state = await Api.GetSpotifyStateAsync();
+        if (_state?.VolumePercent is { } vp) _volumePercent = vp;
         StateHasChanged();
+    }
+
+    private double ProgressPercent() =>
+        _state is { ProgressSeconds: { } p, DurationSeconds: { } d } && d > 0
+            ? Math.Clamp(p / d * 100, 0, 100)
+            : 0;
+
+    private string RepeatLabel() => _state?.Repeat switch
+    {
+        "track" => "🔂 Repeat track",
+        "playlist" => "🔁 Repeat list",
+        _ => "🔁 No repeat",
+    };
+
+    // off → playlist → track → off
+    private Task CycleRepeat()
+    {
+        var next = _state?.Repeat switch { "off" or null => "playlist", "playlist" => "track", _ => "off" };
+        return Send($"music/repeat?mode={next}");
     }
 
     private async Task Send(string path)
@@ -173,9 +168,9 @@ else
             await PollAsync();
     }
 
-    private async Task Play(string id, string title)
+    private async Task Play(string uri, string title)
     {
-        if (await Api.CommandAsync($"music/play?id={Uri.EscapeDataString(id)}", $"Playing {title}"))
+        if (await Api.CommandAsync($"music/play?id={Uri.EscapeDataString(uri)}", $"Playing {title}"))
             await PollAsync();
     }
 
@@ -187,20 +182,14 @@ else
         await Api.CommandAsync($"music/volume?value={volume}");
     }
 
-    private async Task PlaySpotify(string uri, string title)
+    private async Task SearchAsync()
     {
-        if (await Api.CommandAsync($"music/play?id={Uri.EscapeDataString(uri)}", $"Playing {title}"))
-            await PollAsync();
-    }
-
-    private async Task SearchSpotify()
-    {
-        if (string.IsNullOrWhiteSpace(_spotifyQuery)) return;
+        if (string.IsNullOrWhiteSpace(_query)) return;
         _searching = true;
         try
         {
-            var (results, error) = await Api.SearchSpotifyTracksAsync(_spotifyQuery);
-            if (results is not null) _spotifyResults = results;
+            var (results, error) = await Api.SearchSpotifyTracksAsync(_query);
+            if (results is not null) _results = results;
             else if (error is not null) Ui.ReportError(error);
         }
         finally { _searching = false; }
@@ -208,7 +197,7 @@ else
 
     private async Task OnSearchKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") await SearchSpotify();
+        if (e.Key == "Enter") await SearchAsync();
     }
 
     public void Dispose() => _timer?.Dispose();

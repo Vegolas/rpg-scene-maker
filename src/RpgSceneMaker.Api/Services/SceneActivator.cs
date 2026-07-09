@@ -3,19 +3,17 @@ using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
 
-public record ActivationResult(string Scene, string Light, string Music, string SoundEffects)
+public record ActivationResult(string Scene, string Light, string Music)
 {
-    public bool FullySucceeded => Light is "ok" or "skipped" && Music is "ok" or "skipped" && SoundEffects is "ok" or "skipped";
+    public bool FullySucceeded => Light is "ok" or "skipped" && Music is "ok" or "skipped";
 }
 
-/// <summary>Applies a scene: light, music and sound effects run concurrently so the table switches fast.</summary>
+/// <summary>Applies a scene: light and music run concurrently so the table switches fast.</summary>
 public class SceneActivator(
     ILightService lights,
     LightRegistry registry,
     EffectEngine effects,
-    KenkuClient kenku,
     SpotifyClient spotify,
-    SpotifyStore spotifyStore,
     CurrentState state,
     ILogger<SceneActivator> logger)
 {
@@ -26,10 +24,9 @@ public class SceneActivator(
 
         var lightTask = ApplyLightsAsync(scene);
         var musicTask = RunAsync("music", () => ApplyMusicAsync(scene.Music));
-        var sfxTask = RunAsync("sfx", () => ApplySoundEffectsAsync(scene.SoundEffects));
 
-        await Task.WhenAll(lightTask, musicTask, sfxTask);
-        return new ActivationResult(scene.Id, lightTask.Result, musicTask.Result, sfxTask.Result);
+        await Task.WhenAll(lightTask, musicTask);
+        return new ActivationResult(scene.Id, lightTask.Result, musicTask.Result);
     }
 
     // Per-light mode wins; legacy Light is the "all lights" fallback; a scene may also not touch lights at all.
@@ -106,65 +103,32 @@ public class SceneActivator(
 
         if (music.Pause)
         {
-            // With Spotify connected, Kenku may legitimately be off — don't let it fail the scene.
-            if (spotifyStore.Current.IsConnected)
-            {
-                await BestEffort(kenku.PauseAsync);
-                await spotify.PauseAsync(throwOnNoDevice: false);
-            }
-            else
-            {
-                await kenku.PauseAsync();
-            }
+            // Best-effort pause so a scene without a live device still succeeds.
+            await spotify.PauseAsync(throwOnNoDevice: false);
             return true;
         }
 
-        // Spotify track/playlist/album/artist reference → play on Spotify, best-effort pause Kenku.
-        if (!string.IsNullOrWhiteSpace(music.PlayId) && SpotifyClient.IsSpotifyUri(music.PlayId))
-        {
-            // Play first: it wakes the preferred device, while volume on an idle device can 404.
-            await spotify.PlayAsync(music.PlayId);
-            if (music.Volume is double spotifyVolume)
-                await spotify.SetVolumeAsync(spotifyVolume);
-            await BestEffort(kenku.PauseAsync);
-            return true;
-        }
-
-        // Kenku (default): set volume / play, and best-effort pause Spotify if it's connected.
-        var didSomething = false;
-        if (music.Volume is double volume)
-        {
-            await kenku.SetVolumeAsync(volume);
-            didSomething = true;
-        }
         if (!string.IsNullOrWhiteSpace(music.PlayId))
         {
-            await kenku.PlayAsync(music.PlayId);
-            await BestEffortPauseSpotifyAsync();
-            didSomething = true;
+            if (!SpotifyClient.IsSpotifyUri(music.PlayId))
+                throw new ArgumentException(
+                    $"Music id is not a Spotify link/URI: '{music.PlayId}' — Kenku support was removed; use a spotify: URI or open.spotify.com link.");
+
+            // Play first: it wakes the preferred device, while volume on an idle device can 404.
+            await spotify.PlayAsync(music.PlayId);
+            if (music.Volume is double playVolume)
+                await spotify.SetVolumeAsync(playVolume);
+            return true;
         }
-        return didSomething;
-    }
 
-    /// <summary>Pause Spotify without failing the scene: only when connected, and never throwing.</summary>
-    private async Task BestEffortPauseSpotifyAsync()
-    {
-        if (!spotifyStore.Current.IsConnected) return;
-        await BestEffort(() => spotify.PauseAsync(throwOnNoDevice: false));
-    }
+        // Volume-only tweak with no track to start.
+        if (music.Volume is double volume)
+        {
+            await spotify.SetVolumeAsync(volume);
+            return true;
+        }
 
-    private async Task BestEffort(Func<Task> action)
-    {
-        try { await action(); }
-        catch (Exception ex) { logger.LogDebug(ex, "Best-effort music cross-pause failed (ignored)"); }
-    }
-
-    private async Task<bool> ApplySoundEffectsAsync(List<string> soundIds)
-    {
-        if (soundIds.Count == 0) return false;
-        foreach (var id in soundIds.Where(id => !string.IsNullOrWhiteSpace(id)))
-            await kenku.PlaySoundAsync(id);
-        return true;
+        return false;
     }
 
     private async Task<string> RunAsync(string part, Func<Task<bool>> action)

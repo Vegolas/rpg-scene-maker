@@ -14,7 +14,8 @@ public class Scene
 
     public MusicSettings? Music { get; set; }
 
-    /// <summary>Kenku soundboard sound ids fired when the scene activates.</summary>
+    /// <summary>Currently unused — the Kenku FM integration was removed. Retained in the schema so existing
+    /// scene data is preserved and soundboard support can return without a migration.</summary>
     public List<string> SoundEffects { get; set; } = [];
 }
 
@@ -70,7 +71,7 @@ public class LightSettings
 
 public class MusicSettings
 {
-    /// <summary>Kenku playlist or track id to play. Leave null to keep current music.</summary>
+    /// <summary>Spotify track/playlist/album/artist URI or open.spotify.com link. Leave null to keep current music.</summary>
     public string? PlayId { get; set; }
 
     /// <summary>0.0 - 1.0.</summary>

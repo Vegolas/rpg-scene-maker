@@ -9,7 +9,8 @@ public record SpotifyDevice(string Id, string Name, string Type, bool IsActive);
 public record SpotifyPlaylist(string Id, string Name, string Uri, string? ImageUrl, int TrackCount);
 public record SpotifyTrack(string Id, string Name, string Artist, string Uri, string? ImageUrl);
 public record SpotifyPlaybackState(
-    bool IsPlaying, string? TrackName, string? ArtistName, string? ContextUri, string? DeviceName, int? VolumePercent);
+    bool IsPlaying, string? TrackName, string? ArtistName, string? ContextUri, string? DeviceName, int? VolumePercent,
+    double? ProgressSeconds, double? DurationSeconds, bool IsShuffling, string Repeat);
 
 /// <summary>
 /// Shared, process-wide cache of the current Spotify access token. Registered as a singleton so that
@@ -170,6 +171,50 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
         await EnsureSuccessAsync(response);
     }
 
+    /// <summary>Resume the current playback context (no body — Spotify keeps the current queue/track).</summary>
+    public async Task ResumeAsync()
+    {
+        var deviceId = store.Current.PreferredDeviceId;
+        if (!string.IsNullOrEmpty(deviceId))
+        {
+            using var first = await SendAsync(HttpMethod.Put,
+                $"/v1/me/player/play?device_id={Uri.EscapeDataString(deviceId)}");
+            if (first.StatusCode != HttpStatusCode.NotFound)
+            {
+                await EnsureSuccessAsync(first);
+                return;
+            }
+            // The preferred device is gone — fall through and let Spotify pick the active device.
+        }
+
+        using var response = await SendAsync(HttpMethod.Put, "/v1/me/player/play");
+        await EnsureSuccessAsync(response);
+    }
+
+    public Task NextAsync() => PlayerCommandAsync(HttpMethod.Post, "/v1/me/player/next");
+    public Task PreviousAsync() => PlayerCommandAsync(HttpMethod.Post, "/v1/me/player/previous");
+
+    public Task SetShuffleAsync(bool shuffle) =>
+        PlayerCommandAsync(HttpMethod.Put, $"/v1/me/player/shuffle?state={(shuffle ? "true" : "false")}");
+
+    /// <summary>Set the repeat mode. Public vocabulary is off|track|playlist; Spotify's API uses "context" for playlist.</summary>
+    public Task SetRepeatAsync(string mode)
+    {
+        var state = mode == "playlist" ? "context" : mode; // off | track | context
+        return PlayerCommandAsync(HttpMethod.Put, $"/v1/me/player/repeat?state={state}");
+    }
+
+    // Player command that targets the preferred device when one is set; keeps the friendly no-device 404 message.
+    private async Task PlayerCommandAsync(HttpMethod method, string path)
+    {
+        var deviceId = store.Current.PreferredDeviceId;
+        if (!string.IsNullOrEmpty(deviceId))
+            path += (path.Contains('?') ? "&" : "?") + $"device_id={Uri.EscapeDataString(deviceId)}";
+
+        using var response = await SendAsync(method, path);
+        await EnsureSuccessAsync(response);
+    }
+
     // ---------- library / search / state ----------
 
     public async Task<List<SpotifyDevice>> GetDevicesAsync()
@@ -212,7 +257,8 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
 
     public async Task<List<SpotifyTrack>> SearchTracksAsync(string query)
     {
-        var root = await GetJsonAsync($"/v1/search?type=track&limit=20&q={Uri.EscapeDataString(query)}");
+        // Development-mode Spotify apps reject search limits above 10 with a bare "Invalid limit" 400.
+        var root = await GetJsonAsync($"/v1/search?type=track&limit=10&q={Uri.EscapeDataString(query)}");
         var list = new List<SpotifyTrack>();
         if (root.TryGetProperty("tracks", out var tracks) && tracks.TryGetProperty("items", out var items)
             && items.ValueKind == JsonValueKind.Array)
@@ -237,15 +283,29 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
         var isPlaying = root.TryGetProperty("is_playing", out var p) && p.ValueKind == JsonValueKind.True;
 
         string? trackName = null, artistName = null;
+        double? durationSeconds = null;
         if (root.TryGetProperty("item", out var item) && item.ValueKind == JsonValueKind.Object)
         {
             trackName = Str(item, "name") is { Length: > 0 } n ? n : null;
             artistName = JoinArtists(item) is { Length: > 0 } a ? a : null;
+            if (item.TryGetProperty("duration_ms", out var dm) && dm.ValueKind == JsonValueKind.Number)
+                durationSeconds = dm.GetInt64() / 1000.0;
         }
+
+        double? progressSeconds = null;
+        if (root.TryGetProperty("progress_ms", out var pm) && pm.ValueKind == JsonValueKind.Number)
+            progressSeconds = pm.GetInt64() / 1000.0;
 
         string? contextUri = null;
         if (root.TryGetProperty("context", out var ctx) && ctx.ValueKind == JsonValueKind.Object)
             contextUri = ctx.TryGetProperty("uri", out var cu) ? cu.GetString() : null;
+
+        var isShuffling = root.TryGetProperty("shuffle_state", out var ss) && ss.ValueKind == JsonValueKind.True;
+
+        // Spotify reports "context" for playlist/album repeat — map it back to our public "playlist".
+        var repeat = root.TryGetProperty("repeat_state", out var rs) && rs.ValueKind == JsonValueKind.String
+            ? rs.GetString() switch { "context" => "playlist", "track" => "track", _ => "off" }
+            : "off";
 
         string? deviceName = null;
         int? volume = null;
@@ -256,7 +316,8 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
                 volume = vp.GetInt32();
         }
 
-        return new SpotifyPlaybackState(isPlaying, trackName, artistName, contextUri, deviceName, volume);
+        return new SpotifyPlaybackState(isPlaying, trackName, artistName, contextUri, deviceName, volume,
+            progressSeconds, durationSeconds, isShuffling, repeat);
     }
 
     // ---------- URI helpers ----------
