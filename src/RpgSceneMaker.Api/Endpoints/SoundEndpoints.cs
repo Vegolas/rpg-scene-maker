@@ -70,13 +70,27 @@ public static class SoundEndpoints
             return Results.Ok(ToDto(sound));
         });
 
-        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, SoundboardPlayer player) =>
+        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, SoundboardPlayer player, SceneStore scenes) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 return Results.NotFound();
             player.Stop(id);
             files.Delete(sound.FileName);
             await store.DeleteAsync(id);
+
+            // Drop the now-gone sound from any scene that referenced it, so activating those scenes
+            // no longer logs "sound(s) not found and skipped" for a dangling id.
+            foreach (var scene in await scenes.GetAllAsync())
+            {
+                var effects = scene.SoundEffects;
+                if (effects is null || effects.Count == 0) continue;
+                var kept = effects.Where(sid => !string.Equals(sid, sound.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (kept.Count != effects.Count)
+                {
+                    scene.SoundEffects = kept;
+                    await scenes.UpsertAsync(scene);
+                }
+            }
             return Results.NoContent();
         });
 

@@ -209,6 +209,23 @@ else
                 </div>
             }
         }
+
+        @* Sound ids the scene still references but that are no longer in the library (e.g. a deleted or
+           legacy sound). Otherwise invisible — surface them so they can be dropped, then Save. *@
+        @{
+            var knownIds = _sounds?.Select(s => s.Id).ToHashSet() ?? [];
+            var unknownSoundIds = _soundEffects.Where(sid => !knownIds.Contains(sid)).ToList();
+        }
+        @if (unknownSoundIds.Count > 0)
+        {
+            <p class="kgroup-title">Unknown — no longer in your library</p>
+            <div class="klist">
+                @foreach (var sid in unknownSoundIds)
+                {
+                    <KRow Icon="⚠️" Title="@sid" Hint="removed sound — tap to drop" OnClick="() => RemoveSound(sid)" />
+                }
+            </div>
+        }
     </div>
 
     <RuneHeading>Save</RuneHeading>
@@ -567,6 +584,9 @@ else
         if (!_soundEffects.Remove(id))
             _soundEffects.Add(id);
     }
+
+    // Drop a dangling reference (a sound id no longer in the library) from the scene. Persists on Save.
+    private void RemoveSound(string id) => _soundEffects.Remove(id);
 
     private async Task DeleteTapped()
     {

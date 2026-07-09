@@ -57,7 +57,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   do. `SoundStore` persists per-sound metadata (name/category/volume/loop) in SQLite; `SoundFileStorage`
   keeps the audio files on disk. `/sounds/*` ([SoundEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SoundEndpoints.cs))
   covers `list`, `import` (multipart), update, delete, play/stop/stop-all, and `state` (playing ids); a scene
-  fires its `SoundEffects` (sound ids) on activation. Nothing is mapped at the bare `/sounds` path so the
+  fires its `SoundEffects` (sound ids) on activation. Deleting a sound also scrubs its id from every scene's
+  `SoundEffects`, so activations never warn about a dangling reference. Nothing is mapped at the bare `/sounds` path so the
   panel's Sounds tab can live there (same reason `/lights` uses `/lights/list`). **NAudio output is Windows-only.**
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
