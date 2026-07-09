@@ -1,0 +1,256 @@
+@page "/sounds"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+
+<PageTitle>Scene Maker — Sounds</PageTitle>
+
+<RuneHeading>Soundboard</RuneHeading>
+
+<div class="panel">
+    <div class="field" style="margin-bottom:0">
+        <label for="snd-import">Import a sound</label>
+        <InputFile id="snd-import" OnChange="OnFilePicked" accept=".mp3,.wav,.ogg" disabled="@_uploading" />
+        <p class="hint" style="margin-top:0.5rem">
+            @if (_uploading)
+            {
+                <span>Importing @_uploadName…</span>
+            }
+            else
+            {
+                <span>MP3, WAV or OGG. Plays through the <strong>server's</strong> speakers.</span>
+            }
+        </p>
+    </div>
+</div>
+
+@if (_editing is not null && _edit is not null)
+{
+    <RuneHeading>Edit Sound</RuneHeading>
+    <div class="panel">
+        <div class="field">
+            <label for="snd-name">Name</label>
+            <input id="snd-name" type="text" value="@_edit.Name" @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
+        </div>
+        <div class="field" style="margin-bottom:0">
+            <label for="snd-cat">Category</label>
+            <input id="snd-cat" type="text" value="@_edit.Category" @oninput="e => _edit.Category = e.Value?.ToString() ?? string.Empty"
+                   placeholder="e.g. Ambience, Combat" />
+        </div>
+        <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" @bind-Value="_edit.VolumePercent" AriaLabel="Volume" />
+        <div class="chip-row">
+            <Chip On="_edit.Loop" OnClick="() => _edit.Loop = !_edit.Loop">🔁 Loop</Chip>
+        </div>
+        <div class="btn-row" style="margin-top:1rem">
+            <button class="btn primary" @onclick="SaveEdit" disabled="@_busy">Save</button>
+            <button class="btn" @onclick="Preview" disabled="@_busy">▶ Preview</button>
+            <button class="btn" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
+        </div>
+        <div class="btn-row" style="margin-top:0.7rem">
+            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+                @(_confirmDelete ? "Really delete?" : "Delete sound")
+            </button>
+        </div>
+    </div>
+}
+
+@if (_sounds is null)
+{
+    <p class="empty-note">Uncorking the sound vials…</p>
+}
+else if (_sounds.Count == 0)
+{
+    <p class="empty-note">No sounds yet — import one above.</p>
+}
+else
+{
+    @if (_playing.Count > 0)
+    {
+        <div class="btn-row" style="margin:0.2rem 0 1rem">
+            <button class="btn" @onclick="StopAll">⏹ Stop all (@_playing.Count)</button>
+        </div>
+    }
+
+    @foreach (var group in _sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+    {
+        <p class="kgroup-title">@group.Key</p>
+        <div class="sound-grid">
+            @foreach (var sound in group)
+            {
+                var isPlaying = _playing.Contains(sound.Id);
+                <button class="krow @(isPlaying ? "playing" : "")" @onclick="() => Tap(sound, isPlaying)">
+                    <span class="card-edit" role="button" tabindex="0" aria-label="Edit sound"
+                          @onclick="() => Edit(sound)" @onclick:stopPropagation="true">✎</span>
+                    <span class="krow-ico">@(isPlaying ? "⏹" : sound.Loop ? "🔁" : "🔊")</span>
+                    <span class="krow-title">@sound.Name</span>
+                </button>
+            }
+        </div>
+    }
+    <p class="hint" style="margin-top:1rem">Tap to play; tap again to stop. ✎ to rename, set volume or looping.</p>
+}
+
+@code {
+    private List<SoundDto>? _sounds;
+    private HashSet<string> _playing = [];
+    private Timer? _timer;
+
+    private SoundDto? _editing;
+    private SoundEdit? _edit;
+    private bool _busy;
+    private bool _uploading;
+    private string _uploadName = "";
+    private bool _confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
+    }
+
+    private async Task RefreshAsync()
+    {
+        _sounds = await Api.GetSoundsAsync();
+        StateHasChanged();
+    }
+
+    private async Task PollAsync()
+    {
+        _playing = [.. await Api.GetPlayingSoundIdsAsync()];
+        StateHasChanged();
+    }
+
+    private async Task Tap(SoundDto sound, bool isPlaying)
+    {
+        var verb = isPlaying ? "stop" : "play";
+        if (await Api.CommandAsync($"sounds/{Uri.EscapeDataString(sound.Id)}/{verb}"))
+        {
+            if (isPlaying) _playing.Remove(sound.Id);
+            else _playing.Add(sound.Id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopAll()
+    {
+        if (await Api.CommandAsync("sounds/stop"))
+        {
+            _playing.Clear();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnFilePicked(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        _uploading = true;
+        _uploadName = file.Name;
+        StateHasChanged();
+        try
+        {
+            var name = Path.GetFileNameWithoutExtension(file.Name);
+            var (result, error) = await Api.UploadSoundAsync(file, name, "");
+            if (result is not null)
+            {
+                Ui.ReportOk($"Imported \"{result.Name}\"");
+                await RefreshAsync();
+                Edit(result); // open the editor so category / volume / loop can be set right away
+            }
+            else
+            {
+                Ui.ReportError(error ?? "Import failed.");
+            }
+        }
+        finally
+        {
+            _uploading = false;
+            _uploadName = "";
+            StateHasChanged();
+        }
+    }
+
+    private void Edit(SoundDto sound)
+    {
+        _editing = sound;
+        _edit = new SoundEdit
+        {
+            Name = sound.Name,
+            Category = sound.Category,
+            VolumePercent = (int)Math.Round(sound.Volume * 100),
+            Loop = sound.Loop,
+        };
+        _confirmDelete = false;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _edit = null;
+        _confirmDelete = false;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_editing is null || _edit is null) return;
+        if (string.IsNullOrWhiteSpace(_edit.Name))
+        {
+            Ui.ReportError("Give the sound a name.");
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var (result, error) = await Api.UpdateSoundAsync(
+                _editing.Id, _edit.Name.Trim(), _edit.Category.Trim(), _edit.VolumePercent / 100.0, _edit.Loop);
+            if (result is not null)
+            {
+                Ui.ReportOk($"Saved \"{result.Name}\"");
+                await RefreshAsync();
+                CancelEdit();
+            }
+            else
+            {
+                Ui.ReportError(error ?? "Save failed.");
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    // Audition at the (unsaved) edited volume so it can be dialled in before saving.
+    private Task Preview()
+    {
+        if (_editing is null || _edit is null) return Task.CompletedTask;
+        var volume = (_edit.VolumePercent / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return Api.CommandAsync($"sounds/{Uri.EscapeDataString(_editing.Id)}/play?volume={volume}");
+    }
+
+    private async Task DeleteTapped()
+    {
+        if (!_confirmDelete) { _confirmDelete = true; return; }
+        if (_editing is null) return;
+
+        _busy = true;
+        try
+        {
+            var (ok, error) = await Api.DeleteSoundAsync(_editing.Id);
+            if (ok)
+            {
+                Ui.ReportOk("Sound deleted");
+                _playing.Remove(_editing.Id);
+                await RefreshAsync();
+                CancelEdit();
+            }
+            else
+            {
+                Ui.ReportError(error ?? "Delete failed.");
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

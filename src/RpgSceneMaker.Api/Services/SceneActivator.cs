@@ -3,17 +3,21 @@ using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
 
-public record ActivationResult(string Scene, string Light, string Music)
+public record ActivationResult(string Scene, string Light, string Music, string SoundEffects)
 {
-    public bool FullySucceeded => Light is "ok" or "skipped" && Music is "ok" or "skipped";
+    public bool FullySucceeded =>
+        Light is "ok" or "skipped" && Music is "ok" or "skipped" && SoundEffects is "ok" or "skipped";
 }
 
-/// <summary>Applies a scene: light and music run concurrently so the table switches fast.</summary>
+/// <summary>Applies a scene: light, music and sound effects run concurrently so the table switches fast.</summary>
 public class SceneActivator(
     ILightService lights,
     LightRegistry registry,
     EffectEngine effects,
     SpotifyClient spotify,
+    SoundStore soundStore,
+    SoundFileStorage soundFiles,
+    SoundboardPlayer player,
     CurrentState state,
     ILogger<SceneActivator> logger)
 {
@@ -24,9 +28,10 @@ public class SceneActivator(
 
         var lightTask = ApplyLightsAsync(scene);
         var musicTask = RunAsync("music", () => ApplyMusicAsync(scene.Music));
+        var sfxTask = RunAsync("sfx", () => ApplySoundEffectsAsync(scene.SoundEffects));
 
-        await Task.WhenAll(lightTask, musicTask);
-        return new ActivationResult(scene.Id, lightTask.Result, musicTask.Result);
+        await Task.WhenAll(lightTask, musicTask, sfxTask);
+        return new ActivationResult(scene.Id, lightTask.Result, musicTask.Result, sfxTask.Result);
     }
 
     // Per-light mode wins; legacy Light is the "all lights" fallback; a scene may also not touch lights at all.
@@ -129,6 +134,28 @@ public class SceneActivator(
         }
 
         return false;
+    }
+
+    // A scene that carries sound effects swaps them in cleanly: stop whatever's playing, then fire its
+    // own. An empty list leaves playback untouched (reported "skipped"), like music with nothing to change.
+    private async Task<bool> ApplySoundEffectsAsync(List<string> soundEffects)
+    {
+        var ids = soundEffects.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
+        if (ids.Count == 0) return false;
+
+        player.StopAll();
+        var missing = new List<string>();
+        foreach (var id in ids)
+        {
+            if (await soundStore.GetAsync(id) is { } sound)
+                player.Play(sound.Id, soundFiles.FullPath(sound), sound.Loop, sound.Volume);
+            else
+                missing.Add(id);
+        }
+
+        if (missing.Count > 0)
+            logger.LogWarning("Scene activation: sound(s) not found and skipped: {Missing}", string.Join(", ", missing));
+        return true;
     }
 
     private async Task<string> RunAsync(string part, Func<Task<bool>> action)

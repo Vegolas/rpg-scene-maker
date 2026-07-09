@@ -14,8 +14,8 @@ public class Scene
 
     public MusicSettings? Music { get; set; }
 
-    /// <summary>Currently unused — the Kenku FM integration was removed. Retained in the schema so existing
-    /// scene data is preserved and soundboard support can return without a migration.</summary>
+    /// <summary>Ids of soundboard <see cref="Sound"/>s fired when this scene is activated. Activating a
+    /// scene that has any entries stops current playback first, then plays these with their own volume/loop.</summary>
     public List<string> SoundEffects { get; set; } = [];
 }
 

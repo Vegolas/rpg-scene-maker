@@ -8,5 +8,5 @@ public record SceneLightDto(string LightKey, bool? Power, int? Brightness, strin
 public record EffectDto(string Type, int Speed, int Intensity, List<string>? Colors);
 public record MusicDto(string? PlayId, double? Volume, bool Pause);
 public record RegisteredLightInfo(string Key, string Name, string Provider);
-public record ActivationDto(string Scene, string Light, string Music, bool FullySucceeded);
+public record ActivationDto(string Scene, string Light, string Music, string SoundEffects, bool FullySucceeded);
 public record ActiveSceneDto(string? Id, DateTimeOffset? ActivatedAt);
