@@ -1,0 +1,80 @@
+@page "/logs"
+@implements IDisposable
+@inject ApiClient Api
+
+<PageTitle>Scene Maker — Logs</PageTitle>
+
+<RuneHeading>Logs</RuneHeading>
+
+<div class="chip-row">
+    <Chip On="@(_filter == LogFilter.All)" OnClick="@(() => _filter = LogFilter.All)">All</Chip>
+    <Chip On="@(_filter == LogFilter.Warnings)" OnClick="@(() => _filter = LogFilter.Warnings)">Warnings</Chip>
+    <Chip On="@(_filter == LogFilter.Errors)" OnClick="@(() => _filter = LogFilter.Errors)">Errors</Chip>
+    <button class="btn small" @onclick="ClearAsync">Clear</button>
+</div>
+
+@if (_logs is null)
+{
+    <p class="empty-note">Reading the ledger…</p>
+}
+else
+{
+    var rows = Filtered().ToList();
+    @if (rows.Count == 0)
+    {
+        <p class="empty-note">No log entries@(_filter == LogFilter.All ? " yet" : " at this level").</p>
+    }
+    else
+    {
+        <div class="log-list">
+            @foreach (var e in rows)
+            {
+                <div class="log-row log-@e.Level.ToLowerInvariant()">
+                    <span class="log-time">@e.Timestamp.ToString("HH:mm:ss")</span>
+                    <span class="log-level">@e.Level</span>
+                    <span class="log-cat">@e.Category</span>
+                    <span class="log-msg">@e.Message</span>
+                </div>
+                @if (!string.IsNullOrEmpty(e.Exception))
+                {
+                    <pre class="log-exc">@e.Exception</pre>
+                }
+            }
+        </div>
+    }
+}
+
+@code {
+    private enum LogFilter { All, Warnings, Errors }
+
+    private List<LogEntryDto>? _logs;
+    private LogFilter _filter = LogFilter.All;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(RefreshAsync), null, 2500, 2500);
+    }
+
+    private async Task RefreshAsync()
+    {
+        _logs = await Api.GetLogsAsync();
+        StateHasChanged();
+    }
+
+    private IEnumerable<LogEntryDto> Filtered() => _filter switch
+    {
+        LogFilter.Warnings => _logs!.Where(l => l.Level is "Warning" or "Error" or "Critical"),
+        LogFilter.Errors => _logs!.Where(l => l.Level is "Error" or "Critical"),
+        _ => _logs!,
+    };
+
+    private async Task ClearAsync()
+    {
+        if (await Api.ClearLogsAsync())
+            await RefreshAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

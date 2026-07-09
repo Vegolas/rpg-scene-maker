@@ -203,6 +203,14 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             : path;
     }
 
+    // ---------- logs ----------
+
+    /// <summary>Recent server log entries (newest first) for the Logs tab; silent on failure like other pollers.</summary>
+    public async Task<List<LogEntryDto>> GetLogsAsync() =>
+        await GetAsync<List<LogEntryDto>>("logs/list") ?? [];
+
+    public Task<bool> ClearLogsAsync() => CommandAsync("logs/clear", "Logs cleared");
+
     // ---------- plumbing ----------
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path)

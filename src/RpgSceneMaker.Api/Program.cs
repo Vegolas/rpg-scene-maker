@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api;
 using RpgSceneMaker.Api.Data;
 using RpgSceneMaker.Api.Endpoints;
+using RpgSceneMaker.Api.Logging;
 using RpgSceneMaker.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,6 +30,14 @@ builder.Services.AddSingleton<SpotifyStore>();
 builder.Services.AddSingleton<SpotifyTokenCache>();
 builder.Services.AddSingleton<SpotifyAuthState>();
 builder.Services.AddHttpClient<SpotifyClient>(client => client.Timeout = TimeSpan.FromSeconds(10));
+
+// In-memory log buffer surfaced by the panel's Logs tab. Whitelist our own logs at Information and
+// default everything else (EF SQL, HttpClient request chatter, hosting) to Warning+, so the tab stays
+// signal rather than framework noise.
+builder.Services.AddSingleton<InMemoryLogStore>();
+builder.Services.AddSingleton<ILoggerProvider, InMemoryLoggerProvider>();
+builder.Logging.AddFilter<InMemoryLoggerProvider>(null, LogLevel.Warning);
+builder.Logging.AddFilter<InMemoryLoggerProvider>("RpgSceneMaker", LogLevel.Information);
 
 // The configured provider picks which system scenes and /lights control ("tuya" or "hue").
 builder.Services.AddScoped<ILightService>(sp =>
@@ -68,6 +77,12 @@ app.Use(async (context, next) =>
                 (StatusCodes.Status504GatewayTimeout, "Bulb unreachable — check Tuya:Ip and that the bulb is powered"),
             _ => (StatusCodes.Status500InternalServerError, "Unexpected error"),
         };
+        // Real faults (bulb/Spotify unreachable, unexpected) are errors with a stack; "not configured"
+        // (503) and bad requests (4xx) are expected states — warn, and skip the noisy stack trace.
+        var isFault = status is >= 500 and not 503;
+        app.Logger.Log(isFault ? LogLevel.Error : LogLevel.Warning, isFault ? ex : null,
+            "{Method} {Path} → {Status} {Title}: {Detail}",
+            context.Request.Method, context.Request.Path, status, title, ex.Message);
         await Results.Problem(title: title, detail: ex.Message, statusCode: status).ExecuteAsync(context);
     }
 });
@@ -97,7 +112,8 @@ app.Use(async (context, next) =>
         // the API key; the opaque state value (validated server-side) guards it instead.
         !path.StartsWithSegments("/setup/spotify/callback") &&
         (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
-         path.StartsWithSegments("/music") || path.StartsWithSegments("/setup"));
+         path.StartsWithSegments("/music") || path.StartsWithSegments("/setup") ||
+         path.StartsWithSegments("/logs"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -111,8 +127,10 @@ app.MapSceneEndpoints();
 app.MapLightEndpoints();
 app.MapMusicEndpoints();
 app.MapSetupEndpoints();
+app.MapLogEndpoints();
 
 // Everything that isn't an API route is the Blazor control panel.
 app.MapFallbackToFile("index.html");
 
+app.Logger.LogInformation("RPG Scene Maker started.");
 app.Run();
