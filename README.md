@@ -2,9 +2,9 @@
 
 A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor WASM)** that switches your whole table mood with one tap — from a Stream Deck, an iPad, or any browser:
 
-- **Lighting** — a Tuya smart bulb (e.g. Polux GU10) **or Philips Hue lights**, controlled **directly over your LAN** (fast, works without internet). Pick the system with `Lighting:Provider` (`tuya` / `hue`) — scenes and endpoints are identical for both.
+- **Lighting** — a Tuya smart bulb (e.g. Polux GU10) **or Philips Hue lights**, controlled **directly over your LAN** (fast, works without internet). Pick the system on the panel's ⚙ Settings page — scenes and endpoints are identical for both.
 - **Music & sound effects** — [Kenku FM](https://www.kenku.fm/) via its Remote API (playlists for ambience, soundboard for one-shot effects).
-- **Scenes** — named presets in [scenes.json](src/RpgSceneMaker.Api/scenes.json) combining light color/brightness + playlist + sound effects.
+- **Scenes** — named presets combining light color/brightness + playlist + sound effects, stored in a local SQLite database.
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
 
@@ -30,13 +30,13 @@ This serves both the API and the control panel on **http://localhost:5252** (and
 
 1. Install and open [Kenku FM](https://www.kenku.fm/), add your playlists (ambience) and soundboards (effects).
 2. Enable the remote: **Kenku FM → Settings → Remote → Enable** (leave the default `127.0.0.1:3333`).
-3. The control panel's Music/Sounds tabs list everything automatically. For `scenes.json` you need ids: `GET /music/playlists` and `GET /sfx/sounds` return them.
+3. The control panel's Music/Sounds tabs list everything automatically. For scenes you need ids: `GET /music/playlists` and `GET /sfx/sounds` return them.
 
 ### 2a. Tuya bulb (local control)
 
 *Skip this if you use Philips Hue — see 2b.*
 
-You need three values in [appsettings.json](src/RpgSceneMaker.Api/appsettings.json): the bulb's **IP**, **device id** and **local key**.
+You need three values on the panel's ⚙ Settings page: the bulb's **IP**, **device id** and **local key**.
 
 **IP + device id** — with the API running, call:
 
@@ -56,9 +56,9 @@ Tuya devices broadcast on the LAN every few seconds; the response lists `ip`, `d
 http://localhost:5252/setup/local-keys?accessId=YOUR_ACCESS_ID&apiSecret=YOUR_SECRET&deviceId=YOUR_DEVICE_ID&region=eu
 ```
 
-The response contains the `localKey` for every device on your account. Put `Ip`, `DeviceId` and `LocalKey` into `appsettings.json` and restart. The cloud account is **only needed for this step** — all runtime control is local.
+The response contains the `localKey` for every device on your account. Save the IP, device id and local key on the ⚙ Settings page — it applies immediately, no restart. The cloud account is **only needed for this step** — all runtime control is local.
 
-> **Old bulb?** If `GET /lights/status` shows data-point keys `1, 2, 3, 5` instead of `20, 21, 22, 24`, set `"Tuya:DpProfile": "v1"`. If the bulb never responds, try `"ProtocolVersion": "3.1"`.
+> **Old bulb?** If `GET /lights/status` shows data-point keys `1, 2, 3, 5` instead of `20, 21, 22, 24`, set the DP profile to `v1` on the Settings page. If the bulb never responds, try protocol version `3.1`.
 
 ### 2b. Philips Hue (local control)
 
@@ -69,7 +69,7 @@ Everything happens in the control panel — open **⚙ Settings**:
 3. **Press the round link button on the Hue Bridge**, then tap *Pair with bridge* within 30 seconds. The app key is created and saved automatically.
 4. Tick the lights the panel and scenes should control (none ticked = all lights), tap *Save Hue settings*, then *Test (toggle)* to confirm.
 
-Settings changed in the panel are written to `settings.local.json` next to the API (git-ignored, overrides `appsettings.json`) and apply immediately — no restart. The raw endpoints (`/setup/hue/discover`, `/setup/hue/register`, `/setup/hue/lights`, `GET|PUT /setup/config`) remain available for scripting.
+Settings changed in the panel are saved to the SQLite database (see Persistence below) and apply immediately — no restart. The raw endpoints (`/setup/hue/discover`, `/setup/hue/register`, `/setup/hue/lights`, `GET|PUT /setup/config`) remain available for scripting.
 
 Tip: give the bridge a fixed IP (DHCP reservation in your router) so the saved address doesn't go stale.
 
@@ -88,7 +88,7 @@ Use the built-in **System → Website** action (untick "Open in browser" / GET i
 
 ## Scenes
 
-Edit [scenes.json](src/RpgSceneMaker.Api/scenes.json) (hot-reloaded — no restart needed) or `PUT /scenes/{id}` with the same shape:
+Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 
 ```json
 {
@@ -115,25 +115,25 @@ Edit [scenes.json](src/RpgSceneMaker.Api/scenes.json) (hot-reloaded — no resta
 | SFX | `/sfx/play?id=…`, `/sfx/stop?id=…`, `GET /sfx/sounds`, `GET /sfx/state` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
-| Setup (config) | `GET /setup/config`, `PUT /setup/config` — read/update provider + Hue/Tuya settings at runtime (persisted to `settings.local.json`) |
+| Setup (config) | `GET /setup/config`, `PUT /setup/config` — read/update provider + Hue/Tuya settings at runtime (persisted to the database) |
 
 All command endpoints accept GET or POST; parameters go in the query string.
 
+## Persistence
+
+Scenes and lighting settings (provider, Hue, Tuya) live in a SQLite database at `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path` in `appsettings.json`). The schema is created/upgraded automatically at startup via EF Core migrations.
+
+On first run with an empty database, the legacy JSON files are imported once: `scenes.json` (also the starter template on a fresh clone) and `settings.local.json` (the pre-SQLite settings overlay). After that the database is the source of truth — the legacy files are never read again and can be kept as a backup or deleted.
+
 ## Configuration ([appsettings.json](src/RpgSceneMaker.Api/appsettings.json))
+
+Deployment-level config only — everything else is managed from the panel and stored in the database.
 
 | Key | Meaning |
 |---|---|
 | `Urls` | Listen address, default `http://0.0.0.0:5252` so tablets on your Wi-Fi can reach the panel. Change to `http://localhost:5252` to lock it to this PC. |
 | `Security:ApiKey` | Optional shared secret. When set, all control endpoints require it (`X-Api-Key` header or `?apiKey=`); the panel asks for it under ⚙. |
-| `Lighting:Provider` | `tuya` (default) or `hue` — which system scenes and `/lights` control. |
-| `Tuya:Ip / DeviceId / LocalKey` | Bulb connection (see setup above). |
-| `Tuya:ProtocolVersion` | `3.3` (default) or `3.1` for very old firmware. |
-| `Tuya:DpProfile` | `v2` (DPs 20–24, default) or `v1` (DPs 1–5, older bulbs). |
-| `Hue:BridgeIp / AppKey` | Hue Bridge connection — set from the panel's Settings page (see 2b). |
-| `Hue:LightIds` | Hue lights to control; empty = all lights on the bridge. |
-
-Values saved from the panel live in `settings.local.json` (same folder, git-ignored) and override `appsettings.json`.
 | `Kenku:BaseUrl` | Kenku remote address, default `http://127.0.0.1:3333`. |
-| `Scenes:FilePath` | Scenes file location. |
+| `Database:Path` | SQLite file location, default `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db`. |
 
 > ⚠️ The API listens on your whole LAN by default so the iPad can reach it. On a home network the worst case is someone toggling your lights, but set `Security:ApiKey` anyway — one line of config, and the panel + Stream Deck both support it. Never expose the port to the internet.

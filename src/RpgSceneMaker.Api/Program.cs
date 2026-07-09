@@ -1,19 +1,19 @@
 using System.Net.Sockets;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api;
+using RpgSceneMaker.Api.Data;
 using RpgSceneMaker.Api.Models;
 using RpgSceneMaker.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Settings saved from the UI land here and override appsettings.json; hot-reloaded on save.
-builder.Configuration.AddJsonFile(SettingsStore.FileName, optional: true, reloadOnChange: true);
-
-builder.Services.Configure<LightingOptions>(builder.Configuration.GetSection(LightingOptions.Section));
-builder.Services.Configure<TuyaOptions>(builder.Configuration.GetSection(TuyaOptions.Section));
-builder.Services.Configure<HueOptions>(builder.Configuration.GetSection(HueOptions.Section));
 builder.Services.Configure<KenkuOptions>(builder.Configuration.GetSection(KenkuOptions.Section));
-builder.Services.Configure<SceneOptions>(builder.Configuration.GetSection(SceneOptions.Section));
+
+// Scenes and lighting settings live in SQLite; Database:Path overrides the default location.
+var dbPath = builder.Configuration["Database:Path"] ?? Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "RpgSceneMaker", "rpg-scene-maker.db");
+builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 
 builder.Services.AddSingleton<TuyaLightService>();
 builder.Services.AddSingleton<TuyaSetupService>();
@@ -25,14 +25,22 @@ builder.Services.AddSingleton<CurrentState>();
 builder.Services.AddScoped<SceneActivator>();
 builder.Services.AddHttpClient<KenkuClient>(client => client.Timeout = TimeSpan.FromSeconds(5));
 
-// Lighting:Provider picks which system scenes and /lights control ("tuya" or "hue").
+// The configured provider picks which system scenes and /lights control ("tuya" or "hue").
 builder.Services.AddScoped<ILightService>(sp =>
-    sp.GetRequiredService<IOptionsMonitor<LightingOptions>>().CurrentValue.Provider
+    sp.GetRequiredService<SettingsStore>().Current.Provider
         .Equals("hue", StringComparison.OrdinalIgnoreCase)
         ? sp.GetRequiredService<HueLightService>()
         : sp.GetRequiredService<TuyaLightService>());
 
 var app = builder.Build();
+
+// Create/upgrade the database, then pull in data from the legacy JSON files on first run.
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
+    using var db = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
+    db.Database.Migrate();
+    LegacyImporter.Run(db, app.Configuration, app.Environment, app.Logger);
+}
 
 // Map integration failures to useful status codes so a failing Stream Deck button tells you why.
 app.Use(async (context, next) =>
@@ -96,27 +104,27 @@ app.MapGet("/health", () => new { status = "ok" });
 // ---------- Scenes ----------
 var scenes = app.MapGroup("/scenes");
 
-scenes.MapGet("/", (SceneStore store) => store.GetAll());
+scenes.MapGet("/", (SceneStore store) => store.GetAllAsync());
 
 scenes.MapGet("/active", (CurrentState state) =>
     new { id = state.ActiveSceneId, activatedAt = state.ActivatedAt });
 
-scenes.MapGet("/{id}", (string id, SceneStore store) =>
-    store.Get(id) is { } scene ? Results.Ok(scene) : Results.NotFound());
+scenes.MapGet("/{id}", async (string id, SceneStore store) =>
+    await store.GetAsync(id) is { } scene ? Results.Ok(scene) : Results.NotFound());
 
-scenes.MapPut("/{id}", (string id, Scene scene, SceneStore store) =>
+scenes.MapPut("/{id}", async (string id, Scene scene, SceneStore store) =>
 {
     scene.Id = id;
-    store.Upsert(scene);
+    await store.UpsertAsync(scene);
     return Results.Ok(scene);
 });
 
-scenes.MapDelete("/{id}", (string id, SceneStore store) =>
-    store.Delete(id) ? Results.NoContent() : Results.NotFound());
+scenes.MapDelete("/{id}", async (string id, SceneStore store) =>
+    await store.DeleteAsync(id) ? Results.NoContent() : Results.NotFound());
 
 scenes.MapMethods("/{id}/activate", getOrPost, async (string id, SceneStore store, SceneActivator activator) =>
 {
-    if (store.Get(id) is not { } scene)
+    if (await store.GetAsync(id) is not { } scene)
         return Results.NotFound(new { error = $"No scene with id '{id}'. See GET /scenes." });
     var result = await activator.ActivateAsync(scene);
     return Results.Json(result, statusCode: result.FullySucceeded ? 200 : 207);
@@ -236,16 +244,8 @@ setup.MapGet("/scan", (int? seconds, TuyaSetupService tuya) => tuya.ScanAsync(se
 setup.MapGet("/local-keys", (string accessId, string apiSecret, string deviceId, string? region, TuyaSetupService tuya) =>
     tuya.GetLocalKeysAsync(accessId, apiSecret, deviceId, region ?? "eu"));
 
-// Read and update the lighting configuration (persisted to settings.local.json, applied without restart).
-setup.MapGet("/config", (IOptionsMonitor<LightingOptions> lighting, IOptionsMonitor<HueOptions> hue, IOptionsMonitor<TuyaOptions> tuya) =>
-{
-    var h = hue.CurrentValue;
-    var t = tuya.CurrentValue;
-    return new LightingConfigDto(
-        lighting.CurrentValue.Provider,
-        new HueConfigDto(h.BridgeIp, h.AppKey, h.LightIds),
-        new TuyaConfigDto(t.Ip, t.DeviceId, t.LocalKey, t.ProtocolVersion, t.DpProfile));
-});
+// Read and update the lighting configuration (persisted to the database, applied immediately).
+setup.MapGet("/config", (SettingsStore store) => store.GetDto());
 
 setup.MapPut("/config", (LightingConfigDto config, SettingsStore store) =>
 {

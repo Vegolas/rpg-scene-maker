@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -9,7 +8,7 @@ public record HueRegistration(string BridgeIp, string AppKey, string Hint);
 public record HueLight(string Id, string Name, string Type, bool On, bool Reachable);
 
 /// <summary>One-time Philips Hue setup: find the bridge, create an app key, list lights.</summary>
-public class HueSetupService(HttpClient http, IOptionsMonitor<HueOptions> options)
+public class HueSetupService(HttpClient http, SettingsStore settings)
 {
     /// <summary>Find Hue Bridges on your network via Philips' discovery endpoint.</summary>
     public async Task<List<HueBridge>> DiscoverAsync()
@@ -55,7 +54,7 @@ public class HueSetupService(HttpClient http, IOptionsMonitor<HueOptions> option
                 success.TryGetProperty("username", out var username))
             {
                 return new HueRegistration(bridgeIp, username.GetString() ?? "",
-                    "Put this value into Hue:AppKey (and the ip into Hue:BridgeIp) in appsettings.json.");
+                    "Save this as the Hue app key (and the ip as the bridge IP) on the Settings page or via PUT /setup/config.");
             }
             if (item.TryGetProperty("error", out var error) &&
                 error.TryGetProperty("type", out var type) && type.GetInt32() == 101)
@@ -71,10 +70,10 @@ public class HueSetupService(HttpClient http, IOptionsMonitor<HueOptions> option
     /// <summary>List lights with their ids for Hue:LightIds. Falls back to the configured bridge/key.</summary>
     public async Task<List<HueLight>> GetLightsAsync(string? bridgeIp, string? appKey)
     {
-        var ip = bridgeIp ?? options.CurrentValue.BridgeIp;
-        var key = appKey ?? options.CurrentValue.AppKey;
+        var ip = bridgeIp ?? settings.Current.Hue.BridgeIp;
+        var key = appKey ?? settings.Current.Hue.AppKey;
         if (string.IsNullOrWhiteSpace(ip) || string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Pass ?bridgeIp=...&appKey=... or configure Hue:BridgeIp and Hue:AppKey first.");
+            throw new ArgumentException("Pass ?bridgeIp=...&appKey=... or save the bridge IP and app key on the Settings page first.");
 
         var body = await WrapNetworkErrors(
             () => http.GetStringAsync($"http://{ip}/api/{key}/lights"),

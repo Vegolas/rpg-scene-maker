@@ -6,3 +6,8 @@ obj/
 publish/
 .claude/settings.local.json
 settings.local.json
+
+# SQLite databases (runtime data + EF design-time db)
+*.db
+*.db-shm
+*.db-wal

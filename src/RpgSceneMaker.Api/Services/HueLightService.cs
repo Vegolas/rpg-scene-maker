@@ -1,16 +1,16 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
+using RpgSceneMaker.Api.Data;
 
 namespace RpgSceneMaker.Api.Services;
 
 /// <summary>
 /// Controls Philips Hue lights through the Hue Bridge local REST API.
-/// Targets the lights in Hue:LightIds, or every light on the bridge (group 0) when the list is empty.
+/// Targets the configured light ids, or every light on the bridge (group 0) when the list is empty.
 /// </summary>
-public class HueLightService(HttpClient http, IOptionsMonitor<HueOptions> options) : ILightService
+public class HueLightService(HttpClient http, SettingsStore settings) : ILightService
 {
-    private HueOptions Opts => options.CurrentValue;
+    private HueConfig Opts => settings.Current.Hue;
 
     public Task SetPowerAsync(bool on) => SetStateAsync(new Dictionary<string, object> { ["on"] = on });
 
@@ -71,7 +71,7 @@ public class HueLightService(HttpClient http, IOptionsMonitor<HueOptions> option
     {
         if (string.IsNullOrWhiteSpace(Opts.BridgeIp) || string.IsNullOrWhiteSpace(Opts.AppKey))
             throw new InvalidOperationException(
-                "Philips Hue is not configured. Set Hue:BridgeIp and Hue:AppKey in appsettings.json. " +
+                "Philips Hue is not configured. Set the bridge IP and app key on the Settings page (or PUT /setup/config). " +
                 "Use GET /setup/hue/discover to find the bridge and GET /setup/hue/register to create an app key (see README).");
     }
 
@@ -125,7 +125,7 @@ public class HueLightService(HttpClient http, IOptionsMonitor<HueOptions> option
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            throw new HueException($"Hue Bridge unreachable at {Opts.BridgeIp} — check Hue:BridgeIp and your network. ({ex.Message})");
+            throw new HueException($"Hue Bridge unreachable at {Opts.BridgeIp} — check the bridge IP and your network. ({ex.Message})");
         }
     }
 

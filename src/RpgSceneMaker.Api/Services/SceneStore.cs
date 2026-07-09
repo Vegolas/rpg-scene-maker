@@ -1,76 +1,45 @@
-using System.Text.Json;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using RpgSceneMaker.Api.Data;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
 
-/// <summary>Scenes persisted in a human-editable JSON file. The file is re-read when it changes on disk.</summary>
-public class SceneStore(IOptions<SceneOptions> options, IHostEnvironment env)
+/// <summary>Scenes persisted in SQLite. Ids match case-insensitively (NOCASE collation).</summary>
+public class SceneStore(IDbContextFactory<AppDbContext> dbFactory)
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-
-    private readonly Lock _lock = new();
-    private List<Scene>? _cache;
-    private DateTime _cacheTimestamp;
-
-    private string FilePath => Path.GetFullPath(Path.Combine(env.ContentRootPath, options.Value.FilePath));
-
-    public IReadOnlyList<Scene> GetAll()
+    public async Task<List<Scene>> GetAllAsync()
     {
-        lock (_lock) { return Load(); }
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Scenes.AsNoTracking().OrderBy(s => s.Id).ToListAsync();
     }
 
-    public Scene? Get(string id)
+    public async Task<Scene?> GetAsync(string id)
     {
-        lock (_lock)
-        {
-            return Load().FirstOrDefault(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
-        }
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Scenes.AsNoTracking().SingleOrDefaultAsync(s => s.Id == id);
     }
 
-    public void Upsert(Scene scene)
+    public async Task UpsertAsync(Scene scene)
     {
-        lock (_lock)
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var existing = await db.Scenes.SingleOrDefaultAsync(s => s.Id == scene.Id);
+        if (existing is null)
         {
-            var scenes = Load();
-            scenes.RemoveAll(s => s.Id.Equals(scene.Id, StringComparison.OrdinalIgnoreCase));
-            scenes.Add(scene);
-            Save(scenes);
+            db.Scenes.Add(scene);
         }
+        else
+        {
+            existing.Name = scene.Name;
+            existing.Light = scene.Light;
+            existing.Music = scene.Music;
+            existing.SoundEffects = scene.SoundEffects;
+        }
+        await db.SaveChangesAsync();
     }
 
-    public bool Delete(string id)
+    public async Task<bool> DeleteAsync(string id)
     {
-        lock (_lock)
-        {
-            var scenes = Load();
-            var removed = scenes.RemoveAll(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase)) > 0;
-            if (removed) Save(scenes);
-            return removed;
-        }
-    }
-
-    private List<Scene> Load()
-    {
-        if (!File.Exists(FilePath))
-        {
-            _cache = [];
-            return _cache;
-        }
-
-        var timestamp = File.GetLastWriteTimeUtc(FilePath);
-        if (_cache is null || timestamp != _cacheTimestamp)
-        {
-            _cache = JsonSerializer.Deserialize<List<Scene>>(File.ReadAllText(FilePath), JsonOpts) ?? [];
-            _cacheTimestamp = timestamp;
-        }
-        return _cache;
-    }
-
-    private void Save(List<Scene> scenes)
-    {
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(scenes, JsonOpts));
-        _cache = scenes;
-        _cacheTimestamp = File.GetLastWriteTimeUtc(FilePath);
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Scenes.Where(s => s.Id == id).ExecuteDeleteAsync() > 0;
     }
 }

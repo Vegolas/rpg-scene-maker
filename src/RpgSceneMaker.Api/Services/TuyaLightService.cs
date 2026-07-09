@@ -1,6 +1,6 @@
 using System.Globalization;
 using com.clusterrr.TuyaNet;
-using Microsoft.Extensions.Options;
+using RpgSceneMaker.Api.Data;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -8,7 +8,7 @@ namespace RpgSceneMaker.Api.Services;
 /// Controls a single Tuya RGB+CCT bulb over the local network.
 /// Commands are serialized because the bulb only handles one TCP session at a time.
 /// </summary>
-public class TuyaLightService(IOptionsMonitor<TuyaOptions> options, ILogger<TuyaLightService> logger) : ILightService
+public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> logger) : ILightService
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
 
@@ -17,7 +17,7 @@ public class TuyaLightService(IOptionsMonitor<TuyaOptions> options, ILogger<Tuya
     private static readonly DpProfile V2 = new(20, 21, 22, 23, 24);
     private static readonly DpProfile V1 = new(1, 2, 3, 4, 5);
 
-    private TuyaOptions Opts => options.CurrentValue;
+    private TuyaConfig Opts => settings.Current.Tuya;
     private DpProfile Profile => Opts.DpProfile.Equals("v1", StringComparison.OrdinalIgnoreCase) ? V1 : V2;
     private bool IsV1 => Profile == V1;
 
@@ -101,7 +101,7 @@ public class TuyaLightService(IOptionsMonitor<TuyaOptions> options, ILogger<Tuya
     {
         if (!Opts.IsConfigured)
             throw new InvalidOperationException(
-                "Tuya bulb is not configured. Set Tuya:Ip, Tuya:DeviceId and Tuya:LocalKey in appsettings.json. " +
+                "Tuya bulb is not configured. Set the IP, device id and local key on the Settings page (or PUT /setup/config). " +
                 "Use GET /setup/scan to find the IP and GET /setup/local-keys to get the local key (see README).");
 
         var version = Opts.ProtocolVersion.Trim() == "3.1" ? TuyaProtocolVersion.V31 : TuyaProtocolVersion.V33;
