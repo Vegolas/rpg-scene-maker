@@ -27,3 +27,11 @@ jobs:
 
       - name: Build
         run: dotnet build src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj --configuration Release --no-restore
+
+      # Run the automated test suite. The Linux runner never touches NAudio's Windows-only audio
+      # output device, so every test here is cross-platform.
+      - name: Restore tests
+        run: dotnet restore src/RpgSceneMaker.Tests/RpgSceneMaker.Tests.csproj
+
+      - name: Test
+        run: dotnet test src/RpgSceneMaker.Tests/RpgSceneMaker.Tests.csproj --configuration Release --no-restore

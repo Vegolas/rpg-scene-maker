@@ -115,7 +115,7 @@ public static class SetupEndpoints
     // Spotify's dashboard only accepts plain-http redirect URIs on 127.0.0.1 (not "localhost"), and the
     // URI must match character for character. Normalising loopback hosts means connecting from
     // http://localhost:5252 works too — the callback still reaches this same server.
-    private static string SpotifyRedirectUri(HttpRequest request)
+    internal static string SpotifyRedirectUri(HttpRequest request)
     {
         var host = request.Host;
         if (host.Host is "localhost" or "[::1]")
@@ -123,6 +123,6 @@ public static class SetupEndpoints
         return $"{request.Scheme}://{host}/setup/spotify/callback";
     }
 
-    private static string Base64Url(byte[] bytes) =>
+    internal static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

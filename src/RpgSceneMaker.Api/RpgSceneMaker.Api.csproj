@@ -23,4 +23,10 @@
     <ProjectReference Include="..\RpgSceneMaker.Ui\RpgSceneMaker.Ui.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>RpgSceneMaker.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
 </Project>

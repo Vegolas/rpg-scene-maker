@@ -147,3 +147,6 @@ app.MapFallbackToFile("index.html");
 
 app.Logger.LogInformation("RPG Scene Maker started.");
 app.Run();
+
+// Exposed so the test project's WebApplicationFactory<Program> can boot the real app.
+public partial class Program { }

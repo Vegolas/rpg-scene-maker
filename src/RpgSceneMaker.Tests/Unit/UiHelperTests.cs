@@ -1,0 +1,94 @@
+using RpgSceneMaker.Ui.Contracts;
+using RpgSceneMaker.Ui.Shared;
+using Xunit;
+
+namespace RpgSceneMaker.Tests.Unit;
+
+public class SceneNamingTests
+{
+    [Fact]
+    public void SplitName_splits_leading_emoji_from_label()
+    {
+        var (emoji, label) = SceneNaming.SplitName("🍺 Tavern");
+        Assert.Equal("🍺", emoji);
+        Assert.Equal("Tavern", label);
+    }
+
+    [Fact]
+    public void SplitName_without_emoji_keeps_whole_name_as_label()
+    {
+        var (emoji, label) = SceneNaming.SplitName("Dark Forest", emojiFallback: "🎲");
+        Assert.Equal("🎲", emoji);
+        Assert.Equal("Dark Forest", label);
+    }
+
+    [Fact]
+    public void SplitName_blank_name_uses_label_fallback()
+    {
+        var (emoji, label) = SceneNaming.SplitName("   ", emojiFallback: "", labelFallback: "scene-id");
+        Assert.Equal("", emoji);
+        Assert.Equal("scene-id", label);
+    }
+
+    [Theory]
+    [InlineData("Tavern Brawl", "tavern-brawl")]
+    [InlineData("  Multiple   Spaces  ", "multiple-spaces")]
+    [InlineData("a__b--c", "a-b-c")]
+    [InlineData("UPPER", "upper")]
+    [InlineData("-leading-and-trailing-", "leading-and-trailing")]
+    public void Slugify_lowercases_and_collapses_separators(string input, string expected) =>
+        Assert.Equal(expected, SceneNaming.Slugify(input));
+
+    [Fact]
+    public void MakeUnique_suffixes_until_free()
+    {
+        Assert.Equal("lamp-2", SceneNaming.MakeUnique("lamp", ["lamp"]));
+        Assert.Equal("lamp-3", SceneNaming.MakeUnique("lamp", ["lamp", "lamp-2"]));
+        Assert.Equal("lamp", SceneNaming.MakeUnique("lamp", ["other"]));
+    }
+
+    [Fact]
+    public void MakeUnique_is_case_insensitive()
+    {
+        Assert.Equal("Lamp-2", SceneNaming.MakeUnique("Lamp", ["lamp"]));
+    }
+}
+
+public class LightFormatTests
+{
+    [Theory]
+    [InlineData(0, "warm")]
+    [InlineData(33, "warm")]
+    [InlineData(34, "neutral")]
+    [InlineData(50, "neutral")]
+    [InlineData(66, "neutral")]
+    [InlineData(67, "cold")]
+    [InlineData(100, "cold")]
+    public void TempWord_boundaries(int temperature, string word) =>
+        Assert.Equal(word, LightFormat.TempWord(temperature));
+}
+
+public class UiExtensionsTests
+{
+    private static ActivationDto Result(string light, string music, string sound) =>
+        new("scene", light, music, sound, FullySucceeded: false);
+
+    [Fact]
+    public void ProblemSummary_joins_only_errored_parts_stripping_the_prefix()
+    {
+        var summary = Result("ok", "error: no active device", "error: missing file").ProblemSummary();
+        Assert.Equal("music: no active device | sound: missing file", summary);
+    }
+
+    [Fact]
+    public void ProblemSummary_reports_the_light_part()
+    {
+        Assert.Equal("light: bulb unreachable", Result("error: bulb unreachable", "ok", "skipped").ProblemSummary());
+    }
+
+    [Fact]
+    public void ProblemSummary_is_empty_when_nothing_errored()
+    {
+        Assert.Equal("", Result("ok", "skipped", "ok").ProblemSummary());
+    }
+}

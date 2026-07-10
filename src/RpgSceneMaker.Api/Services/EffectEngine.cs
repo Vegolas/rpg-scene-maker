@@ -99,7 +99,7 @@ public class EffectEngine(ILogger<EffectEngine> logger)
     }
 
     // Hue: keep total command rate under ~8/sec. Tuya is serialized by its semaphore; still floor it.
-    private static int FloorInterval(int desiredMs, EffectJob job, int hueLoops) =>
+    internal static int FloorInterval(int desiredMs, EffectJob job, int hueLoops) =>
         job.IsHue
             ? Math.Max(desiredMs, 125 * Math.Max(1, hueLoops))
             : Math.Max(desiredMs, 400);
@@ -215,7 +215,7 @@ public class EffectEngine(ILogger<EffectEngine> logger)
     }
 
     // Interpolate along the shorter arc of the hue circle.
-    private static double LerpHue(double a, double b, double t)
+    internal static double LerpHue(double a, double b, double t)
     {
         var delta = ((b - a + 540) % 360) - 180;
         return (a + delta * t + 360) % 360;

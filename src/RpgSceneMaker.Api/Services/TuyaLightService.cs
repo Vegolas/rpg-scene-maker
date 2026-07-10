@@ -133,7 +133,7 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
         finally { _lock.Release(); }
     }
 
-    private int ScaleBrightness(int percent)
+    internal int ScaleBrightness(int percent)
     {
         var p = Math.Clamp(percent, 1, 100);
         return IsV1
@@ -143,7 +143,7 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
 
     // v2 colour: hhhhssssvvvv (h 0-360, s/v 0-1000, all hex)
     // v1 colour: rrggbbhhhhssvv (rgb hex + h 0-360 hex + s/v 0-255 hex)
-    private string EncodeColour(double h, double s, double v)
+    internal string EncodeColour(double h, double s, double v)
     {
         var hue = (int)Math.Round(h) % 360;
         if (IsV1)
@@ -158,7 +158,7 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
         return $"{hue:x4}{s1000:x4}{v1000:x4}";
     }
 
-    private (double h, double s, double v) DecodeColour(string colour)
+    internal (double h, double s, double v) DecodeColour(string colour)
     {
         try
         {

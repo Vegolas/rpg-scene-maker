@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="../RpgSceneMaker.Ui/RpgSceneMaker.Ui.csproj" />
   <Project Path="RpgSceneMaker.Api.csproj" />
+  <Project Path="../RpgSceneMaker.Tests/RpgSceneMaker.Tests.csproj" />
 </Solution>
