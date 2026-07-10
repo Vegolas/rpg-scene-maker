@@ -189,7 +189,7 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
     height: var(--tabbar-h);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     background: linear-gradient(rgba(20, 16, 27, 0.9), var(--bg-deep));
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--line);
@@ -789,6 +789,32 @@ ol.steps li { margin: 0.3rem 0; }
 .log-row.log-warning .log-level { color: var(--ember); }
 .log-row.log-information .log-level { color: var(--ok); }
 .log-row.log-debug .log-level, .log-row.log-trace .log-level { color: var(--ink-dim); }
+
+/* ---------- view transitions (tab nav + scene changes) ---------- */
+/* The persistent chrome gets its own snapshots so the page transition can animate
+   the content region without dragging the top bar / tab bar along with it.
+   (Both are unchanged across most navigations, so they simply hold still; the tab
+   bar's active-tab colour cross-fades on its own.) */
+.topbar { view-transition-name: topbar; }
+.tabbar { view-transition-name: tabbar; }
+
+/* Started only when the browser supports the API and motion is welcome
+   (rpgViewTransitions.run bails otherwise), but keep the animations gated on
+   reduced-motion too for safety. */
+@media (prefers-reduced-motion: no-preference) {
+    /* Tab / page navigation: the outgoing page fades, the incoming one rises in. */
+    ::view-transition-old(root) { animation: vtFadeOut 0.16s ease both; }
+    ::view-transition-new(root) { animation: vtRiseIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+    /* Scene activation: a calm cross-fade in place — the lights/mood change, the
+       layout doesn't, so nothing should slide. */
+    :root[data-view-transition="scene"]::view-transition-old(root) { animation: vtFadeOut 0.2s ease both; }
+    :root[data-view-transition="scene"]::view-transition-new(root) { animation: vtFadeIn 0.3s ease both; }
+}
+
+@keyframes vtFadeOut { to { opacity: 0; } }
+@keyframes vtFadeIn { from { opacity: 0; } }
+@keyframes vtRiseIn { from { opacity: 0; transform: translateY(12px); } }
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }

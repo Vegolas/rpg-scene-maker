@@ -6,6 +6,7 @@
 @inject ApiClient Api
 @inject UiState Ui
 @inject NavigationManager Nav
+@inject ViewTransition Vt
 
 <PageTitle>Scene Maker — @(_isNew ? "New scene" : "Edit scene")</PageTitle>
 
@@ -454,12 +455,12 @@ else
                 }
                 // On create, keep editing the freshly-made scene rather than re-creating it.
                 if (_isNew)
-                    Nav.NavigateTo($"editor/{id}");
+                    await Vt.NavigateAsync($"editor/{id}");
             }
             else
             {
                 Ui.ReportOk($"Saved scene \"{id}\"");
-                Nav.NavigateTo("");
+                await Vt.NavigateAsync("");
             }
         }
         finally
@@ -608,7 +609,7 @@ else
             if (ok)
             {
                 Ui.ReportOk($"Deleted scene \"{_edit.Id}\"");
-                Nav.NavigateTo("");
+                await Vt.NavigateAsync("");
             }
             else
             {

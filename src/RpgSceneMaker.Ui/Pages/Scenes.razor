@@ -2,7 +2,7 @@
 @implements IDisposable
 @inject ApiClient Api
 @inject UiState Ui
-@inject NavigationManager Nav
+@inject ViewTransition Vt
 
 <PageTitle>Scene Maker — Scenes</PageTitle>
 
@@ -75,9 +75,9 @@ else
         ?? scene.Lights?.FirstOrDefault(l => l.Color is not null)?.Color
         ?? "transparent";
 
-    private void NewScene() => Nav.NavigateTo("editor");
+    private Task NewScene() => Vt.NavigateAsync("editor");
 
-    private void Edit(string id) => Nav.NavigateTo($"editor/{id}");
+    private Task Edit(string id) => Vt.NavigateAsync($"editor/{id}");
 
     private async Task Activate(string id)
     {
@@ -87,7 +87,14 @@ else
             var result = await Api.ActivateSceneAsync(id);
             if (result is null) return;
 
-            _activeId = id;
+            // Cross-fade the active highlight from the old scene card to the new one.
+            await Vt.RunAsync(() =>
+            {
+                _busyId = null;
+                _activeId = id;
+                StateHasChanged();
+            }, type: "scene");
+
             if (result.FullySucceeded)
             {
                 Ui.ReportOk($"Scene \"{id}\" is live");

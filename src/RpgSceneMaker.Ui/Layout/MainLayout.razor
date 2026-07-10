@@ -2,13 +2,14 @@
 @implements IDisposable
 @inject UiState Ui
 @inject NavigationManager Nav
+@inject ViewTransition Vt
 
 <div class="shell">
     <header class="topbar">
         <h1>Scene Maker</h1>
         <QuickControls />
         <div class="conn-dot @(Ui.Connected ? "" : "off")" title="@(Ui.Connected ? "API connected" : "API unreachable")"></div>
-        <button class="icon-btn" @onclick="@(() => Nav.NavigateTo("settings"))" aria-label="Settings">⚙</button>
+        <button class="icon-btn" @onclick='() => Vt.NavigateAsync("settings")' aria-label="Settings">⚙</button>
     </header>
 
     <main class="page">
@@ -16,11 +17,13 @@
     </main>
 
     <nav class="tabbar">
-        <NavLink href="" Match="NavLinkMatch.All"><span class="tab-ico">🎲</span>Scenes</NavLink>
-        <NavLink href="music"><span class="tab-ico">🎵</span>Music</NavLink>
-        <NavLink href="lights"><span class="tab-ico">💡</span>Lights</NavLink>
-        <NavLink href="sounds"><span class="tab-ico">🔊</span>Sounds</NavLink>
-        <NavLink href="logs"><span class="tab-ico">📜</span>Logs</NavLink>
+        @foreach (var tab in Tabs)
+        {
+            <a href="@tab.Href" class="@ActiveClass(tab)"
+               @onclick:preventDefault @onclick="() => Vt.NavigateAsync(tab.Href)">
+                <span class="tab-ico">@tab.Icon</span>@tab.Label
+            </a>
+        }
     </nav>
 
     @if (Ui.Toast is not null)
@@ -30,9 +33,45 @@
 </div>
 
 @code {
-    protected override void OnInitialized() => Ui.Changed += OnUiChanged;
+    private record Tab(string Href, string Icon, string Label, bool Exact = false);
+
+    private static readonly Tab[] Tabs =
+    [
+        new("", "🎲", "Scenes", Exact: true),
+        new("music", "🎵", "Music"),
+        new("lights", "💡", "Lights"),
+        new("sounds", "🔊", "Sounds"),
+        new("logs", "📜", "Logs"),
+    ];
+
+    protected override void OnInitialized()
+    {
+        Ui.Changed += OnUiChanged;
+        // The active tab is derived from the URL, so re-render whenever it changes.
+        Nav.LocationChanged += OnLocationChanged;
+    }
 
     private void OnUiChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Ui.Changed -= OnUiChanged;
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    // Mirrors NavLink: exact match for the Scenes root, prefix match for the rest.
+    private string ActiveClass(Tab tab)
+    {
+        var current = Nav.ToBaseRelativePath(Nav.Uri);
+        var query = current.IndexOf('?');
+        if (query >= 0) current = current[..query];
+        current = current.Trim('/');
+
+        var active = tab.Exact
+            ? current.Length == 0
+            : current == tab.Href || current.StartsWith(tab.Href + "/", StringComparison.OrdinalIgnoreCase);
+        return active ? "active" : "";
+    }
+
+    public void Dispose()
+    {
+        Ui.Changed -= OnUiChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
 }

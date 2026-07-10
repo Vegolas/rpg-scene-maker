@@ -17,5 +17,6 @@ builder.Services.AddScoped(sp => new HttpClient
 });
 builder.Services.AddSingleton<UiState>();
 builder.Services.AddScoped<ApiClient>();
+builder.Services.AddScoped<ViewTransition>();
 
 await builder.Build().RunAsync();
