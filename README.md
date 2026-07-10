@@ -142,6 +142,23 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 
 > Sound playback uses NAudio and is **Windows-only** (lighting and Spotify work cross-platform).
 
+## Events
+
+**Events** are one-shot triggered effects — a brief light **flash** and/or a **sound**, fired *on top of* the current scene instead of replacing it. The classic example is **thunder**: a white flash + a thunderclap, after which the lights return to whatever scene was live. Manage them from the panel's **Events** tab or with `PUT /events/{id}`:
+
+```json
+{
+  "id": "thunder",
+  "name": "⚡ Thunder",
+  "flash": { "color": "#FFFFFF", "brightness": 100, "durationMs": 200 },
+  "soundEffects": ["thunderclap"]
+}
+```
+
+- `flash`: the lights jump to `color` at `brightness` (0–100), hold for `durationMs`, then restore the **live scene's** lighting (re-running its effects) — or the configured [default lighting](#lights) if no scene is active. Omit `flash` for a sound-only event.
+- `soundEffects`: sound ids (from the Sounds tab) played **over** whatever is already playing — a clap on top of the music. Omit for a flash-only event.
+- Fire an event with `GET|POST /events/{id}/trigger` (so a Stream Deck *Website* button works). Light and sound run concurrently and the response reports each part (HTTP 207 if something failed).
+
 ## Endpoint reference
 
 | Area | Endpoints |
@@ -150,6 +167,7 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 | Lights | `/lights/on`, `/lights/off`, `/lights/toggle`, `/lights/color?hex=FF8C2A&brightness=80`, `/lights/white?brightness=80&temperature=30`, `/lights/brightness?value=50`, `GET /lights/status` |
 | Music (Spotify) | `/music/play?id=…` (a `spotify:` URI / `open.spotify.com` link), `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/shuffle?value=true`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/search?q=…`, `GET /music/state` |
 | Sounds (soundboard) | `GET /sounds/list`, `POST /sounds/import` (multipart), `PUT\|DELETE /sounds/{id}`, `/sounds/{id}/play?volume=0.8`, `/sounds/{id}/stop`, `/sounds/stop` (all), `GET /sounds/state` |
+| Events | `GET /events/list`, `GET/PUT/DELETE /events/{id}`, `GET\|POST /events/{id}/trigger` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
 | Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |

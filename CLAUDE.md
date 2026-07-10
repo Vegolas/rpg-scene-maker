@@ -26,12 +26,12 @@ Two projects under `src/`; the solution file lives at
 [src/RpgSceneMaker.Api/RpgSceneMaker.slnx](src/RpgSceneMaker.Api/RpgSceneMaker.slnx).
 
 - **RpgSceneMaker.Api** — Minimal API. [Program.cs](src/RpgSceneMaker.Api/Program.cs) wires up DI +
-  middleware and calls the endpoint groups in `Endpoints/` (`Scene`/`Light`/`Music`/`Sound`/`Setup`Endpoints,
+  middleware and calls the endpoint groups in `Endpoints/` (`Scene`/`Light`/`Music`/`Sound`/`Event`/`Setup`Endpoints,
   one `Map…Endpoints()` extension method each); wire DTOs live in `Contracts/`, request guards in `Validation/`.
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Music, Lights, Sounds, Settings, Logs);
+- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Music, Lights, Sounds, Events, Settings, Logs);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions). All server calls go
   through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). The top bar (in
@@ -63,8 +63,17 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   connect flow lives under `/setup/spotify/*` in [SetupEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SetupEndpoints.cs),
   and `/music/*` ([MusicEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/MusicEndpoints.cs)) maps straight onto `SpotifyClient` (play/pause/resume/next/previous/volume/shuffle/repeat +
   playlists/search/state). Playing requires a `spotify:` URI or `open.spotify.com` link.
-- **`SceneActivator`** — applies a scene's light/music/sound effects **concurrently**; each part reports
-  ok/skipped/error independently (activation returns HTTP 207 if any part failed).
+- **`SceneActivator` / `SceneLightApplier`** — `SceneActivator` applies a scene's light/music/sound effects
+  **concurrently**; each part reports ok/skipped/error independently (activation returns HTTP 207 if any part
+  failed). The light half lives in `SceneLightApplier` (per-light entries + legacy "all lights" block,
+  starting/stopping `EffectEngine` loops), extracted so `EventActivator` can reuse it.
+- **`EventActivator`** — fires a one-shot **event** (`GameEvent`, [GameEvent.cs](src/RpgSceneMaker.Api/Models/GameEvent.cs)):
+  a brief light **flash** (jump to a colour, hold `DurationMs`, then restore the live scene's lights via
+  `SceneLightApplier`, else the configured default light) and/or **sounds** that *overlay* current playback
+  (no `StopAll`, unlike a scene). Light + sound run concurrently and each reports ok/skipped/error (207 if any
+  failed). `/events/*` ([EventEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/EventEndpoints.cs)) covers `list`,
+  get/put/delete and `trigger`; like `/sounds`, nothing is mapped at the bare `/events` path so the panel's
+  Events tab can live there.
 - **`SoundboardPlayer` / `SoundStore` / `SoundFileStorage`** — the soundboard. `SoundboardPlayer` plays
   sound effects on the **server's own audio device** via NAudio (a `MixingSampleProvider` mixes any number
   of overlapping "voices", each with its own volume and optional looping) — this is what Kenku FM used to
@@ -72,7 +81,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   keeps the audio files on disk. `/sounds/*` ([SoundEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SoundEndpoints.cs))
   covers `list`, `import` (multipart), update, delete, play/stop/stop-all, and `state` (playing ids); a scene
   fires its `SoundEffects` (sound ids) on activation. Deleting a sound also scrubs its id from every scene's
-  `SoundEffects`, so activations never warn about a dangling reference. Nothing is mapped at the bare `/sounds` path so the
+  and event's `SoundEffects`, so activations/triggers never warn about a dangling reference. Nothing is mapped at the bare `/sounds` path so the
   panel's Sounds tab can live there (same reason `/lights` uses `/lights/list`). **NAudio output is Windows-only.**
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
@@ -101,7 +110,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.json. The DB is at
 `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path`). Context:
 [AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
-as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`) and a
+as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`), `Events`
+(one-shot triggered effects; `Flash` JSON column; ids `NOCASE`) and a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 

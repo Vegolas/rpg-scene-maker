@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<Sound> Sounds => Set<Sound>();
+    public DbSet<GameEvent> Events => Set<GameEvent>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
 
@@ -31,6 +32,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             sound.HasKey(s => s.Id);
             // Sound ids appear in hand-typed /sounds/{id}/play URLs, so match them case-insensitively too.
             sound.Property(s => s.Id).UseCollation("NOCASE");
+        });
+
+        modelBuilder.Entity<GameEvent>(evt =>
+        {
+            evt.HasKey(e => e.Id);
+            // Event ids appear in hand-typed /events/{id}/trigger URLs, so match them case-insensitively too.
+            evt.Property(e => e.Id).UseCollation("NOCASE");
+            evt.OwnsOne(e => e.Flash, b => b.ToJson());
         });
 
         modelBuilder.Entity<LightingConfig>(config =>

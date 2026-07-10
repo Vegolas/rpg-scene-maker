@@ -30,11 +30,15 @@ builder.Services.AddSingleton<SoundStore>();
 builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
 builder.Services.AddSingleton<SoundboardPlayer>();
 
+builder.Services.AddSingleton<EventStore>();
+
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<CurrentState>();
 builder.Services.AddSingleton<LightRegistry>();
 builder.Services.AddSingleton<EffectEngine>();
+builder.Services.AddScoped<SceneLightApplier>();
 builder.Services.AddScoped<SceneActivator>();
+builder.Services.AddScoped<EventActivator>();
 
 // Spotify: cloud Web API (PKCE) to control a Spotify Connect device on the LAN.
 builder.Services.AddSingleton<SpotifyStore>();
@@ -125,7 +129,8 @@ app.Use(async (context, next) =>
         !path.StartsWithSegments("/setup/spotify/callback") &&
         (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
          path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
-         path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs"));
+         path.StartsWithSegments("/events") || path.StartsWithSegments("/setup") ||
+         path.StartsWithSegments("/logs"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -139,6 +144,7 @@ app.MapSceneEndpoints();
 app.MapLightEndpoints();
 app.MapMusicEndpoints();
 app.MapSoundEndpoints();
+app.MapEventEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
 

@@ -70,7 +70,7 @@ public static class SoundEndpoints
             return Results.Ok(ToDto(sound));
         });
 
-        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, SoundboardPlayer player, SceneStore scenes) =>
+        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, SoundboardPlayer player, SceneStore scenes, EventStore events) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 return Results.NotFound();
@@ -78,17 +78,22 @@ public static class SoundEndpoints
             files.Delete(sound.FileName);
             await store.DeleteAsync(id);
 
-            // Drop the now-gone sound from any scene that referenced it, so activating those scenes
+            // Drop the now-gone sound from any scene or event that referenced it, so triggering those
             // no longer logs "sound(s) not found and skipped" for a dangling id.
             foreach (var scene in await scenes.GetAllAsync())
             {
-                var effects = scene.SoundEffects;
-                if (effects is null || effects.Count == 0) continue;
-                var kept = effects.Where(sid => !string.Equals(sid, sound.Id, StringComparison.OrdinalIgnoreCase)).ToList();
-                if (kept.Count != effects.Count)
+                if (Scrub(scene.SoundEffects, sound.Id) is { } kept)
                 {
                     scene.SoundEffects = kept;
                     await scenes.UpsertAsync(scene);
+                }
+            }
+            foreach (var evt in await events.GetAllAsync())
+            {
+                if (Scrub(evt.SoundEffects, sound.Id) is { } kept)
+                {
+                    evt.SoundEffects = kept;
+                    await events.UpsertAsync(evt);
                 }
             }
             return Results.NoContent();
@@ -115,6 +120,14 @@ public static class SoundEndpoints
             player.StopAll();
             return new { stopped = "all" };
         });
+    }
+
+    // The list with soundId removed (case-insensitively), or null when it wasn't referenced (no rewrite needed).
+    private static List<string>? Scrub(List<string>? soundEffects, string soundId)
+    {
+        if (soundEffects is null || soundEffects.Count == 0) return null;
+        var kept = soundEffects.Where(sid => !string.Equals(sid, soundId, StringComparison.OrdinalIgnoreCase)).ToList();
+        return kept.Count != soundEffects.Count ? kept : null;
     }
 
     private static SoundDto ToDto(Sound s) => new(s.Id, s.Name, s.Category, s.Volume, s.Loop);
