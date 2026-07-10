@@ -45,6 +45,17 @@ public class ApiKeyGateTests
     }
 
     [Fact]
+    public async Task Diagnostics_without_key_is_401()
+    {
+        using var factory = new ApiFactory(apiKey: Key);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/diagnostics");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Spotify_callback_is_exempt_from_the_key_gate()
     {
         using var factory = new ApiFactory(apiKey: Key);

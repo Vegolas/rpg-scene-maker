@@ -37,6 +37,27 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             await js.InvokeVoidAsync("localStorage.setItem", "apiKey", _apiKey);
     }
 
+    // ---------- developer mode (persisted per-device in the browser) ----------
+
+    private bool? _devMode;
+
+    /// <summary>Whether developer mode is on for this device (surfaces the Logs tab + diagnostics).</summary>
+    public async Task<bool> GetDevModeAsync()
+    {
+        _devMode ??= await js.InvokeAsync<string?>("localStorage.getItem", "devMode") == "1";
+        return _devMode.Value;
+    }
+
+    public async Task SetDevModeAsync(bool on)
+    {
+        _devMode = on;
+        if (on)
+            await js.InvokeVoidAsync("localStorage.setItem", "devMode", "1");
+        else
+            await js.InvokeVoidAsync("localStorage.removeItem", "devMode");
+        ui.SetDevMode(on); // live-updates the tab bar and any subscribed page
+    }
+
     // ---------- scenes ----------
 
     public async Task<List<SceneDto>> GetScenesAsync() =>
@@ -214,6 +235,9 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         await GetAsync<List<LogEntryDto>>("logs/list") ?? [];
 
     public Task<bool> ClearLogsAsync() => CommandAsync("logs/clear", "Logs cleared");
+
+    /// <summary>Runtime diagnostics for developer mode; silent on failure like the other pollers.</summary>
+    public Task<DiagnosticsDto?> GetDiagnosticsAsync() => GetAsync<DiagnosticsDto?>("diagnostics");
 
     // ---------- sounds (soundboard) ----------
 

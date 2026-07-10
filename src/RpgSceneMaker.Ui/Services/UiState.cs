@@ -9,6 +9,10 @@ public class UiState
     public bool ToastIsError { get; private set; }
     public bool Connected { get; private set; } = true;
 
+    /// <summary>Per-device developer mode (persisted in localStorage by <see cref="ApiClient"/>).
+    /// When on, the panel surfaces the Logs tab and its diagnostics panel.</summary>
+    public bool DevMode { get; private set; }
+
     public event Action? Changed;
 
     public void ReportOk(string message) => ShowToast(message, isError: false);
@@ -19,6 +23,13 @@ public class UiState
     {
         if (Connected == connected) return;
         Connected = connected;
+        Changed?.Invoke();
+    }
+
+    public void SetDevMode(bool on)
+    {
+        if (DevMode == on) return;
+        DevMode = on;
         Changed?.Invoke();
     }
 

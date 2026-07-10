@@ -19,6 +19,10 @@ var soundsPath = builder.Configuration["Sounds:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
     "RpgSceneMaker", "sounds");
 
+// Startup-captured facts surfaced by GET /diagnostics (developer mode): process start time plus the
+// resolved on-disk paths, so the endpoint reuses the exact values instead of re-resolving them.
+builder.Services.AddSingleton(new DiagnosticsInfo(DateTimeOffset.UtcNow, dbPath, soundsPath));
+
 builder.Services.AddSingleton<TuyaLightService>();
 builder.Services.AddSingleton<TuyaSetupService>();
 builder.Services.AddHttpClient<HueLightService>(client => client.Timeout = TimeSpan.FromSeconds(5));
@@ -130,7 +134,7 @@ app.Use(async (context, next) =>
         (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
          path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
          path.StartsWithSegments("/events") || path.StartsWithSegments("/setup") ||
-         path.StartsWithSegments("/logs"));
+         path.StartsWithSegments("/logs") || path.StartsWithSegments("/diagnostics"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -147,6 +151,7 @@ app.MapSoundEndpoints();
 app.MapEventEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
+app.MapDiagnosticsEndpoints();
 
 // Everything that isn't an API route is the Blazor control panel.
 app.MapFallbackToFile("index.html");
