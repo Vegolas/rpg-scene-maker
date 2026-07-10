@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject UiState Ui
+@inject ApiClient Api
 @inject NavigationManager Nav
 @inject ViewTransition Vt
 
@@ -17,7 +18,7 @@
     </main>
 
     <nav class="tabbar">
-        @foreach (var tab in Tabs)
+        @foreach (var tab in VisibleTabs)
         {
             <a href="@tab.Href" class="@ActiveClass(tab)"
                @onclick:preventDefault @onclick="() => Vt.NavigateAsync(tab.Href)">
@@ -43,14 +44,20 @@
         new("lights", "💡", "Lights"),
         new("sounds", "🔊", "Sounds"),
         new("events", "⚡", "Events"),
-        new("logs", "📜", "Logs"),
     ];
 
-    protected override void OnInitialized()
+    // The Logs tab (with its diagnostics panel) only appears when developer mode is on.
+    private static readonly Tab LogsTab = new("logs", "📜", "Logs");
+
+    private IEnumerable<Tab> VisibleTabs => Ui.DevMode ? [.. Tabs, LogsTab] : Tabs;
+
+    protected override async Task OnInitializedAsync()
     {
         Ui.Changed += OnUiChanged;
         // The active tab is derived from the URL, so re-render whenever it changes.
         Nav.LocationChanged += OnLocationChanged;
+        // Load the per-device developer-mode flag so the tab bar renders it from the first paint.
+        Ui.SetDevMode(await Api.GetDevModeAsync());
     }
 
     private void OnUiChanged() => InvokeAsync(StateHasChanged);

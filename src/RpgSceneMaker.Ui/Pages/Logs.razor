@@ -1,8 +1,41 @@
 @page "/logs"
 @implements IDisposable
 @inject ApiClient Api
+@inject NavigationManager Nav
 
 <PageTitle>Scene Maker — Logs</PageTitle>
+
+<RuneHeading>Diagnostics</RuneHeading>
+<div class="panel">
+    @if (_diag is not null)
+    {
+        <dl class="diag">
+            <dt>Version</dt><dd>@_diag.Version</dd>
+            <dt>Environment</dt><dd>@_diag.Environment</dd>
+            <dt>Uptime</dt><dd>@Uptime(_diag.StartedAt)</dd>
+            <dt>Light provider</dt><dd>@LightFormat.ProviderLabel(_diag.LightProvider)</dd>
+            <dt>Spotify</dt><dd>@(_diag.SpotifyConnected ? "Connected" : "Not connected")</dd>
+            <dt>Soundboard</dt>
+            <dd>@(_diag.SoundboardSupported ? $"Supported — {_diag.PlayingSoundCount} playing" : "Unsupported on this OS")</dd>
+            <dt>Scenes</dt><dd>@_diag.SceneCount</dd>
+            <dt>Sounds</dt><dd>@_diag.SoundCount</dd>
+            <dt>Events</dt><dd>@_diag.EventCount</dd>
+            <dt>Database</dt><dd><code>@_diag.DatabasePath</code></dd>
+            <dt>Sounds folder</dt><dd><code>@_diag.SoundsPath</code></dd>
+        </dl>
+    }
+    else if (_diagLoaded)
+    {
+        <p class="empty-note" style="margin:0.4rem 0">Diagnostics unavailable.</p>
+    }
+    else
+    {
+        <p class="empty-note" style="margin:0.4rem 0">Gathering diagnostics…</p>
+    }
+    <div class="btn-row" style="margin-top:0.8rem">
+        <button class="btn small" @onclick="RefreshDiagnosticsAsync">Refresh</button>
+    </div>
+</div>
 
 <RuneHeading>Logs</RuneHeading>
 
@@ -50,9 +83,20 @@ else
     private List<LogEntryDto>? _logs;
     private LogFilter _filter = LogFilter.All;
     private Timer? _timer;
+    private DiagnosticsDto? _diag;
+    private bool _diagLoaded;
 
     protected override async Task OnInitializedAsync()
     {
+        // Developer mode gates this page; when it's off there's no tab for it, so send the user home
+        // (e.g. arriving via a stale bookmark). Authoritative check, independent of layout timing.
+        if (!await Api.GetDevModeAsync())
+        {
+            Nav.NavigateTo("");
+            return;
+        }
+
+        await RefreshDiagnosticsAsync();
         await RefreshAsync();
         _timer = new Timer(_ => _ = InvokeAsync(RefreshAsync), null, 2500, 2500);
     }
@@ -60,6 +104,16 @@ else
     private async Task RefreshAsync()
     {
         _logs = await Api.GetLogsAsync();
+        StateHasChanged();
+    }
+
+    // Fetched on demand (load + Refresh button) rather than on the 2.5s log poll: the count fields
+    // hit the database, so there's no need to re-query them every tick. Uptime still ticks along,
+    // because the log poll re-renders the page and Uptime() recomputes from StartedAt.
+    private async Task RefreshDiagnosticsAsync()
+    {
+        _diag = await Api.GetDiagnosticsAsync();
+        _diagLoaded = true;
         StateHasChanged();
     }
 
@@ -74,6 +128,15 @@ else
     {
         if (await Api.ClearLogsAsync())
             await RefreshAsync();
+    }
+
+    private static string Uptime(DateTimeOffset startedAt)
+    {
+        var span = DateTimeOffset.UtcNow - startedAt;
+        if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h {span.Minutes}m";
+        if (span.TotalMinutes >= 1) return $"{span.Minutes}m {span.Seconds}s";
+        return $"{span.Seconds}s";
     }
 
     public void Dispose() => _timer?.Dispose();

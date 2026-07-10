@@ -189,7 +189,10 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
     height: var(--tabbar-h);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    /* Equal columns for however many tabs are shown — the Logs tab is only present in developer mode,
+       so the count varies (6 or 7). Auto-flow keeps them evenly spread without a fixed column count. */
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
     background: linear-gradient(rgba(20, 16, 27, 0.9), var(--bg-deep));
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--line);
@@ -826,6 +829,18 @@ ol.steps li { margin: 0.3rem 0; }
 .log-row.log-warning .log-level { color: var(--ember); }
 .log-row.log-information .log-level { color: var(--ok); }
 .log-row.log-debug .log-level, .log-row.log-trace .log-level { color: var(--ink-dim); }
+
+/* ---------- diagnostics (developer mode) ---------- */
+.diag {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.35rem 0.9rem;
+    margin: 0;
+    font-size: 0.9rem;
+}
+.diag dt { color: var(--ink-dim); }
+.diag dd { margin: 0; min-width: 0; color: var(--ink); word-break: break-word; }
+.diag dd code { font-size: 0.82rem; color: var(--ink-dim); word-break: break-all; }
 
 /* ---------- view transitions (tab nav + scene changes) ---------- */
 /* The persistent chrome gets its own snapshots so the page transition can animate

@@ -290,6 +290,14 @@ else
             <button class="btn primary" @onclick="SaveApiKey">Save key on this device</button>
         </div>
     </div>
+
+    <RuneHeading>Developer</RuneHeading>
+    <div class="panel">
+        <div class="chip-row" style="margin-top:0">
+            <Chip On="@Ui.DevMode" OnClick="ToggleDevMode">Developer mode</Chip>
+        </div>
+        <p class="hint">Surfaces the Logs tab — server logs plus a diagnostics panel. Stored on this device only.</p>
+    </div>
 }
 
 @code {
@@ -522,6 +530,13 @@ else
     {
         await Api.SetApiKeyAsync(_apiKeyInput);
         Ui.ReportOk("API key saved on this device");
+    }
+
+    private async Task ToggleDevMode()
+    {
+        var on = !Ui.DevMode;
+        await Api.SetDevModeAsync(on);
+        Ui.ReportOk(on ? "Developer mode on — Logs tab added" : "Developer mode off");
     }
 
     // ---------- light registry ----------
