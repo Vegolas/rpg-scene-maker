@@ -269,6 +269,46 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
+    // ---------- events (one-shot triggered effects) ----------
+
+    public async Task<List<EventDto>> GetEventsAsync() =>
+        await GetAsync<List<EventDto>>("events/list") ?? [];
+
+    /// <summary>Upsert an event; the editor shows the returned error inline / via toast.</summary>
+    public Task<(EventDto? Result, string? Error)> SaveEventAsync(string id, EventEdit edit) =>
+        FetchAsync<EventDto>(HttpMethod.Put, $"events/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteEventAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"events/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    public async Task<EventTriggerDto?> TriggerEventAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, $"events/{Uri.EscapeDataString(id)}/trigger");
+            var result = await response.Content.ReadFromJsonAsync<EventTriggerDto>(Json);
+            ui.SetConnected(true);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return null;
+        }
+    }
+
     // ---------- plumbing ----------
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path)

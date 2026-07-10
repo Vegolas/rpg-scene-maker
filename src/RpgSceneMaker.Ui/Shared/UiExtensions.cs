@@ -11,7 +11,14 @@ public static class UiExtensions
 
     /// <summary>"light: … | music: … | sound: …" from an activation result's failed parts (the "error:" prefix stripped).</summary>
     public static string ProblemSummary(this ActivationDto result) =>
-        string.Join(" | ", new[] { ("light", result.Light), ("music", result.Music), ("sound", result.SoundEffects) }
-            .Where(p => p.Item2.StartsWith("error"))
-            .Select(p => $"{p.Item1}: {p.Item2[7..]}"));
+        Summarize(("light", result.Light), ("music", result.Music), ("sound", result.SoundEffects));
+
+    /// <summary>"light: … | sound: …" from an event trigger's failed parts (the "error:" prefix stripped).</summary>
+    public static string ProblemSummary(this EventTriggerDto result) =>
+        Summarize(("light", result.Light), ("sound", result.Sound));
+
+    private static string Summarize(params (string Label, string Status)[] parts) =>
+        string.Join(" | ", parts
+            .Where(p => p.Status.StartsWith("error"))
+            .Select(p => $"{p.Label}: {p.Status[7..]}"));
 }

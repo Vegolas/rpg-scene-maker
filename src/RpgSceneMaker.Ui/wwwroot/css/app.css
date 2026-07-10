@@ -189,7 +189,7 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
     height: var(--tabbar-h);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     background: linear-gradient(rgba(20, 16, 27, 0.9), var(--bg-deep));
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--line);

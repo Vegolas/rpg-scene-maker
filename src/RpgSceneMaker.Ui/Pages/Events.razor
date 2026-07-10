@@ -1,0 +1,322 @@
+@page "/events"
+@inject ApiClient Api
+@inject UiState Ui
+
+<PageTitle>Scene Maker — Events</PageTitle>
+
+<RuneHeading>Events</RuneHeading>
+
+@if (_edit is not null)
+{
+    <div class="panel">
+        <div class="emoji-row">
+            @foreach (var e in Palette.Emojis)
+            {
+                <button class="emoji-pick @(e == _emoji ? "picked" : "")" @onclick="() => ToggleEmoji(e)">@e</button>
+            }
+        </div>
+        <div class="field" style="margin-top:1rem;margin-bottom:0">
+            <label for="evt-label">Name</label>
+            <input id="evt-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty"
+                   placeholder="e.g. Thunder" />
+        </div>
+        <p class="hint" style="margin-top:0.6rem">
+            @if (_isNew)
+            {
+                <span>Stream Deck URL: <code>/events/@(CurrentId is { Length: > 0 } cid ? cid : "…")/trigger</code></span>
+            }
+            else
+            {
+                <span>Id: <code>@_edit.Id</code> (fixed) — <code>/events/@_edit.Id/trigger</code></span>
+            }
+        </p>
+    </div>
+
+    <RuneHeading>Light Flash</RuneHeading>
+    <div class="panel">
+        <div class="chip-row" style="margin-top:0">
+            <Chip On="_edit.FlashEnabled" OnClick="() => _edit.FlashEnabled = !_edit.FlashEnabled">⚡ Flash the lights</Chip>
+        </div>
+        @if (_edit.FlashEnabled)
+        {
+            <SwatchGrid Selected="_edit.FlashColor" OnPick="@(hex => _edit.FlashColor = hex)" Style="margin-top:1rem" />
+            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="_edit.FlashBrightness" AriaLabel="Flash brightness" />
+            <SliderRow LeftIcon="⏱️" Min="50" Max="1500" Suffix="ms" @bind-Value="_edit.FlashDurationMs" AriaLabel="Flash duration" />
+            <p class="hint" style="margin-top:0.6rem">The lights jump to this colour, hold, then return to the live scene (or the default lighting).</p>
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0.8rem">This event doesn't touch the lights — sound only.</p>
+        }
+    </div>
+
+    <RuneHeading>Sound</RuneHeading>
+    <div class="panel">
+        @if (_sounds is null || _sounds.Count == 0)
+        {
+            <p class="hint" style="margin:0">
+                No sounds imported yet. Add some on the <a href="sounds">Sounds</a> tab, then pick them here.
+            </p>
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0">Triggering the event plays these <em>over</em> whatever's already playing (a clap on top of the music).</p>
+            @foreach (var group in _sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+            {
+                <p class="kgroup-title">@group.Key</p>
+                <div class="klist">
+                    @foreach (var sound in group)
+                    {
+                        var picked = _edit.SoundEffects.Contains(sound.Id);
+                        <KRow Icon="@(picked ? "☑" : "☐")" Title="@sound.Name" Hint="@(sound.Loop ? "🔁 loop" : null)"
+                              Selected="picked" OnClick="() => ToggleSound(sound.Id)" />
+                    }
+                </div>
+            }
+        }
+
+        @* Sound ids the event still references but that are no longer in the library. *@
+        @{
+            var knownIds = _sounds?.Select(s => s.Id).ToHashSet() ?? [];
+            var unknownSoundIds = _edit.SoundEffects.Where(sid => !knownIds.Contains(sid)).ToList();
+        }
+        @if (unknownSoundIds.Count > 0)
+        {
+            <p class="kgroup-title">Unknown — no longer in your library</p>
+            <div class="klist">
+                @foreach (var sid in unknownSoundIds)
+                {
+                    <KRow Icon="⚠️" Title="@sid" Hint="removed sound — tap to drop" OnClick="() => RemoveSound(sid)" />
+                }
+            </div>
+        }
+    </div>
+
+    <RuneHeading>Save</RuneHeading>
+    <div class="btn-row">
+        <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
+        <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
+        <button class="btn" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
+    </div>
+    @if (!_isNew)
+    {
+        <div class="btn-row" style="margin-top:0.7rem">
+            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+                @(_confirmDelete ? "Really delete?" : "Delete event")
+            </button>
+        </div>
+    }
+}
+
+@if (_events is null)
+{
+    <p class="empty-note">Gathering the omens…</p>
+}
+else
+{
+    @if (_edit is null && _events.Count == 0)
+    {
+        <p class="empty-note">No events yet — conjure a thunderclap or a horn blast below.</p>
+    }
+    <div class="scene-grid">
+        @foreach (var (evt, index) in _events.Select((e, i) => (e, i)))
+        {
+            var (emoji, label) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
+            <button class="scene-card @(_busyId == evt.Id ? "busy" : "")"
+                    style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(evt))"
+                    @onclick="() => Trigger(evt.Id)">
+                <span class="scene-swatch"></span>
+                <span class="card-edit" role="button" tabindex="0" aria-label="Edit event"
+                      @onclick="() => Edit(evt)" @onclick:stopPropagation="true">✎</span>
+                <span class="scene-emoji">@emoji</span>
+                <span class="scene-name">@label</span>
+            </button>
+        }
+        <button class="scene-card ghost" @onclick="NewEvent">
+            <span class="scene-emoji">＋</span>
+            <span class="scene-name">New event</span>
+        </button>
+    </div>
+    @if (_events.Count > 0)
+    {
+        <p class="hint" style="margin-top:1rem">Tap to fire. ✎ to edit the flash and sound.</p>
+    }
+}
+
+@code {
+    private List<EventDto>? _events;
+    private List<SoundDto>? _sounds;
+    private string? _busyId;
+
+    // Editor state (inline, one at a time). _edit non-null = editor open.
+    private EventEdit? _edit;
+    private bool _isNew;
+    private bool _busy;
+    private bool _confirmDelete;
+    private string _emoji = "";
+    private string _label = "";
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _events = await Api.GetEventsAsync();
+        _sounds = await Api.GetSoundsAsync();
+        StateHasChanged();
+    }
+
+    // Flash colour tints the card swatch, like a scene's colour.
+    private static string SwatchColor(EventDto evt) => evt.Flash?.Color ?? "transparent";
+
+    private async Task Trigger(string id)
+    {
+        _busyId = id;
+        StateHasChanged();
+        try
+        {
+            var result = await Api.TriggerEventAsync(id);
+            if (result is null) return;
+            if (result.FullySucceeded)
+                Ui.ReportOk($"Event \"{id}\" fired");
+            else
+                Ui.ReportError($"Partially fired. {result.ProblemSummary()}");
+        }
+        finally
+        {
+            _busyId = null;
+            StateHasChanged();
+        }
+    }
+
+    private void NewEvent()
+    {
+        _isNew = true;
+        _emoji = "";
+        _label = "";
+        _edit = new EventEdit();
+        _confirmDelete = false;
+    }
+
+    private void Edit(EventDto evt)
+    {
+        _isNew = false;
+        (_emoji, _label) = SceneNaming.SplitName(evt.Name);
+        _edit = new EventEdit
+        {
+            Id = evt.Id,
+            FlashEnabled = evt.Flash is not null,
+            FlashColor = evt.Flash?.Color ?? "#ffffff",
+            FlashBrightness = evt.Flash?.Brightness ?? 100,
+            FlashDurationMs = evt.Flash?.DurationMs ?? 200,
+            SoundEffects = [.. evt.SoundEffects ?? []],
+        };
+        _confirmDelete = false;
+    }
+
+    private void CancelEdit()
+    {
+        _edit = null;
+        _confirmDelete = false;
+    }
+
+    private void ToggleEmoji(string e) => _emoji = _emoji == e ? "" : e;
+
+    private string ComposedName =>
+        string.IsNullOrEmpty(_emoji) ? _label.Trim() : $"{_emoji} {_label.Trim()}";
+
+    // On create the id follows the label; on edit it's fixed.
+    private string CurrentId => _isNew
+        ? SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _events?.Select(e => e.Id).ToList() ?? [])
+        : _edit!.Id;
+
+    private void ToggleSound(string id)
+    {
+        if (_edit is null) return;
+        if (!_edit.SoundEffects.Remove(id))
+            _edit.SoundEffects.Add(id);
+    }
+
+    private void RemoveSound(string id) => _edit?.SoundEffects.Remove(id);
+
+    private async Task Save(bool test)
+    {
+        if (_edit is null) return;
+        if (string.IsNullOrWhiteSpace(_label))
+        {
+            Ui.ReportError("Give the event a name first.");
+            return;
+        }
+        if (!_edit.FlashEnabled && _edit.SoundEffects.Count == 0)
+        {
+            Ui.ReportError("An event needs a light flash, a sound, or both.");
+            return;
+        }
+
+        var id = CurrentId;
+        if (string.IsNullOrEmpty(id))
+        {
+            Ui.ReportError("Couldn't derive an id from that name — use some letters or digits.");
+            return;
+        }
+
+        _edit.Id = id;
+        _edit.Name = ComposedName;
+
+        _busy = true;
+        try
+        {
+            var (_, error) = await Api.SaveEventAsync(id, _edit);
+            if (error is not null)
+            {
+                Ui.ReportError(error);
+                return;
+            }
+            await RefreshAsync();
+
+            if (test)
+            {
+                // Keep editing the saved event (no longer "new") so a follow-up save updates it.
+                _isNew = false;
+                _edit.Id = id;
+                var result = await Api.TriggerEventAsync(id);
+                if (result is null) return;
+                if (result.FullySucceeded)
+                    Ui.ReportOk($"Saved — event \"{id}\" fired");
+                else
+                    Ui.ReportError($"Saved, but partially fired. {result.ProblemSummary()}");
+            }
+            else
+            {
+                Ui.ReportOk($"Saved event \"{id}\"");
+                CancelEdit();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteTapped()
+    {
+        if (!_confirmDelete) { _confirmDelete = true; return; }
+        if (_edit is null) return;
+
+        _busy = true;
+        try
+        {
+            var (ok, error) = await Api.DeleteEventAsync(_edit.Id);
+            if (ok)
+            {
+                Ui.ReportOk($"Deleted event \"{_edit.Id}\"");
+                await RefreshAsync();
+                CancelEdit();
+            }
+            else
+            {
+                Ui.ReportError(error ?? "Delete failed.");
+            }
+        }
+        finally { _busy = false; }
+    }
+}
