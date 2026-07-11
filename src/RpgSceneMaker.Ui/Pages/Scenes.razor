@@ -24,8 +24,9 @@ else if (_scenes.Count == 0)
 }
 else
 {
+    var shown = _scenes.Where(SceneMatches).ToList();
     <div class="scene-grid">
-        @foreach (var (scene, index) in _scenes.Select((s, i) => (s, i)))
+        @foreach (var (scene, index) in shown.Select((s, i) => (s, i)))
         {
             var (emoji, label) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
             var artUrl = Api.ImageUrl(scene.Image);
@@ -44,11 +45,18 @@ else
                 <span class="scene-name">@label</span>
             </button>
         }
-        <button class="scene-card ghost" @onclick="NewScene">
-            <span class="scene-emoji">＋</span>
-            <span class="scene-name">New scene</span>
-        </button>
+        @if (!Searching)
+        {
+            <button class="scene-card ghost" @onclick="NewScene">
+                <span class="scene-emoji">＋</span>
+                <span class="scene-name">New scene</span>
+            </button>
+        }
     </div>
+    @if (Searching && shown.Count == 0)
+    {
+        <p class="empty-note">No scenes match “@Ui.SearchQuery”.</p>
+    }
 }
 
 @code {
@@ -59,6 +67,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        Ui.SearchChanged += OnSearchChanged;
         await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         await RefreshAsync();
         // Re-fetch the grid too (not just the active highlight) so edits made elsewhere —
@@ -66,6 +75,20 @@ else
         // surface without a manual reload.
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 4000, 4000);
     }
+
+    private bool Searching => !string.IsNullOrWhiteSpace(Ui.SearchQuery);
+
+    // Match the header search against the scene's display label and its id.
+    private bool SceneMatches(SceneDto scene)
+    {
+        var q = Ui.SearchQuery;
+        if (string.IsNullOrWhiteSpace(q)) return true;
+        var (_, label) = SceneNaming.SplitName(scene.Name, "", scene.Id);
+        return label.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || scene.Id.Contains(q, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
 
     private async Task RefreshAsync()
     {
@@ -131,5 +154,9 @@ else
         }
     }
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        Ui.SearchChanged -= OnSearchChanged;
+        _timer?.Dispose();
+    }
 }

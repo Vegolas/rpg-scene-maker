@@ -9,9 +9,10 @@ public static class ScreenValidation
     // A board with more than this many shortcuts stops being tap-friendly; also bounds the JSON payload.
     private const int MaxTiles = 100;
 
-    // The tile kinds the panel knows how to render and operate.
+    // The tile kinds the panel knows how to render and operate. "break" is a layout-only marker (a
+    // full-width line break, optionally labelled to act as a section heading) — it has no target.
     private static readonly HashSet<string> Kinds =
-        new(StringComparer.Ordinal) { "scene", "event", "sound", "music", "light-reset" };
+        new(StringComparer.Ordinal) { "scene", "event", "sound", "music", "light-reset", "break" };
 
     public static void Validate(Screen screen)
     {
@@ -38,7 +39,8 @@ public static class ScreenValidation
             switch (tile.Kind)
             {
                 case "light-reset":
-                    // A built-in command with no target — normalise away any stray ref.
+                case "break":
+                    // A built-in command / layout marker with no target — normalise away any stray ref.
                     tile.Ref = "";
                     break;
                 case "music":

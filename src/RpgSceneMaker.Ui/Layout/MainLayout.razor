@@ -1,26 +1,41 @@
 @inherits LayoutComponentBase
-@implements IDisposable
+@implements IAsyncDisposable
 @inject UiState Ui
 @inject ApiClient Api
 @inject NavigationManager Nav
 @inject ViewTransition Vt
+@inject IJSRuntime JS
 
 <div class="shell">
     <header class="topbar">
-        <h1>Scene Maker</h1>
-        <QuickControls />
-        <div class="conn-dot @(Ui.Connected ? "" : "off")" title="@(Ui.Connected ? "API connected" : "API unreachable")"></div>
-        <button class="icon-btn" @onclick='() => Vt.NavigateAsync("settings")' aria-label="Settings">⚙</button>
+        <div class="topbar-row">
+            <h1>Scene Maker</h1>
+            <QuickControls />
+            <div class="conn-dot @(Ui.Connected ? "" : "off")" title="@(Ui.Connected ? "API connected" : "API unreachable")"></div>
+            <button class="icon-btn" @onclick='() => Vt.NavigateAsync("settings")' aria-label="Settings">⚙</button>
+        </div>
+        @if (SearchPlaceholder is { } placeholder)
+        {
+            <div class="searchbar">
+                <span class="searchbar-ico" aria-hidden="true">🔍</span>
+                <input type="search" inputmode="search" placeholder="@placeholder" value="@Ui.SearchQuery"
+                       aria-label="@placeholder" @oninput="e => Ui.SetSearchQuery(e.Value?.ToString())" />
+                @if (Ui.SearchQuery.Length > 0)
+                {
+                    <button class="searchbar-clear" @onclick='() => Ui.SetSearchQuery("")' aria-label="Clear search">✕</button>
+                }
+            </div>
+        }
     </header>
 
     <main class="page">
         @Body
     </main>
 
-    <nav class="tabbar">
-        @foreach (var tab in VisibleTabs)
+    <nav class="tabbar" @ref="_tabbarEl">
+        @foreach (var (tab, index) in VisibleTabs.Select((t, i) => (t, i)))
         {
-            <a href="@tab.Href" class="@ActiveClass(tab)"
+            <a @key="tab.Href" href="@tab.Href" class="@ActiveClass(tab)" data-tab-index="@index"
                @onclick:preventDefault @onclick="() => Vt.NavigateAsync(tab.Href)">
                 <span class="tab-ico">@tab.Icon</span>@tab.Label
             </a>
@@ -50,38 +65,113 @@
     // The Logs tab (with its diagnostics panel) only appears when developer mode is on.
     private static readonly Tab LogsTab = new("logs", "📜", "Logs");
 
-    private IEnumerable<Tab> VisibleTabs => Ui.DevMode ? [.. Tabs, LogsTab] : Tabs;
+    // Routes that show the header search bar, with their placeholder. Exact path match, so deep pages
+    // (a board, an editor) don't inherit it. Each page filters its own contents by Ui.SearchQuery.
+    private static readonly Dictionary<string, string> SearchablePages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [""] = "Search scenes…",
+        ["screens"] = "Search screens…",
+        ["music"] = "Search playlists…",
+        ["sounds"] = "Search sounds…",
+        ["events"] = "Search events…",
+    };
+
+    private ElementReference _tabbarEl;
+    private DotNetObjectReference<MainLayout>? _selfRef;
+    private bool _jsInit;
+
+    private IEnumerable<Tab> KnownTabs => Ui.DevMode ? [.. Tabs, LogsTab] : Tabs;
+
+    // Tabs in the user's saved order; tabs missing from it (new build, or Logs when it wasn't ordered)
+    // keep their built-in order at the end (OrderBy is stable, so equal keys don't shuffle).
+    private List<Tab> VisibleTabs
+    {
+        get
+        {
+            var order = Ui.TabOrder;
+            if (order.Count == 0) return [.. KnownTabs];
+            return [.. KnownTabs.OrderBy(t => Rank(order, t.Href))];
+        }
+    }
+
+    private static int Rank(IReadOnlyList<string> order, string href)
+    {
+        for (var i = 0; i < order.Count; i++)
+            if (order[i] == href) return i;
+        return int.MaxValue; // unknown/new tab (or Logs when it wasn't ordered) → falls to the end
+    }
+
+    private string? SearchPlaceholder =>
+        SearchablePages.TryGetValue(CurrentPath(), out var p) ? p : null;
 
     protected override async Task OnInitializedAsync()
     {
         Ui.Changed += OnUiChanged;
         // The active tab is derived from the URL, so re-render whenever it changes.
         Nav.LocationChanged += OnLocationChanged;
-        // Load the per-device developer-mode flag so the tab bar renders it from the first paint.
+        // Load the per-device flags so the tab bar renders correctly from the first paint.
         Ui.SetDevMode(await Api.GetDevModeAsync());
+        Ui.SetTabOrder(await Api.GetTabOrderAsync());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("rpgTabReorder.init", _tabbarEl, _selfRef);
+            _jsInit = true;
+        }
+    }
+
+    /// <summary>Called from tab-reorder.js on drop: move the dragged tab and persist the new order.</summary>
+    [JSInvokable]
+    public async Task OnTabReordered(int fromIndex, int toIndex)
+    {
+        var hrefs = VisibleTabs.Select(t => t.Href).ToList();
+        if (fromIndex < 0 || fromIndex >= hrefs.Count || toIndex < 0 || toIndex >= hrefs.Count || fromIndex == toIndex)
+            return;
+        var moved = hrefs[fromIndex];
+        hrefs.RemoveAt(fromIndex);
+        hrefs.Insert(toIndex, moved);
+        await Api.SetTabOrderAsync(hrefs); // -> Ui.SetTabOrder -> Changed -> re-render
     }
 
     private void OnUiChanged() => InvokeAsync(StateHasChanged);
 
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        Ui.SetSearchQuery(""); // a fresh search per page
+        InvokeAsync(StateHasChanged);
+    }
 
-    // Mirrors NavLink: exact match for the Scenes root, prefix match for the rest.
-    private string ActiveClass(Tab tab)
+    // Current base-relative path, without any query string, trimmed of slashes.
+    private string CurrentPath()
     {
         var current = Nav.ToBaseRelativePath(Nav.Uri);
         var query = current.IndexOf('?');
         if (query >= 0) current = current[..query];
-        current = current.Trim('/');
+        return current.Trim('/');
+    }
 
+    // Mirrors NavLink: exact match for the Scenes root, prefix match for the rest.
+    private string ActiveClass(Tab tab)
+    {
+        var current = CurrentPath();
         var active = tab.Exact
             ? current.Length == 0
             : current == tab.Href || current.StartsWith(tab.Href + "/", StringComparison.OrdinalIgnoreCase);
         return active ? "active" : "";
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Ui.Changed -= OnUiChanged;
         Nav.LocationChanged -= OnLocationChanged;
+        if (_jsInit)
+        {
+            try { await JS.InvokeVoidAsync("rpgTabReorder.dispose", _tabbarEl); } catch { }
+        }
+        _selfRef?.Dispose();
     }
 }

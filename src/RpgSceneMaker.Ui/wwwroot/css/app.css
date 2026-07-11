@@ -83,13 +83,59 @@ body::after {
     top: 0;
     z-index: 20;
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 0.55rem;
     padding: calc(0.6rem + env(safe-area-inset-top, 0px)) 1.1rem 0.6rem;
     background: linear-gradient(rgba(14, 11, 19, 0.92), rgba(14, 11, 19, 0.75));
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--line);
 }
+.topbar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+/* ---------- header search bar (per-page filtering; shown only on searchable pages) ---------- */
+.searchbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0 0.35rem 0 0.7rem;
+    min-height: 44px;
+    animation: riseIn 0.25s ease-out backwards;
+}
+.searchbar:focus-within { border-color: var(--line-strong); }
+.searchbar-ico { flex: 0 0 auto; color: var(--ink-dim); font-size: 0.95rem; }
+.searchbar input {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    min-height: 42px;
+}
+.searchbar input:focus { outline: none; }
+.searchbar input::-webkit-search-cancel-button { display: none; }
+.searchbar-clear {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    background: none;
+    border: none;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 8px;
+}
+.searchbar-clear:active { transform: scale(0.9); }
 .topbar h1 {
     margin: 0;
     font-family: var(--font-display);
@@ -215,6 +261,24 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
 .tabbar a.active { color: var(--ember); }
 .tabbar a.active .tab-ico { filter: none; transform: translateY(-2px); }
 .tabbar a:active .tab-ico { transform: scale(0.9); }
+
+/* long-press drag-to-reorder (tab-reorder.js): suppress the iOS long-press link callout / text
+   selection, let the untouched tabs slide aside, and lift the dragged one above them. */
+.tabbar a {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.tabbar.reordering a { transition: transform 0.18s ease; }
+.tabbar.reordering a.dragging {
+    transition: none;
+    color: var(--ember);
+    background: rgba(232, 163, 61, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.tabbar.reordering a.dragging .tab-ico { filter: none; transform: translateY(-2px) scale(1.12); }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -368,6 +432,36 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
 /* A shortcut whose target was deleted — dimmed with a danger edge until removed in Arrange. */
 .scene-card.missing { opacity: 0.7; border-color: rgba(255, 93, 93, 0.5); }
 .krow.arrange.missing { border-color: rgba(255, 93, 93, 0.5); }
+
+/* A "line break" tile spans the whole grid row so the next tiles wrap onto a fresh line; with a
+   label it doubles as a section heading (styled like a .rune divider). */
+.scene-grid .grid-break {
+    grid-column: 1 / -1;
+    height: 1px;
+    margin: 0.2rem 0;
+    background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+    animation: none;
+}
+.scene-grid .grid-break.titled {
+    height: auto;
+    background: none;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin: 0.7rem 0 0.1rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+.scene-grid .grid-break.titled::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--line-strong), transparent);
+}
 
 /* Arrange mode: a tile row carries reorder / remove controls on the right (not itself tappable). */
 .krow.arrange { cursor: default; }

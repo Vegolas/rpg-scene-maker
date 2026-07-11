@@ -42,31 +42,39 @@ else
         </div>
     }
 
-    @foreach (var group in _sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+    var shown = _sounds.Where(SoundMatches).ToList();
+    @if (Searching && shown.Count == 0)
     {
-        <p class="kgroup-title">@group.Key</p>
-        <div class="sound-grid">
-            @foreach (var sound in group)
-            {
-                var isPlaying = _playing.Contains(sound.Id);
-                var artUrl = Api.ImageUrl(sound.Image);
-                var hasArt = artUrl is not null;
-                <button class="krow @(isPlaying ? "playing" : "") @(hasArt ? "art" : "")"
-                        style="@(hasArt ? $"--art:url('{artUrl}');" : "")"
-                        @onclick="() => Tap(sound, isPlaying)">
-                    @if (hasArt)
-                    {
-                        <span class="scene-art"></span>
-                    }
-                    <span class="card-edit" role="button" tabindex="0" aria-label="Edit sound"
-                          @onclick="() => Edit(sound.Id)" @onclick:stopPropagation="true">✎</span>
-                    <span class="krow-ico">@(isPlaying ? "⏹" : sound.Loop ? "🔁" : "🔊")</span>
-                    <span class="krow-title">@sound.Name</span>
-                </button>
-            }
-        </div>
+        <p class="empty-note">No sounds match “@Ui.SearchQuery”.</p>
     }
-    <p class="hint" style="margin-top:1rem">Tap to play; tap again to stop. ✎ to rename, set volume or looping.</p>
+    else
+    {
+        @foreach (var group in shown.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+        {
+            <p class="kgroup-title">@group.Key</p>
+            <div class="sound-grid">
+                @foreach (var sound in group)
+                {
+                    var isPlaying = _playing.Contains(sound.Id);
+                    var artUrl = Api.ImageUrl(sound.Image);
+                    var hasArt = artUrl is not null;
+                    <button class="krow @(isPlaying ? "playing" : "") @(hasArt ? "art" : "")"
+                            style="@(hasArt ? $"--art:url('{artUrl}');" : "")"
+                            @onclick="() => Tap(sound, isPlaying)">
+                        @if (hasArt)
+                        {
+                            <span class="scene-art"></span>
+                        }
+                        <span class="card-edit" role="button" tabindex="0" aria-label="Edit sound"
+                              @onclick="() => Edit(sound.Id)" @onclick:stopPropagation="true">✎</span>
+                        <span class="krow-ico">@(isPlaying ? "⏹" : sound.Loop ? "🔁" : "🔊")</span>
+                        <span class="krow-title">@sound.Name</span>
+                    </button>
+                }
+            </div>
+        }
+        <p class="hint" style="margin-top:1rem">Tap to play; tap again to stop. ✎ to rename, set volume or looping.</p>
+    }
 }
 
 @code {
@@ -79,10 +87,24 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        Ui.SearchChanged += OnSearchChanged;
         await RefreshAsync();
         await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
     }
+
+    private bool Searching => !string.IsNullOrWhiteSpace(Ui.SearchQuery);
+
+    // Match the header search against the sound's name and its category.
+    private bool SoundMatches(SoundDto sound)
+    {
+        var q = Ui.SearchQuery;
+        if (string.IsNullOrWhiteSpace(q)) return true;
+        return (sound.Name?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (sound.Category?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
 
     private async Task RefreshAsync()
     {
@@ -151,5 +173,9 @@ else
 
     private Task Edit(string id) => Vt.NavigateAsync($"sounds/editor/{id}");
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        Ui.SearchChanged -= OnSearchChanged;
+        _timer?.Dispose();
+    }
 }

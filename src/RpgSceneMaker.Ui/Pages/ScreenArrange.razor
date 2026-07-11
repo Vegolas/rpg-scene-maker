@@ -108,6 +108,17 @@ else
                 <button class="btn" @onclick="AddResetLights">💡 Add reset-lights shortcut</button>
             </div>
         }
+        else if (_addKind == "break")
+        {
+            <div class="field" style="margin-top:1rem;margin-bottom:0">
+                <label for="break-label">Section label (optional)</label>
+                <input id="break-label" type="text" @bind="_breakLabel" @bind:event="oninput" placeholder="e.g. Combat" />
+            </div>
+            <p class="hint" style="margin-top:0.6rem">Ends the current row so the next shortcuts start on a new line. Add a label to show it as a section heading.</p>
+            <div class="btn-row" style="margin-top:0.6rem">
+                <button class="btn" @onclick="AddBreak">↵ Add line break</button>
+            </div>
+        }
     </div>
 
     <RuneHeading>Save</RuneHeading>
@@ -144,9 +155,10 @@ else
     private string _query = "";
     private bool _searching;
     private List<SpotifyTrackDto>? _results;
+    private string _breakLabel = "";
 
     private static readonly (string, string)[] AddOptions =
-        [("scene", "🎲"), ("event", "⚡"), ("sound", "🔊"), ("music", "🎵"), ("lights", "💡")];
+        [("scene", "🎲"), ("event", "⚡"), ("sound", "🔊"), ("music", "🎵"), ("lights", "💡"), ("break", "↵")];
 
     protected override async Task OnInitializedAsync()
     {
@@ -198,6 +210,8 @@ else
                 return new TileView("🎧", Label(tile), false);
             case "light-reset":
                 return new TileView("💡", "Reset lights", false);
+            case "break":
+                return new TileView("↵", string.IsNullOrWhiteSpace(tile.Label) ? "Line break" : tile.Label, false);
             default:
                 return Gone(tile);
         }
@@ -210,7 +224,7 @@ else
     private static string KindLabel(string kind) => kind switch
     {
         "scene" => "scene", "event" => "event", "sound" => "sound",
-        "music" => "music", "light-reset" => "lights", _ => kind,
+        "music" => "music", "light-reset" => "lights", "break" => "line break", _ => kind,
     };
 
     private static bool Eq(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
@@ -247,6 +261,14 @@ else
         }
         _edit.Tiles.Add(new ScreenTileDto("light-reset", "", "Reset lights"));
         Ui.ReportOk("Added reset-lights shortcut");
+    }
+
+    private void AddBreak()
+    {
+        var label = _breakLabel.Trim();
+        _edit.Tiles.Add(new ScreenTileDto("break", "", label));
+        _breakLabel = "";
+        Ui.ReportOk(label.Length > 0 ? $"Added section \"{label}\"" : "Added line break");
     }
 
     private void Move(int index, int delta)

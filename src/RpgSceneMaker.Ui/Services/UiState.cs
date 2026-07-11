@@ -13,7 +13,21 @@ public class UiState
     /// When on, the panel surfaces the Logs tab and its diagnostics panel.</summary>
     public bool DevMode { get; private set; }
 
+    /// <summary>The current header search text. Searchable pages filter their own list by this and
+    /// subscribe to <see cref="SearchChanged"/> to re-render as it changes; the layout owns the input
+    /// and decides (from the route) when the search bar is shown. Reset to "" on every navigation.</summary>
+    public string SearchQuery { get; private set; } = "";
+
+    /// <summary>Preferred order of the bottom-bar tabs, as their hrefs. Empty until loaded / never
+    /// customized. The layout renders tabs in this order (unknown/new tabs fall to the end);
+    /// long-press-drag on the bar rewrites it and <see cref="ApiClient"/> persists it per-device.</summary>
+    public IReadOnlyList<string> TabOrder { get; private set; } = [];
+
     public event Action? Changed;
+
+    /// <summary>Raised only when <see cref="SearchQuery"/> changes, so pages re-filter without also
+    /// re-rendering on every toast/connection tick that fires <see cref="Changed"/>.</summary>
+    public event Action? SearchChanged;
 
     public void ReportOk(string message) => ShowToast(message, isError: false);
 
@@ -30,6 +44,20 @@ public class UiState
     {
         if (DevMode == on) return;
         DevMode = on;
+        Changed?.Invoke();
+    }
+
+    public void SetSearchQuery(string? query)
+    {
+        query ??= "";
+        if (query == SearchQuery) return;
+        SearchQuery = query;
+        SearchChanged?.Invoke();
+    }
+
+    public void SetTabOrder(IReadOnlyList<string> order)
+    {
+        TabOrder = order ?? [];
         Changed?.Invoke();
     }
 

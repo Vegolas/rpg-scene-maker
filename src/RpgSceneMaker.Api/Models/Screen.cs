@@ -24,15 +24,16 @@ public class Screen
 /// <summary>One shortcut on a <see cref="Screen"/>.</summary>
 public class ScreenTile
 {
-    /// <summary>What the tile points at: <c>scene</c>, <c>event</c>, <c>sound</c>, <c>music</c> or <c>light-reset</c>.</summary>
+    /// <summary>What the tile points at: <c>scene</c>, <c>event</c>, <c>sound</c>, <c>music</c>,
+    /// <c>light-reset</c>, or <c>break</c> (a layout-only full-width line break, no target).</summary>
     public string Kind { get; set; } = "";
 
     /// <summary>The target: the entity id for <c>scene</c>/<c>event</c>/<c>sound</c>, a Spotify URI/link
-    /// for <c>music</c>, and empty for <c>light-reset</c>.</summary>
+    /// for <c>music</c>, and empty for <c>light-reset</c>/<c>break</c>.</summary>
     public string Ref { get; set; } = "";
 
     /// <summary>Display text. Required for <c>music</c> (there is no stored entity to read a name from);
-    /// for the other kinds the panel resolves the live name/emoji/colour from the referenced entity and
-    /// only falls back to this label when that entity no longer exists.</summary>
+    /// for the entity kinds the panel resolves the live name/emoji/colour and only falls back to this
+    /// label when that entity no longer exists. For <c>break</c> it is the optional section heading.</summary>
     public string Label { get; set; } = "";
 }

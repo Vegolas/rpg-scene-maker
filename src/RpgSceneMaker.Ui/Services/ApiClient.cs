@@ -59,6 +59,43 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         ui.SetDevMode(on); // live-updates the tab bar and any subscribed page
     }
 
+    // ---------- bottom tab order (persisted per-device in the browser) ----------
+
+    private List<string>? _tabOrder;
+
+    /// <summary>The saved bottom-tab order (tab hrefs) for this device; an empty list when never customized.</summary>
+    public async Task<List<string>> GetTabOrderAsync()
+    {
+        if (_tabOrder is null)
+        {
+            var raw = await js.InvokeAsync<string?>("localStorage.getItem", "tabOrder");
+            _tabOrder = DeserializeList(raw);
+        }
+        return _tabOrder;
+    }
+
+    public async Task SetTabOrderAsync(IReadOnlyList<string> order)
+    {
+        _tabOrder = [.. order];
+        await js.InvokeVoidAsync("localStorage.setItem", "tabOrder", JsonSerializer.Serialize(_tabOrder, Json));
+        ui.SetTabOrder(_tabOrder); // live-updates the tab bar
+    }
+
+    /// <summary>Forget the custom order so the bar reverts to the built-in tab order.</summary>
+    public async Task ClearTabOrderAsync()
+    {
+        _tabOrder = [];
+        await js.InvokeVoidAsync("localStorage.removeItem", "tabOrder");
+        ui.SetTabOrder(_tabOrder);
+    }
+
+    private static List<string> DeserializeList(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return [];
+        try { return JsonSerializer.Deserialize<List<string>>(raw, Json) ?? []; }
+        catch { return []; }
+    }
+
     // ---------- scenes ----------
 
     public async Task<List<SceneDto>> GetScenesAsync() =>

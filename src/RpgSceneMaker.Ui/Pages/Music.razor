@@ -81,9 +81,16 @@ else
     </div>
 
     <RuneHeading>Playlists</RuneHeading>
-    <PlaylistPicker Playlists="_playlists" OnPick="pl => Play(pl.Uri, pl.Name)">
+    <PlaylistPicker Playlists="FilteredPlaylists" OnPick="pl => Play(pl.Uri, pl.Name)">
         <EmptyContent>
-            <p class="empty-note">No Spotify playlists found.</p>
+            @if (Searching)
+            {
+                <p class="empty-note">No playlists match “@Ui.SearchQuery”.</p>
+            }
+            else
+            {
+                <p class="empty-note">No Spotify playlists found.</p>
+            }
         </EmptyContent>
     </PlaylistPicker>
 }
@@ -101,8 +108,26 @@ else
     private bool ShuffleOn => _state?.IsShuffling == true;
     private bool RepeatOn => _state is { Repeat: "playlist" or "track" };
 
+    // Playlists narrowed by the header search (null while still loading, so the picker keeps its
+    // loading state). The catalog "Search tracks" box below is a separate, server-side search.
+    private List<SpotifyPlaylistDto>? FilteredPlaylists
+    {
+        get
+        {
+            if (_playlists is null) return null;
+            var q = Ui.SearchQuery;
+            if (string.IsNullOrWhiteSpace(q)) return _playlists;
+            return _playlists.Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+    }
+
+    private bool Searching => !string.IsNullOrWhiteSpace(Ui.SearchQuery);
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
+
     protected override async Task OnInitializedAsync()
     {
+        Ui.SearchChanged += OnSearchChanged;
         var (spotify, _) = await Api.GetSpotifyConfigAsync();
         _connected = spotify?.Connected == true;
         if (_connected != true) return;
@@ -180,5 +205,9 @@ else
         if (e.Key == "Enter") await SearchAsync();
     }
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        Ui.SearchChanged -= OnSearchChanged;
+        _timer?.Dispose();
+    }
 }
