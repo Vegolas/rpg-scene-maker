@@ -118,7 +118,11 @@ else
                                             }
                                         </div>
 
-                                        @if (row.Edit.Effect.Type != "none")
+                                        @if (row.Edit.Effect.Type == "custom")
+                                        {
+                                            <KeyframeEditor Effect="row.Edit.Effect" />
+                                        }
+                                        else if (row.Edit.Effect.Type != "none")
                                         {
                                             <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="row.Edit.Effect.Speed" AriaLabel="Speed" />
                                             <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="row.Edit.Effect.Intensity" AriaLabel="Intensity" />
@@ -517,8 +521,7 @@ else
             else if (entry.Power == false) { edit.Mode = "off"; }
             else { edit.Mode = "white"; edit.Temperature = entry.Temperature ?? 40; edit.Brightness = entry.Brightness ?? 80; }
 
-            if (entry.Effect is { } fx)
-                edit.Effect = new EffectEdit { Type = fx.Type, Speed = fx.Speed, Intensity = fx.Intensity, Colors = [.. fx.Colors ?? []] };
+            edit.Effect = EffectEdit.FromDto(entry.Effect);
         }
         return new LightRow { Key = key, Name = name, Provider = provider, Known = known, Edit = edit };
     }
@@ -546,13 +549,7 @@ else
             row.Edit.Color = src.Edit.Color;
             row.Edit.Brightness = src.Edit.Brightness;
             row.Edit.Temperature = src.Edit.Temperature;
-            row.Edit.Effect = new EffectEdit
-            {
-                Type = src.Edit.Effect.Type,
-                Speed = src.Edit.Effect.Speed,
-                Intensity = src.Edit.Effect.Intensity,
-                Colors = [.. src.Edit.Effect.Colors],
-            };
+            row.Edit.Effect = src.Edit.Effect.Clone();
         }
         Ui.ReportOk("Copied to every light");
     }

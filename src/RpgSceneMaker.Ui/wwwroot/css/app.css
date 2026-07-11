@@ -1128,3 +1128,59 @@ ol.steps li { margin: 0.3rem 0; }
 }
 .tl-insp-row input[type="number"]:focus { outline: none; border-color: var(--line-strong); }
 .tl-unit { color: var(--ink-dim); font-size: 0.9rem; }
+
+/* a small select reusing the number-input look (e.g. keyframe "Fade" presets) */
+.tl-insp-row select {
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    min-height: 44px;
+    padding: 0.4rem 0.6rem;
+}
+.tl-insp-row select:focus { outline: none; border-color: var(--line-strong); }
+
+/* decorative keyframe tick marks on a "custom" light clip (never intercept drag/resize) */
+.tl-kf-tick {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    width: 2px;
+    margin-left: -1px;
+    background: rgba(242, 233, 216, 0.85);
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* ---- keyframe editor (custom light effect) ---- */
+.kf-editor { margin-top: 0.6rem; }
+.kf-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.7rem 0.8rem;
+    margin-bottom: 0.7rem;
+    background: rgba(255, 255, 255, 0.02);
+}
+.kf-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+.kf-num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--ember);
+    font-variant-numeric: tabular-nums;
+}
+.kf-at {
+    width: 84px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    min-height: 44px;
+    padding: 0.4rem 0.6rem;
+}
+.kf-at:focus { outline: none; border-color: var(--line-strong); }
+.kf-spacer { flex: 1; }

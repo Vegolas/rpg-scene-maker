@@ -1,0 +1,154 @@
+@* Editor for a "custom" light effect: a sequence of keyframes (each a light state at a time offset with an
+   optional Hue transition) plus loop/cycle controls. Shared by the scene editor's per-light effect section and
+   the event timeline's light-clip inspector. iPad-first: generous touch targets, no hover-only affordances. *@
+
+<div class="kf-editor">
+    @if (Effect.Keyframes.Count == 0)
+    {
+        <p class="hint" style="margin:0.4rem 0">No keyframes yet — add one to build the sequence.</p>
+    }
+
+    @foreach (var (kf, i) in Effect.Keyframes.Select((k, idx) => (k, idx)))
+    {
+        <div class="kf-card" @key="kf.Uid">
+            <div class="kf-head">
+                <span class="kf-num">#@(i + 1)</span>
+                <input class="kf-at" type="number" min="0" step="0.1" value="@Sec(kf.AtMs)" @onchange="e => SetAt(kf, e)" aria-label="Keyframe time" />
+                <span class="tl-unit">s</span>
+                <span class="kf-spacer"></span>
+                <button class="btn small" @onclick="() => Duplicate(kf)" aria-label="Duplicate keyframe">⧉</button>
+                <button class="btn small danger" @onclick="() => Remove(kf)" aria-label="Delete keyframe">✕</button>
+            </div>
+
+            <Segmented TValue="string" Options="ModeOptions" Value="kf.Mode" ValueChanged="m => kf.Mode = m" />
+
+            @if (kf.Mode == "color")
+            {
+                <SwatchGrid Selected="kf.Color" OnPick="hex => kf.Color = hex" Style="margin-top:0.8rem" />
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="kf.Brightness" AriaLabel="Brightness" />
+            }
+            else if (kf.Mode == "white")
+            {
+                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="kf.Temperature" AriaLabel="Color temperature" />
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="kf.Brightness" AriaLabel="Brightness" />
+            }
+            else
+            {
+                <p class="hint" style="margin-top:0.6rem">This keyframe switches the light off.</p>
+            }
+
+            <div class="tl-insp-row" style="margin-top:0.6rem">
+                <label>Fade</label>
+                <select value="@(kf.TransitionMs?.ToString() ?? "")" @onchange="e => SetTransition(kf, e)">
+                    <option value="">Default</option>
+                    <option value="0">Instant</option>
+                    <option value="100">100 ms</option>
+                    <option value="400">400 ms</option>
+                    <option value="1000">1000 ms</option>
+                    @if (kf.TransitionMs is { } t && t is not (0 or 100 or 400 or 1000))
+                    {
+                        <option value="@t">@t ms</option>
+                    }
+                </select>
+                <span class="tl-unit">Hue only</span>
+            </div>
+        </div>
+    }
+
+    <div class="btn-row" style="margin-top:0.8rem">
+        <button class="btn small" @onclick="AddKeyframe">＋ Add keyframe</button>
+    </div>
+
+    <div class="chip-row">
+        <Chip On="Effect.Loop" OnClick="ToggleLoop">🔁 Loop</Chip>
+    </div>
+
+    @if (Effect.Loop)
+    {
+        <div class="tl-insp-row" style="margin-top:0.6rem">
+            <label>Cycle</label>
+            <input type="number" min="0.1" step="0.1" value="@Sec(Effect.CycleMs ?? DefaultCycleMs)" @onchange="SetCycle" aria-label="Cycle length" />
+            <span class="tl-unit">s repeat</span>
+        </div>
+        @if (CycleTooShort)
+        {
+            <p class="hint" style="margin-top:0.4rem">⚠ Cycle must be at least @Sec(MinCycleMs)s (100 ms past the last keyframe).</p>
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0.4rem">Repeats the sequence every @Sec(Effect.CycleMs ?? DefaultCycleMs)s.</p>
+        }
+    }
+    else
+    {
+        <p class="hint" style="margin-top:0.4rem">Plays once, then holds the last keyframe.</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EffectEdit Effect { get; set; } = new();
+
+    private static readonly (string, string)[] ModeOptions = [("color", "Color"), ("white", "White"), ("off", "Off")];
+
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    private int LastAt => Effect.Keyframes.Count == 0 ? 0 : Effect.Keyframes.Max(k => k.AtMs);
+    private int MinCycleMs => LastAt + 100;
+    private int DefaultCycleMs => Math.Max(MinCycleMs, LastAt + 500);
+    private bool CycleTooShort => Effect.Loop && (Effect.CycleMs ?? 0) < MinCycleMs;
+
+    private void AddKeyframe()
+    {
+        var last = Effect.Keyframes.Count == 0 ? null : Effect.Keyframes[^1];
+        var kf = last is null
+            ? new KeyframeEdit { AtMs = 0, Mode = "color", Color = "#ffffff", Brightness = 100 }
+            : last.Clone();
+        if (last is not null) kf.AtMs = last.AtMs + 500; // default: 500 ms after the previous keyframe
+        Effect.Keyframes.Add(kf);
+        Sort();
+    }
+
+    private void Duplicate(KeyframeEdit kf)
+    {
+        var copy = kf.Clone();
+        copy.AtMs = kf.AtMs + 500;
+        Effect.Keyframes.Add(copy);
+        Sort();
+    }
+
+    private void Remove(KeyframeEdit kf) => Effect.Keyframes.Remove(kf);
+
+    private void SetAt(KeyframeEdit kf, ChangeEventArgs e)
+    {
+        kf.AtMs = Math.Max(0, ParseMs(e));
+        Sort();
+    }
+
+    private void SetTransition(KeyframeEdit kf, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        kf.TransitionMs = int.TryParse(v, out var ms) ? ms : null;
+    }
+
+    private void ToggleLoop()
+    {
+        Effect.Loop = !Effect.Loop;
+        if (Effect.Loop && (Effect.CycleMs is null || Effect.CycleMs < MinCycleMs))
+            Effect.CycleMs = DefaultCycleMs;
+    }
+
+    private void SetCycle(ChangeEventArgs e) => Effect.CycleMs = Math.Max(1, ParseMs(e));
+
+    // Keep the list ordered by time so numbering and the timeline ticks match. OrderBy is stable, so two
+    // keyframes momentarily sharing a time keep their relative order until the user nudges them apart.
+    private void Sort()
+    {
+        var ordered = Effect.Keyframes.OrderBy(k => k.AtMs).ToList();
+        Effect.Keyframes.Clear();
+        Effect.Keyframes.AddRange(ordered);
+    }
+
+    private static string Sec(int ms) => (ms / 1000.0).ToString("0.##", Inv);
+    private static int ParseMs(ChangeEventArgs e) =>
+        double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, Inv, out var s) ? (int)Math.Round(s * 1000) : 0;
+}

@@ -24,7 +24,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             scene.OwnsMany(s => s.Lights, lights =>
             {
                 lights.ToJson();
-                lights.OwnsOne(l => l.Effect);
+                // Effect (and its "custom" keyframe list) live inside the same JSON document.
+                lights.OwnsOne(l => l.Effect, fx => fx.OwnsMany(e => e.Keyframes));
             });
         });
 
@@ -46,7 +47,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             {
                 timeline.ToJson();
                 timeline.OwnsMany(t => t.Sounds);
-                timeline.OwnsMany(t => t.Lights, lights => lights.OwnsOne(l => l.Effect));
+                timeline.OwnsMany(t => t.Lights, lights =>
+                    lights.OwnsOne(l => l.Effect, fx => fx.OwnsMany(e => e.Keyframes)));
             });
             // What the lights do when the event finishes — one small JSON column, like Flash.
             evt.OwnsOne(e => e.After, b => b.ToJson());

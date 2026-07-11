@@ -76,6 +76,10 @@
                             <span class="tl-clip-label">@LightName(l.LightKey)</span>
                             <span class="tl-clip-time">@ClipTimeLabel(l.StartMs, l.DurationMs, false)</span>
                             <span class="tl-resize" aria-label="Resize clip"></span>
+                            @foreach (var x in CustomTicks(l))
+                            {
+                                <span class="tl-kf-tick" style="left:@(x)px"></span>
+                            }
                         </div>
                     </div>
                 }
@@ -224,7 +228,11 @@ else if (SelectedLight is { } lc)
                     <Chip On="lc.Effect.Type == type" OnClick="() => lc.Effect.Type = type">@label</Chip>
                 }
             </div>
-            @if (lc.Effect.Type != "none")
+            @if (lc.Effect.Type == "custom")
+            {
+                <KeyframeEditor Effect="lc.Effect" />
+            }
+            else if (lc.Effect.Type != "none")
             {
                 <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="lc.Effect.Speed" AriaLabel="Speed" />
                 <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="lc.Effect.Intensity" AriaLabel="Intensity" />
@@ -354,6 +362,31 @@ else if (SelectedLight is { } lc)
     private string LightName(string? key) =>
         string.IsNullOrWhiteSpace(key) ? "All lights"
         : Lights.FirstOrDefault(r => string.Equals(r.Key, key, StringComparison.OrdinalIgnoreCase))?.Name ?? key;
+
+    // Decorative keyframe markers along a "custom" light clip: one thin tick at each keyframe time, repeating
+    // per cycle across the clip window when looping. Capped so a long clip with a short cycle can't emit
+    // thousands of ticks. Offsets are px from the clip's left edge (Px(at) since the clip starts at Px(StartMs)).
+    private IReadOnlyList<int> CustomTicks(TimelineLightEdit l)
+    {
+        var fx = l.Effect;
+        if (fx.Type != "custom" || fx.Keyframes.Count == 0) return [];
+        const int maxTicks = 60;
+        var ticks = new List<int>();
+        var loop = fx.Loop && (fx.CycleMs ?? 0) > 0;
+        var cycle = loop ? fx.CycleMs!.Value : int.MaxValue;
+        for (var cycleStart = 0; cycleStart <= l.DurationMs && ticks.Count < maxTicks;)
+        {
+            foreach (var kf in fx.Keyframes)
+            {
+                var at = cycleStart + kf.AtMs;
+                if (at > l.DurationMs || ticks.Count >= maxTicks) break;
+                ticks.Add(Px(at));
+            }
+            if (!loop) break;
+            cycleStart += cycle;
+        }
+        return ticks;
+    }
 
     private static string ClipTint(TimelineLightEdit l) => l.Mode switch
     {

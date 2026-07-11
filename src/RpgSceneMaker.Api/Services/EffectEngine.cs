@@ -85,6 +85,7 @@ public class EffectEngine(ILogger<EffectEngine> logger)
         var rnd = new Random();
         var failures = 0;
         var elapsedMs = 0.0;
+        var custom = effect.Type == "custom" ? new CustomState(effect) : null;
 
         while (!token.IsCancellationRequested)
         {
@@ -97,6 +98,7 @@ public class EffectEngine(ILogger<EffectEngine> logger)
                     "glow" => await GlowAsync(job, effect, elapsedMs, token),
                     "storm" => await StormAsync(job, effect, rnd, token),
                     "drift" => await DriftAsync(job, effect, elapsedMs, token),
+                    "custom" => await CustomAsync(job, effect, elapsedMs, custom!, token),
                     _ => 1000,
                 };
                 failures = 0;
@@ -223,6 +225,97 @@ public class EffectEngine(ILogger<EffectEngine> logger)
         int? transition = job.IsHue ? step : null;
         await job.Service.SetColorAsync(ToHex(h, s, v), job.Light.Brightness, job.TargetId, transition);
         return step;
+    }
+
+    // Per-loop state for the "custom" effect: the keyframe offsets (cached) and the global index of the last
+    // keyframe we actually sent, so a floored tick that lands on the same keyframe doesn't re-send it.
+    private sealed class CustomState(LightEffect e)
+    {
+        public readonly int[] Ats = [.. e.Keyframes.Select(k => k.AtMs)]; // ascending (validated)
+        public long LastApplied = long.MinValue;
+    }
+
+    // Walk a hand-authored keyframe sequence. The loop drives us by absolute elapsed time; we recompute the
+    // active keyframe from elapsedMs each tick (so flooring never accumulates drift) and only send a command
+    // when the tick crosses into a new keyframe. The gap to the next keyframe boundary is returned as the delay.
+    private async Task<int> CustomAsync(EffectJob job, LightEffect e, double elapsedMs, CustomState st, CancellationToken token)
+    {
+        if (st.Ats.Length == 0) return 60_000; // nothing to play (shouldn't happen post-validation)
+
+        var loop = e.Loop && (e.CycleMs ?? 0) > 0;
+        var (index, nextMs) = CustomPosition(st.Ats, loop, e.CycleMs ?? 0, elapsedMs);
+
+        // index < 0 → before the first keyframe of the very first cycle: apply nothing yet, just wait.
+        if (index >= 0 && index != st.LastApplied)
+        {
+            await ApplyKeyframeAsync(job, e.Keyframes[(int)(index % st.Ats.Length)]);
+            st.LastApplied = index;
+        }
+
+        if (double.IsPositiveInfinity(nextMs)) return 60_000; // non-loop tail: hold the last keyframe, park.
+        return Math.Max(1, (int)Math.Ceiling(nextMs - elapsedMs));
+    }
+
+    // Apply one keyframe's static state, mirroring SceneLightApplier.ApplyBaseAsync's precedence
+    // (power-off wins, else colour, else white, else power-on) and passing its transition through.
+    private static async Task ApplyKeyframeAsync(EffectJob job, LightKeyframe kf)
+    {
+        var transition = kf.TransitionMs; // Hue → transitiontime; Tuya ignores it.
+        if (kf.Power == false)
+        {
+            await job.Service.SetPowerAsync(false, job.TargetId, transition);
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(kf.Color))
+            await job.Service.SetColorAsync(kf.Color, kf.Brightness, job.TargetId, transition);
+        else if (kf.Brightness is not null || kf.Temperature is not null)
+            await job.Service.SetWhiteAsync(kf.Brightness ?? 100, kf.Temperature, job.TargetId, transition);
+        else if (kf.Power == true)
+            await job.Service.SetPowerAsync(true, job.TargetId, transition);
+    }
+
+    // Which keyframe is active at <paramref name="elapsedMs"/>, and when the next one begins.
+    //
+    // We model keyframe applications as an infinite stream of events. Non-loop: one event per keyframe at
+    // its AtMs, then the last one holds forever. Loop: cycle c (0,1,2…) fires each keyframe i at
+    // t = c*CycleMs + AtMs[i], giving a strictly increasing global index g = c*n + i (since AtMs is ascending
+    // and the last AtMs is < CycleMs). The active event is the one with the greatest t ≤ elapsedMs; using a
+    // monotonic global index (rather than the local 0..n-1 index) lets the caller detect the wrap so the first
+    // keyframe re-fires each new cycle. Returns (-1, firstAt) before the first keyframe of cycle 0 — nothing to
+    // apply yet — and (index, +∞) once a non-loop sequence reaches its last keyframe.
+    internal static (long Index, double NextMs) CustomPosition(IReadOnlyList<int> ats, bool loop, int cycleMs, double elapsedMs)
+    {
+        var n = ats.Count;
+        if (!loop)
+        {
+            var i = LastAtOrBefore(ats, elapsedMs);
+            if (i < 0) return (-1, ats[0]);                        // waiting for the first keyframe
+            if (i >= n - 1) return (n - 1, double.PositiveInfinity); // last keyframe: hold indefinitely
+            return (i, ats[i + 1]);
+        }
+
+        var cycle = (long)Math.Floor(elapsedMs / cycleMs);
+        var posInCycle = elapsedMs - cycle * cycleMs;
+        var local = LastAtOrBefore(ats, posInCycle);
+        if (local < 0)
+        {
+            // Before this cycle's first keyframe. In cycle 0 nothing has fired yet; otherwise the previous
+            // cycle's last keyframe still holds until this cycle's first keyframe begins.
+            if (cycle == 0) return (-1, ats[0]);
+            return (cycle * n - 1, cycle * (double)cycleMs + ats[0]); // (cycle-1)*n + (n-1)
+        }
+        var next = local < n - 1
+            ? cycle * (double)cycleMs + ats[local + 1]
+            : (cycle + 1) * (double)cycleMs + ats[0];
+        return (cycle * n + local, next);
+    }
+
+    // Index of the last entry ≤ t (ats is ascending), or -1 if t is below the first.
+    private static int LastAtOrBefore(IReadOnlyList<int> ats, double t)
+    {
+        var idx = -1;
+        for (var i = 0; i < ats.Count && ats[i] <= t; i++) idx = i;
+        return idx;
     }
 
     // ---- helpers ----
