@@ -45,8 +45,8 @@ public static class LightValidation
         for (var i = 0; i < kfs.Count; i++)
         {
             var kf = kfs[i];
-            if (kf.AtMs < 0)
-                throw new ArgumentException($"Keyframe {i + 1} on {context} must start at 0 ms or later.");
+            if (kf.AtMs is < 0 or > MaxCycleMs)
+                throw new ArgumentException($"Keyframe {i + 1} on {context} must start between 0 and {MaxCycleMs} ms.");
             if (i > 0)
             {
                 if (kf.AtMs <= prev)

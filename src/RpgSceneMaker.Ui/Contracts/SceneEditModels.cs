@@ -111,8 +111,9 @@ public class KeyframeEdit
     public string Color { get; set; } = "#ffffff";
     public int Brightness { get; set; } = 100;
     public int Temperature { get; set; } = 40;
-    // Fade duration in ms (Hue only; Tuya ignores). Null = provider default.
-    public int? TransitionMs { get; set; } = 400;
+    // Fade duration in ms (Hue only; Tuya ignores). Null = provider default. New keyframes default to
+    // instant — snappy sequences (strobes) are the primary use; "Default" (~400 ms) is a pick away.
+    public int? TransitionMs { get; set; } = 0;
 
     public KeyframeDto ToDto() => Mode switch
     {
