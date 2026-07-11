@@ -20,6 +20,9 @@ public class GameEvent
     /// these overlap current playback (a clap over the music) instead of replacing it.</summary>
     public List<string> SoundEffects { get; set; } = [];
 
+    /// <summary>Stored file name of an optional full-art tile background (uploaded via <c>/images</c>), or null.</summary>
+    public string? Image { get; set; }
+
     /// <summary>Optional advanced timeline: sound and light clips placed at millisecond offsets, played in
     /// the background when the event is triggered. Null on legacy events (Flash + <see cref="SoundEffects"/>).</summary>
     public EventTimeline? Timeline { get; set; }

@@ -1,4 +1,5 @@
 using RpgSceneMaker.Api.Models;
+using RpgSceneMaker.Api.Services;
 
 namespace RpgSceneMaker.Api.Validation;
 
@@ -15,5 +16,7 @@ public static class SoundValidation
             throw new ArgumentException("Sound category must be 40 characters or fewer.");
         if (sound.Volume is < 0.0 or > 1.0)
             throw new ArgumentException("Sound volume must be between 0.0 and 1.0.");
+        if (sound.Image is not null && !ImageFileStorage.IsValidName(sound.Image))
+            throw new ArgumentException("Invalid image reference.");
     }
 }

@@ -21,6 +21,8 @@ public static class ScreenValidation
             throw new ArgumentException("Screen id may only contain letters, digits, '-' and '_'.");
         if (string.IsNullOrWhiteSpace(screen.Name))
             throw new ArgumentException("Screen name is required.");
+        if (screen.Image is not null && !ImageFileStorage.IsValidName(screen.Image))
+            throw new ArgumentException("Invalid image reference.");
 
         // JSON "tiles": null overwrites the C# default.
         screen.Tiles ??= [];

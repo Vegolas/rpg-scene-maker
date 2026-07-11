@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -275,8 +276,8 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
-    public Task<(SoundDto? Result, string? Error)> UpdateSoundAsync(string id, string name, string category, double volume, bool loop) =>
-        FetchAsync<SoundDto>(HttpMethod.Put, $"sounds/{Uri.EscapeDataString(id)}", new { name, category, volume, loop });
+    public Task<(SoundDto? Result, string? Error)> UpdateSoundAsync(string id, string name, string category, double volume, bool loop, string? image) =>
+        FetchAsync<SoundDto>(HttpMethod.Put, $"sounds/{Uri.EscapeDataString(id)}", new { name, category, volume, loop, image });
 
     public async Task<(bool Ok, string? Error)> DeleteSoundAsync(string id)
     {
@@ -291,6 +292,49 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             ui.SetConnected(false);
             return (false, $"API unreachable: {ex.Message}");
         }
+    }
+
+    // ---------- images (tile art) ----------
+
+    /// <summary>Upload a cropped tile-art image (multipart); returns its stored file name on success.</summary>
+    public async Task<(string? Id, string? Error)> UploadImageAsync(byte[] bytes, string fileName, string contentType)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var part = new ByteArrayContent(bytes);
+            part.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            content.Add(part, "file", fileName);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "images/upload") { Content = content };
+            if (await GetApiKeyAsync() is { } key) request.Headers.Add("X-Api-Key", key);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+                return (null, await ExtractProblemAsync(response));
+
+            var node = await response.Content.ReadFromJsonAsync<JsonNode>(Json);
+            var id = node?["id"]?.GetValue<string>();
+            return string.IsNullOrEmpty(id) ? (null, "Upload succeeded but no image id was returned.") : (id, null);
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Root-relative url for a stored tile-art image, or null when none. <img>/CSS can't send
+    /// the key header, so append it as a query param when set (the GET /images path is protected).</summary>
+    public string? ImageUrl(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        // Leading slash so it resolves against the origin in BOTH an <img src> and a CSS url(): a bare
+        // relative url() inside the --art custom property would otherwise resolve against the stylesheet
+        // folder (/css/…) instead of the document, 404-ing the tile background.
+        var url = $"/images/{Uri.EscapeDataString(id)}";
+        return _apiKey is { } key ? $"{url}?apiKey={Uri.EscapeDataString(key)}" : url;
     }
 
     // ---------- events (one-shot triggered effects) ----------

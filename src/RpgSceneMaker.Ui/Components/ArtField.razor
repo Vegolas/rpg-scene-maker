@@ -1,0 +1,86 @@
+@* Reusable tile-art picker: shows the current art thumbnail and an Upload/Remove pair. The browser
+   crops + downscales the chosen image (rpgImageCrop) so only a small data URL crosses interop; we
+   upload that and store the returned file name via @bind-Image. *@
+@inject IJSRuntime JS
+@inject ApiClient Api
+@inject UiState Ui
+
+<div class="art-field">
+    <label class="art-label">Tile art</label>
+    <div class="art-preview">
+        @if (Api.ImageUrl(Image) is { } url)
+        {
+            <img class="art-thumb" src="@url" alt="Tile art preview" />
+        }
+        else
+        {
+            <span class="art-empty">No art</span>
+        }
+    </div>
+    <div class="btn-row" style="margin-top:0.6rem">
+        <button class="btn small" @onclick="Upload" disabled="@_busy">
+            @(_busy ? "Uploading…" : HasImage ? "Replace art" : "Upload art")
+        </button>
+        @if (HasImage)
+        {
+            <button class="btn small danger" @onclick="Remove" disabled="@_busy">Remove</button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Image { get; set; }
+    [Parameter] public EventCallback<string?> ImageChanged { get; set; }
+
+    private bool _busy;
+
+    private bool HasImage => !string.IsNullOrEmpty(Image);
+
+    // Ensure the API key is cached so ImageUrl() builds the correct (key-bearing) src synchronously.
+    protected override Task OnInitializedAsync() => Api.GetApiKeyAsync();
+
+    private async Task Upload()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            // 4:3 crop frame, longest side 640px — matches the tile art layer.
+            var dataUrl = await JS.InvokeAsync<string?>("rpgImageCrop.cropFromFilePicker", 4, 3, 640);
+            if (string.IsNullOrEmpty(dataUrl)) return; // cancelled
+
+            var comma = dataUrl.IndexOf(',');
+            if (comma < 0) { Ui.ReportError("Couldn't read the cropped image."); return; }
+
+            var isWebp = dataUrl[..comma].Contains("image/webp", StringComparison.OrdinalIgnoreCase);
+            var contentType = isWebp ? "image/webp" : "image/jpeg";
+            var ext = isWebp ? ".webp" : ".jpg";
+            var bytes = Convert.FromBase64String(dataUrl[(comma + 1)..]);
+
+            var (id, error) = await Api.UploadImageAsync(bytes, $"art{ext}", contentType);
+            if (id is not null)
+            {
+                Image = id;
+                await ImageChanged.InvokeAsync(id);
+            }
+            else
+            {
+                Ui.ReportError(error ?? "Image upload failed.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Ui.ReportError($"Image upload failed: {ex.Message}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Remove()
+    {
+        Image = null;
+        await ImageChanged.InvokeAsync(null);
+    }
+}

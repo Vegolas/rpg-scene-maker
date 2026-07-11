@@ -37,6 +37,7 @@ else if (_arranging)
             <label for="screen-label">Name</label>
             <input id="screen-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty" />
         </div>
+        <ArtField @bind-Image="_edit.Image" />
     </div>
 
     <RuneHeading>Shortcuts</RuneHeading>
@@ -147,9 +148,14 @@ else
             @foreach (var (tile, index) in _edit.Tiles.Select((t, i) => (t, i)))
             {
                 var v = View(tile);
-                <button class="scene-card @(v.Active ? "active" : "") @(v.Playing ? "playing" : "") @(v.Missing ? "missing" : "") @(_busyIndex == index ? "busy" : "")"
-                        style="animation-delay:@(index * 45)ms; --sc:@v.Color"
+                var hasArt = v.Image is not null;
+                <button class="scene-card @(v.Active ? "active" : "") @(v.Playing ? "playing" : "") @(v.Missing ? "missing" : "") @(_busyIndex == index ? "busy" : "") @(hasArt ? "art" : "")"
+                        style="animation-delay:@(index * 45)ms; --sc:@v.Color;@(hasArt ? $" --art:url('{v.Image}');" : "")"
                         @onclick="() => Tap(tile, index)">
+                    @if (hasArt)
+                    {
+                        <span class="scene-art"></span>
+                    }
                     <span class="scene-swatch"></span>
                     <span class="scene-emoji">@v.Emoji</span>
                     <span class="scene-name">@v.Label</span>
@@ -200,6 +206,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         var dto = (await Api.GetScreensAsync())
             .FirstOrDefault(s => string.Equals(s.Id, Id, StringComparison.OrdinalIgnoreCase));
         if (dto is null)
@@ -224,7 +231,7 @@ else
 
     private void LoadFrom(ScreenDto dto)
     {
-        _edit = new ScreenEdit { Id = dto.Id, Name = dto.Name, Tiles = [.. dto.Tiles ?? []] };
+        _edit = new ScreenEdit { Id = dto.Id, Name = dto.Name, Tiles = [.. dto.Tiles ?? []], Image = dto.Image };
         (_emoji, _label) = SceneNaming.SplitName(dto.Name);
         _savedName = dto.Name;
         _savedTiles = [.. _edit.Tiles];
@@ -239,7 +246,7 @@ else
 
     // ---------- tile display ----------
 
-    private record TileView(string Emoji, string Label, string Color, bool Missing, bool Active, bool Playing);
+    private record TileView(string Emoji, string Label, string Color, bool Missing, bool Active, bool Playing, string? Image = null);
 
     private TileView View(ScreenTileDto tile)
     {
@@ -249,17 +256,17 @@ else
                 var scene = _scenes?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
                 if (scene is null) return Gone(tile);
                 var (se, sl) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
-                return new TileView(se, sl, SceneSwatch(scene), false, Eq(_activeSceneId, scene.Id), false);
+                return new TileView(se, sl, SceneSwatch(scene), false, Eq(_activeSceneId, scene.Id), false, Api.ImageUrl(scene.Image));
             case "event":
                 var evt = _events?.FirstOrDefault(e => Eq(e.Id, tile.Ref));
                 if (evt is null) return Gone(tile);
                 var (ee, el) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
-                return new TileView(ee, el, evt.Flash?.Color ?? "transparent", false, false, false);
+                return new TileView(ee, el, evt.Flash?.Color ?? "transparent", false, false, false, Api.ImageUrl(evt.Image));
             case "sound":
                 var snd = _sounds?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
                 if (snd is null) return Gone(tile);
                 var playing = _playingSoundIds.Contains(snd.Id);
-                return new TileView(playing ? "⏹" : snd.Loop ? "🔁" : "🔊", snd.Name, "transparent", false, false, playing);
+                return new TileView(playing ? "⏹" : snd.Loop ? "🔁" : "🔊", snd.Name, "transparent", false, false, playing, Api.ImageUrl(snd.Image));
             case "music":
                 return new TileView("🎧", Label(tile), "transparent", false, false, false);
             case "light-reset":

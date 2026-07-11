@@ -34,6 +34,7 @@ public class SoundStore(IDbContextFactory<AppDbContext> dbFactory)
             existing.FileName = sound.FileName;
             existing.Volume = sound.Volume;
             existing.Loop = sound.Loop;
+            existing.Image = sound.Image;
             existing.DurationMs = sound.DurationMs;
         }
         await db.SaveChangesAsync();

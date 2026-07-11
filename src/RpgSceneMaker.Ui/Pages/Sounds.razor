@@ -41,6 +41,7 @@
         <div class="chip-row">
             <Chip On="_edit.Loop" OnClick="() => _edit.Loop = !_edit.Loop">🔁 Loop</Chip>
         </div>
+        <ArtField @bind-Image="_edit.Image" />
         <div class="btn-row" style="margin-top:1rem">
             <button class="btn primary" @onclick="SaveEdit" disabled="@_busy">Save</button>
             <button class="btn" @onclick="Preview" disabled="@_busy">▶ Preview</button>
@@ -78,7 +79,15 @@ else
             @foreach (var sound in group)
             {
                 var isPlaying = _playing.Contains(sound.Id);
-                <button class="krow @(isPlaying ? "playing" : "")" @onclick="() => Tap(sound, isPlaying)">
+                var artUrl = Api.ImageUrl(sound.Image);
+                var hasArt = artUrl is not null;
+                <button class="krow @(isPlaying ? "playing" : "") @(hasArt ? "art" : "")"
+                        style="@(hasArt ? $"--art:url('{artUrl}');" : "")"
+                        @onclick="() => Tap(sound, isPlaying)">
+                    @if (hasArt)
+                    {
+                        <span class="scene-art"></span>
+                    }
                     <span class="card-edit" role="button" tabindex="0" aria-label="Edit sound"
                           @onclick="() => Edit(sound)" @onclick:stopPropagation="true">✎</span>
                     <span class="krow-ico">@(isPlaying ? "⏹" : sound.Loop ? "🔁" : "🔊")</span>
@@ -111,6 +120,7 @@ else
 
     private async Task RefreshAsync()
     {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         _sounds = await Api.GetSoundsAsync();
         StateHasChanged();
     }
@@ -181,6 +191,7 @@ else
             Category = sound.Category,
             VolumePercent = (int)Math.Round(sound.Volume * 100),
             Loop = sound.Loop,
+            Image = sound.Image,
         };
         _confirmDelete = false;
     }
@@ -205,7 +216,7 @@ else
         try
         {
             var (result, error) = await Api.UpdateSoundAsync(
-                _editing.Id, _edit.Name.Trim(), _edit.Category.Trim(), _edit.VolumePercent / 100.0, _edit.Loop);
+                _editing.Id, _edit.Name.Trim(), _edit.Category.Trim(), _edit.VolumePercent / 100.0, _edit.Loop, _edit.Image);
             if (result is not null)
             {
                 Ui.ReportOk($"Saved \"{result.Name}\"");

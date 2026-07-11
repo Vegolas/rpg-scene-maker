@@ -10,12 +10,14 @@ public class SceneEdit
     public List<SceneLightEdit> Lights { get; set; } = [];
     public MusicEdit? Music { get; set; }
     public List<string> SoundEffects { get; set; } = [];
+    public string? Image { get; set; }
 
     public SceneDto ToDto() => new(Id, Name,
         Light is null ? null : new LightDto(Light.Power, Light.Color, Light.Brightness, Light.Temperature),
         Lights.Select(l => l.ToDto()).OfType<SceneLightDto>().ToList(),
         Music is null ? null : new MusicDto(Music.PlayId, Music.Volume, Music.Pause),
-        SoundEffects);
+        SoundEffects,
+        Image);
 }
 
 public class LightEdit

@@ -1,4 +1,5 @@
 using RpgSceneMaker.Api.Models;
+using RpgSceneMaker.Api.Services;
 
 namespace RpgSceneMaker.Api.Validation;
 
@@ -26,6 +27,8 @@ public static class EventValidation
             throw new ArgumentException("Event id 'list', 'stop' and 'state' are reserved (they'd shadow the /events/list, /events/stop and /events/state routes).");
         if (string.IsNullOrWhiteSpace(evt.Name))
             throw new ArgumentException("Event name is required.");
+        if (evt.Image is not null && !ImageFileStorage.IsValidName(evt.Image))
+            throw new ArgumentException("Invalid image reference.");
 
         if (evt.Flash is { } flash)
         {

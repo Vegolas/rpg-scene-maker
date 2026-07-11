@@ -1,9 +1,10 @@
 namespace RpgSceneMaker.Ui.Contracts;
 
 // Mirrors the API's event shapes (contracts are duplicated per project by design — keep in sync by hand).
-// `Timeline` is the advanced editor's shape; `Flash`/`SoundEffects` are the legacy shape (still read for
-// import, always written back as null/[] once an event is saved from the timeline editor).
-public record EventDto(string Id, string Name, EventFlashDto? Flash, List<string>? SoundEffects, EventTimelineDto? Timeline = null);
+// `Image` is an optional full-art tile background. `Timeline` is the advanced editor's shape;
+// `Flash`/`SoundEffects` are the legacy shape (still read for import, always written back as null/[]
+// once an event is saved from the timeline editor).
+public record EventDto(string Id, string Name, EventFlashDto? Flash, List<string>? SoundEffects, string? Image = null, EventTimelineDto? Timeline = null);
 public record EventFlashDto(string Color, int Brightness, int DurationMs);
 public record EventTriggerDto(string Event, string Light, string Sound, bool FullySucceeded);
 
@@ -27,9 +28,10 @@ public class EventEdit
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public TimelineEdit Timeline { get; set; } = new();
+    public string? Image { get; set; }
 
     // Always writes the timeline and clears the legacy fields (flash:null, soundEffects:[]).
-    public EventDto ToDto() => new(Id, Name, null, [], Timeline.ToDto());
+    public EventDto ToDto() => new(Id, Name, null, [], Image, Timeline.ToDto());
 
     // Build an editable model from an event, converting a legacy (flash/soundEffects) event into
     // equivalent timeline clips: the flash → one all-lights light clip at t=0; each legacy sound id →
@@ -38,7 +40,7 @@ public class EventEdit
     // (a natural length under that, or an unknown one, would otherwise make the server 400 the clip).
     public static EventEdit FromDto(EventDto evt, IReadOnlyList<SoundDto> sounds)
     {
-        var edit = new EventEdit { Id = evt.Id, Name = evt.Name };
+        var edit = new EventEdit { Id = evt.Id, Name = evt.Name, Image = evt.Image };
 
         if (evt.Timeline is { } tl)
         {

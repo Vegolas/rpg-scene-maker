@@ -26,16 +26,25 @@ public static class EventEndpoints
         events.MapGet("/{id}", async (string id, EventStore store) =>
             await store.GetAsync(id) is { } evt ? Results.Ok(evt) : Results.NotFound());
 
-        events.MapPut("/{id}", async (string id, GameEvent evt, EventStore store) =>
+        events.MapPut("/{id}", async (string id, GameEvent evt, EventStore store, ImageFileStorage images) =>
         {
             evt.Id = id;
             EventValidation.Validate(evt);
+            var oldImage = (await store.GetAsync(id))?.Image;
             await store.UpsertAsync(evt);
+            // Drop the previous tile art if it was replaced or cleared, so old uploads don't pile up on disk.
+            if (!string.IsNullOrEmpty(oldImage) && !string.Equals(oldImage, evt.Image, StringComparison.OrdinalIgnoreCase))
+                images.Delete(oldImage);
             return Results.Ok(evt);
         });
 
-        events.MapDelete("/{id}", async (string id, EventStore store) =>
-            await store.DeleteAsync(id) ? Results.NoContent() : Results.NotFound());
+        events.MapDelete("/{id}", async (string id, EventStore store, ImageFileStorage images) =>
+        {
+            var image = (await store.GetAsync(id))?.Image;
+            if (!await store.DeleteAsync(id)) return Results.NotFound();
+            images.Delete(image);
+            return Results.NoContent();
+        });
 
         // Trigger dispatches inside EventActivator (a non-empty timeline runs in the background and returns
         // "started"/"skipped" at once; else the legacy flash + sounds are awaited). 207 if any part failed.

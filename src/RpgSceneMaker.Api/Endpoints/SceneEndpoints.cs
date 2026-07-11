@@ -18,16 +18,25 @@ public static class SceneEndpoints
         scenes.MapGet("/{id}", async (string id, SceneStore store) =>
             await store.GetAsync(id) is { } scene ? Results.Ok(scene) : Results.NotFound());
 
-        scenes.MapPut("/{id}", async (string id, Scene scene, SceneStore store) =>
+        scenes.MapPut("/{id}", async (string id, Scene scene, SceneStore store, ImageFileStorage images) =>
         {
             scene.Id = id;
             SceneValidation.Validate(scene);
+            var oldImage = (await store.GetAsync(id))?.Image;
             await store.UpsertAsync(scene);
+            // Drop the previous tile art if it was replaced or cleared, so old uploads don't pile up on disk.
+            if (!string.IsNullOrEmpty(oldImage) && !string.Equals(oldImage, scene.Image, StringComparison.OrdinalIgnoreCase))
+                images.Delete(oldImage);
             return Results.Ok(scene);
         });
 
-        scenes.MapDelete("/{id}", async (string id, SceneStore store) =>
-            await store.DeleteAsync(id) ? Results.NoContent() : Results.NotFound());
+        scenes.MapDelete("/{id}", async (string id, SceneStore store, ImageFileStorage images) =>
+        {
+            var image = (await store.GetAsync(id))?.Image;
+            if (!await store.DeleteAsync(id)) return Results.NotFound();
+            images.Delete(image);
+            return Results.NoContent();
+        });
 
         scenes.MapMethods("/{id}/activate", EndpointHelpers.GetOrPost, async (string id, SceneStore store, SceneActivator activator) =>
         {

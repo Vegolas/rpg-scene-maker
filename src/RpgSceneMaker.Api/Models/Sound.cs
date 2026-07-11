@@ -21,6 +21,9 @@ public class Sound
     /// <summary>When true the sound loops until stopped; otherwise it plays once.</summary>
     public bool Loop { get; set; }
 
+    /// <summary>Stored file name of an optional full-art tile background (uploaded via <c>/images</c>), or null.</summary>
+    public string? Image { get; set; }
+
     /// <summary>The file's natural length in milliseconds, measured at import. Null means "not measured
     /// yet" (predates duration tracking; backfilled lazily by <c>/sounds/list</c>). <c>0</c> is the
     /// "tried, unmeasurable" sentinel persisted when the file won't decode, so the backfill doesn't

@@ -22,6 +22,7 @@
                    placeholder="e.g. Fantasy" />
         </div>
         <p class="hint" style="margin-top:0.6rem">A screen just groups shortcuts — you'll pick which scenes, events, sounds and playlists go on it next.</p>
+        <ArtField @bind-Image="_image" />
         <div class="btn-row" style="margin-top:0.6rem">
             <button class="btn primary" @onclick="Create" disabled="@_busy">Create</button>
             <button class="btn" @onclick="() => _creating = false" disabled="@_busy">Cancel</button>
@@ -43,7 +44,15 @@ else
         @foreach (var (screen, index) in _screens.Select((s, i) => (s, i)))
         {
             var (emoji, label) = SceneNaming.SplitName(screen.Name, "🎛️", screen.Id);
-            <button class="scene-card" style="animation-delay:@(index * 55)ms" @onclick="() => Open(screen.Id)">
+            var artUrl = Api.ImageUrl(screen.Image);
+            var hasArt = artUrl is not null;
+            <button class="scene-card @(hasArt ? "art" : "")"
+                    style="animation-delay:@(index * 55)ms;@(hasArt ? $" --art:url('{artUrl}');" : "")"
+                    @onclick="() => Open(screen.Id)">
+                @if (hasArt)
+                {
+                    <span class="scene-art"></span>
+                }
                 <span class="scene-emoji">@emoji</span>
                 <span class="scene-name">@label</span>
                 <span class="screen-count">@TileCount(screen)</span>
@@ -66,8 +75,13 @@ else
     private bool _busy;
     private string _emoji = "";
     private string _label = "";
+    private string? _image;
 
-    protected override async Task OnInitializedAsync() => _screens = await Api.GetScreensAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
+        _screens = await Api.GetScreensAsync();
+    }
 
     private static string TileCount(ScreenDto s)
     {
@@ -82,6 +96,7 @@ else
         _creating = true;
         _emoji = "";
         _label = "";
+        _image = null;
     }
 
     private void ToggleEmoji(string e) => _emoji = _emoji == e ? "" : e;
@@ -107,7 +122,7 @@ else
         try
         {
             // Persist an empty board, then drop straight into it to arrange the shortcuts.
-            var (_, error) = await Api.SaveScreenAsync(id, new ScreenEdit { Id = id, Name = ComposedName });
+            var (_, error) = await Api.SaveScreenAsync(id, new ScreenEdit { Id = id, Name = ComposedName, Image = _image });
             if (error is not null)
             {
                 Ui.ReportError(error);

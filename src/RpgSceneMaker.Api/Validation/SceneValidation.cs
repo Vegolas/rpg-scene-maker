@@ -14,6 +14,8 @@ public static class SceneValidation
             throw new ArgumentException("Scene id may only contain letters, digits, '-' and '_'.");
         if (string.IsNullOrWhiteSpace(scene.Name))
             throw new ArgumentException("Scene name is required.");
+        if (scene.Image is not null && !ImageFileStorage.IsValidName(scene.Image))
+            throw new ArgumentException("Invalid image reference.");
 
         if (scene.Light is { } light)
         {

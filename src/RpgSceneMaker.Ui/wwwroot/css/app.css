@@ -390,6 +390,136 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
 .reorder:disabled { opacity: 0.3; pointer-events: none; }
 .reorder.danger { color: var(--danger); }
 
+/* ---------- full-art tile background (optional per-entity image) ---------- */
+/* The art rides behind the tile's existing content via the --art custom property;
+   a bottom-weighted scrim keeps the emoji/name legible over any image. */
+.scene-card .scene-art {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: var(--art) center / cover no-repeat;
+}
+.scene-card.art .scene-art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.15) 55%, rgba(0, 0, 0, 0.4));
+}
+.scene-card.art .scene-emoji,
+.scene-card.art .scene-name,
+.scene-card.art .screen-count {
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
+.scene-card.art .scene-name { color: #fff; }
+.scene-card.art .screen-count { color: rgba(255, 255, 255, 0.85); }
+/* keep the swatch bar and active/edit affordances above the art */
+.scene-card.art .scene-swatch { z-index: 1; }
+.scene-card.art .card-edit { z-index: 2; }
+.scene-card.art.active::after { z-index: 1; }
+
+/* sound-tile variant: same art layer + scrim inside a .krow */
+.sound-grid .krow.art { overflow: hidden; }
+.sound-grid .krow.art .scene-art {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: var(--art) center / cover no-repeat;
+}
+.sound-grid .krow.art .scene-art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.15) 55%, rgba(0, 0, 0, 0.4));
+}
+.sound-grid .krow.art .krow-ico,
+.sound-grid .krow.art .krow-title {
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
+.sound-grid .krow.art .krow-title { color: #fff; }
+.sound-grid .krow.art .card-edit { z-index: 2; }
+
+/* ---------- art field (editor: thumbnail + upload/remove) ---------- */
+.art-field { margin-top: 1rem; }
+.art-label { display: block; color: var(--ink-dim); font-size: 0.9rem; margin-bottom: 0.35rem; }
+.art-preview {
+    width: 100%;
+    max-width: 240px;
+    aspect-ratio: 4 / 3;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--bg-deep);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+}
+.art-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art-empty { color: var(--ink-dim); font-size: 0.85rem; }
+
+/* ---------- image crop overlay (tile art upload) ---------- */
+.crop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    background: rgba(8, 6, 12, 0.92);
+    backdrop-filter: blur(6px);
+    padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
+}
+.crop-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* No border here on purpose: with box-sizing:border-box a border would shrink the
+   canvas content box below its drawing buffer and skew pan/zoom by a pixel — the
+   frame is drawn with box-shadow (which doesn't affect layout) instead. */
+.crop-canvas {
+    touch-action: none;
+    max-width: 100%;
+    max-height: 100%;
+    background: #000;
+    border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--line-strong), 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.crop-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding-top: 0.9rem;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+}
+.crop-zoom { flex: 1; }
+.crop-btn {
+    flex: 0 0 auto;
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0.75rem 1.3rem;
+    min-height: 52px;
+    cursor: pointer;
+    transition: transform 0.08s, border-color 0.2s;
+}
+.crop-btn:active { transform: scale(0.96); border-color: var(--line-strong); }
+.crop-btn-primary {
+    color: var(--ember);
+    font-weight: 700;
+    border-color: var(--line-strong);
+    box-shadow: 0 0 18px rgba(232, 163, 61, 0.12), inset 0 0 12px rgba(232, 163, 61, 0.06);
+}
+
 /* ---------- panels / cards ---------- */
 .panel {
     background: linear-gradient(170deg, var(--surface-2), var(--surface) 75%);

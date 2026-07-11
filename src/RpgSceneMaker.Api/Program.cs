@@ -19,6 +19,11 @@ var soundsPath = builder.Configuration["Sounds:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
     "RpgSceneMaker", "sounds");
 
+// Full-art tile background images live next to the database; Images:Path overrides the location.
+var imagesPath = builder.Configuration["Images:Path"] ?? Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "RpgSceneMaker", "images");
+
 // Startup-captured facts surfaced by GET /diagnostics (developer mode): process start time plus the
 // resolved on-disk paths, so the endpoint reuses the exact values instead of re-resolving them.
 builder.Services.AddSingleton(new DiagnosticsInfo(DateTimeOffset.UtcNow, dbPath, soundsPath));
@@ -33,6 +38,9 @@ builder.Services.AddSingleton<SceneStore>();
 builder.Services.AddSingleton<SoundStore>();
 builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
 builder.Services.AddSingleton<SoundboardPlayer>();
+
+// Full-art tile backgrounds: uploaded via /images, stored on disk, referenced by stored file name.
+builder.Services.AddSingleton(new ImageFileStorage(imagesPath));
 
 builder.Services.AddSingleton<EventStore>();
 builder.Services.AddSingleton<ScreenStore>();
@@ -137,6 +145,7 @@ app.Use(async (context, next) =>
         (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
          path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
+         path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
          path.StartsWithSegments("/diagnostics"));
 });
@@ -154,6 +163,7 @@ app.MapMusicEndpoints();
 app.MapSoundEndpoints();
 app.MapEventEndpoints();
 app.MapScreenEndpoints();
+app.MapImageEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
 app.MapDiagnosticsEndpoints();

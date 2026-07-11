@@ -16,6 +16,9 @@ public class Screen
 
     /// <summary>The shortcuts on this board, in display order.</summary>
     public List<ScreenTile> Tiles { get; set; } = [];
+
+    /// <summary>Stored file name of an optional full-art tile background (uploaded via <c>/images</c>), or null.</summary>
+    public string? Image { get; set; }
 }
 
 /// <summary>One shortcut on a <see cref="Screen"/>.</summary>

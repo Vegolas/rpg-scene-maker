@@ -28,9 +28,15 @@ else
         @foreach (var (scene, index) in _scenes.Select((s, i) => (s, i)))
         {
             var (emoji, label) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
-            <button class="scene-card @(scene.Id == _activeId ? "active" : "") @(_busyId == scene.Id ? "busy" : "")"
-                    style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(scene))"
+            var artUrl = Api.ImageUrl(scene.Image);
+            var hasArt = artUrl is not null;
+            <button class="scene-card @(scene.Id == _activeId ? "active" : "") @(_busyId == scene.Id ? "busy" : "") @(hasArt ? "art" : "")"
+                    style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(scene));@(hasArt ? $" --art:url('{artUrl}');" : "")"
                     @onclick="() => Activate(scene.Id)">
+                @if (hasArt)
+                {
+                    <span class="scene-art"></span>
+                }
                 <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit scene"
                       @onclick="() => Edit(scene.Id)" @onclick:stopPropagation="true">✎</span>
@@ -53,6 +59,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         await RefreshAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollActiveAsync), null, 4000, 4000);
     }

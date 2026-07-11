@@ -17,6 +17,9 @@ public class Scene
     /// <summary>Ids of soundboard <see cref="Sound"/>s fired when this scene is activated. Activating a
     /// scene that has any entries stops current playback first, then plays these with their own volume/loop.</summary>
     public List<string> SoundEffects { get; set; } = [];
+
+    /// <summary>Stored file name of an optional full-art tile background (uploaded via <c>/images</c>), or null.</summary>
+    public string? Image { get; set; }
 }
 
 /// <summary>A scene's settings for one registered light, optionally animated by an effect.</summary>

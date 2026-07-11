@@ -39,6 +39,7 @@ else
                 <span>Id: <code>@_edit.Id</code> (fixed) — <code>/scenes/@_edit.Id/activate</code></span>
             }
         </p>
+        <ArtField @bind-Image="_edit.Image" />
     </div>
 
     <RuneHeading>Lights</RuneHeading>
@@ -338,6 +339,7 @@ else
     private void LoadFrom(SceneDto scene)
     {
         _edit.Id = scene.Id;
+        _edit.Image = scene.Image;
         (_emoji, _label) = SceneNaming.SplitName(scene.Name);
 
         // Per-light entries win over the legacy single block (matching the server).

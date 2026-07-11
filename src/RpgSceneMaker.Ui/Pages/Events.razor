@@ -31,6 +31,7 @@
                 <span>Id: <code>@_edit.Id</code> (fixed) — <code>/events/@_edit.Id/trigger</code></span>
             }
         </p>
+        <ArtField @bind-Image="_edit.Image" />
     </div>
 
     <RuneHeading>Timeline</RuneHeading>
@@ -76,10 +77,16 @@ else
         @foreach (var (evt, index) in _events.Select((e, i) => (e, i)))
         {
             var (emoji, label) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
+            var artUrl = Api.ImageUrl(evt.Image);
+            var hasArt = artUrl is not null;
             var running = _runningId == evt.Id;
-            <button class="scene-card @(_busyId == evt.Id ? "busy" : "") @(running ? "playing" : "")"
-                    style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(evt))"
+            <button class="scene-card @(_busyId == evt.Id ? "busy" : "") @(running ? "playing" : "") @(hasArt ? "art" : "")"
+                    style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(evt));@(hasArt ? $" --art:url('{artUrl}');" : "")"
                     @onclick="() => Trigger(evt.Id)">
+                @if (hasArt)
+                {
+                    <span class="scene-art"></span>
+                }
                 <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit event"
                       @onclick="() => Edit(evt)" @onclick:stopPropagation="true">✎</span>
@@ -128,6 +135,7 @@ else
 
     private async Task RefreshAsync()
     {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         var eventsTask = Api.GetEventsAsync();
         var soundsTask = Api.GetSoundsAsync();
         var lightsTask = Api.GetRegisteredLightsAsync();

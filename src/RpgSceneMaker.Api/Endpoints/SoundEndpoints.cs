@@ -71,25 +71,32 @@ public static class SoundEndpoints
             return Results.Ok(ToDto(sound));
         }).DisableAntiforgery();
 
-        sounds.MapPut("/{id}", async (string id, SoundUpdateInput input, SoundStore store) =>
+        sounds.MapPut("/{id}", async (string id, SoundUpdateInput input, SoundStore store, ImageFileStorage images) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 return Results.NotFound(new { error = $"No sound with id '{id}'." });
+            var oldImage = sound.Image;
             if (input.Name is not null) sound.Name = input.Name.Trim();
             if (input.Category is not null) sound.Category = input.Category.Trim();
             if (input.Volume is { } volume) sound.Volume = volume;
             if (input.Loop is { } loop) sound.Loop = loop;
+            // Tile art is set as sent (null clears it), not left-unchanged like the fields above.
+            sound.Image = input.Image;
             SoundValidation.Validate(sound);
             await store.UpsertAsync(sound);
+            // Drop the previous tile art if it was replaced or cleared, so old uploads don't pile up on disk.
+            if (!string.IsNullOrEmpty(oldImage) && !string.Equals(oldImage, sound.Image, StringComparison.OrdinalIgnoreCase))
+                images.Delete(oldImage);
             return Results.Ok(ToDto(sound));
         });
 
-        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, SoundboardPlayer player, SceneStore scenes, EventStore events) =>
+        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, ImageFileStorage images, SoundboardPlayer player, SceneStore scenes, EventStore events) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 return Results.NotFound();
             player.Stop(id);
             files.Delete(sound.FileName);
+            images.Delete(sound.Image);
             await store.DeleteAsync(id);
 
             // Drop the now-gone sound from any scene or event that referenced it, so triggering those
@@ -163,7 +170,7 @@ public static class SoundEndpoints
         return kept.Count != soundEffects.Count ? kept : null;
     }
 
-    private static SoundDto ToDto(Sound s) => new(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.DurationMs);
+    private static SoundDto ToDto(Sound s) => new(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.Image, s.DurationMs);
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 

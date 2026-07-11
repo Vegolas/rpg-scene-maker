@@ -15,16 +15,25 @@ public static class ScreenEndpoints
         // Literal segment, so it wins over any "/{id}" route.
         screens.MapGet("/list", (ScreenStore store) => store.GetAllAsync());
 
-        screens.MapPut("/{id}", async (string id, Screen screen, ScreenStore store) =>
+        screens.MapPut("/{id}", async (string id, Screen screen, ScreenStore store, ImageFileStorage images) =>
         {
             screen.Id = id;
             ScreenValidation.Validate(screen);
+            var oldImage = (await store.GetAsync(id))?.Image;
             await store.UpsertAsync(screen);
+            // Drop the previous tile art if it was replaced or cleared, so old uploads don't pile up on disk.
+            if (!string.IsNullOrEmpty(oldImage) && !string.Equals(oldImage, screen.Image, StringComparison.OrdinalIgnoreCase))
+                images.Delete(oldImage);
             return Results.Ok(screen);
         });
 
-        screens.MapDelete("/{id}", async (string id, ScreenStore store) =>
-            await store.DeleteAsync(id) ? Results.NoContent() : Results.NotFound());
+        screens.MapDelete("/{id}", async (string id, ScreenStore store, ImageFileStorage images) =>
+        {
+            var image = (await store.GetAsync(id))?.Image;
+            if (!await store.DeleteAsync(id)) return Results.NotFound();
+            images.Delete(image);
+            return Results.NoContent();
+        });
 
         // Deliberately NO "GET /screens/{id}" (and nothing at the bare "/screens"): the Blazor panel's
         // Screens list lives at /screens and each board at /screens/{id}, so a full-page load of either
