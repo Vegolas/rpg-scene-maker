@@ -429,6 +429,42 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
+    // ---------- light fx (reusable effect library) ----------
+
+    public async Task<List<LightFxDto>> GetLightFxAsync() =>
+        await GetAsync<List<LightFxDto>>("lightfx/list") ?? [];
+
+    /// <summary>Upsert a library Light FX; the editor shows the returned error inline / via toast.</summary>
+    public Task<(LightFxDto? Result, string? Error)> SaveLightFxAsync(string id, LightFxEdit edit) =>
+        FetchAsync<LightFxDto>(HttpMethod.Put, $"lightfx/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteLightFxAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"lightfx/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    /// <summary>Start a bounded test-run of an FX (empty light = the configured provider group). Surfaces a
+    /// server error (e.g. no lights configured) via toast.</summary>
+    public Task<bool> TestLightFxAsync(string id, string? light, int seconds)
+    {
+        var path = $"lightfx/{Uri.EscapeDataString(id)}/test?seconds={seconds}";
+        if (!string.IsNullOrWhiteSpace(light))
+            path += $"&light={Uri.EscapeDataString(light)}";
+        return CommandAsync(path);
+    }
+
+    public Task<bool> StopLightFxTestAsync() => CommandAsync("lightfx/test/stop");
+
     // ---------- plumbing ----------
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path)

@@ -45,8 +45,12 @@ public class SceneLight
 /// <summary>A background animation applied to a single light.</summary>
 public class LightEffect
 {
-    /// <summary>"flicker" | "glow" | "storm" | "drift" | "custom".</summary>
+    /// <summary>"flicker" | "glow" | "storm" | "drift" | "custom" | "fx".</summary>
     public string Type { get; set; } = "";
+
+    /// <summary>"fx" only: id of the library <see cref="LightFx"/> this effect references. Resolved at apply
+    /// time into a "custom" effect (its keyframes/loop/cycle); a missing FX degrades to a static light.</summary>
+    public string? FxId { get; set; }
 
     /// <summary>1 (slow) - 10 (fast). Unused for "custom".</summary>
     public int Speed { get; set; } = 5;

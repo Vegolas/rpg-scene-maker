@@ -52,7 +52,7 @@ public class SceneLightEdit
 // Mutable form model for a per-light effect.
 public class EffectEdit
 {
-    // "none" | "flicker" | "glow" | "storm" | "drift" | "custom"
+    // "none" | "flicker" | "glow" | "storm" | "drift" | "custom" | "fx"
     public string Type { get; set; } = "none";
     public int Speed { get; set; } = 5;
     public int Intensity { get; set; } = 5;
@@ -63,9 +63,13 @@ public class EffectEdit
     public bool Loop { get; set; }
     public int? CycleMs { get; set; }
 
+    // "fx" only: id of the referenced library Light FX.
+    public string? FxId { get; set; }
+
     public EffectDto? ToDto() => Type switch
     {
         "none" => null,
+        "fx" => new EffectDto("fx", Speed, Intensity, [], null, false, null, FxId),
         "custom" => new EffectDto("custom", Speed, Intensity, [.. Colors],
             Keyframes.Select(k => k.ToDto()).ToList(), Loop, Loop ? CycleMs : null),
         _ => new EffectDto(Type, Speed, Intensity, [.. Colors]),
@@ -81,10 +85,11 @@ public class EffectEdit
         Keyframes = Keyframes.Select(k => k.Clone()).ToList(),
         Loop = Loop,
         CycleMs = CycleMs,
+        FxId = FxId,
     };
 
     // Build an editable effect from a wire DTO (null → "none"). Shared by the scene editor and the timeline
-    // clip inspector so keyframe/loop fields can never be dropped by only one of the two mappings.
+    // clip inspector so keyframe/loop/fx fields can never be dropped by only one of the two mappings.
     public static EffectEdit FromDto(EffectDto? fx) => fx is null
         ? new EffectEdit()
         : new EffectEdit
@@ -96,6 +101,7 @@ public class EffectEdit
             Keyframes = (fx.Keyframes ?? []).Select(KeyframeEdit.FromDto).ToList(),
             Loop = fx.Loop,
             CycleMs = fx.CycleMs,
+            FxId = fx.FxId,
         };
 }
 

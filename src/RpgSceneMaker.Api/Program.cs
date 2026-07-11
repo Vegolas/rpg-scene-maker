@@ -44,6 +44,7 @@ builder.Services.AddSingleton(new ImageFileStorage(imagesPath));
 
 builder.Services.AddSingleton<EventStore>();
 builder.Services.AddSingleton<ScreenStore>();
+builder.Services.AddSingleton<LightFxStore>();
 
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<CurrentState>();
@@ -55,6 +56,8 @@ builder.Services.AddScoped<EventAfterApplier>();
 builder.Services.AddScoped<EventActivator>();
 // Runs an event's background timeline; creates its own scope per run (ILightService is scoped).
 builder.Services.AddSingleton<EventTimelineRunner>();
+// Bounded preview of a library Light FX; like the timeline runner it owns a scope per test run.
+builder.Services.AddSingleton<LightFxTester>();
 
 // Spotify: cloud Web API (PKCE) to control a Spotify Connect device on the LAN.
 builder.Services.AddSingleton<SpotifyStore>();
@@ -146,7 +149,7 @@ app.Use(async (context, next) =>
         (path.StartsWithSegments("/scenes") || path.StartsWithSegments("/lights") ||
          path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
-         path.StartsWithSegments("/images") ||
+         path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
          path.StartsWithSegments("/diagnostics"));
 });
@@ -164,6 +167,7 @@ app.MapMusicEndpoints();
 app.MapSoundEndpoints();
 app.MapEventEndpoints();
 app.MapScreenEndpoints();
+app.MapLightFxEndpoints();
 app.MapImageEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();

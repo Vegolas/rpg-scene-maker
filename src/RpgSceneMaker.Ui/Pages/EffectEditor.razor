@@ -1,0 +1,235 @@
+@* Literal "/effects/new" wins over "/effects/{FxId}", so it always means create (an FX id can never shadow it). *@
+@page "/effects/new"
+@page "/effects/{FxId}"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject ViewTransition Vt
+
+<PageTitle>Scene Maker — @(_isNew ? "New effect" : "Edit effect")</PageTitle>
+
+@if (_loading)
+{
+    <p class="empty-note">Unrolling the scroll…</p>
+}
+else
+{
+    <RuneHeading>@(_isNew ? "New Light FX" : "Edit Light FX")</RuneHeading>
+
+    <div class="panel">
+        <div class="field" style="margin-bottom:0">
+            <label for="fx-name">Name</label>
+            <input id="fx-name" type="text" value="@_edit.Name" @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty"
+                   placeholder="e.g. Torch flicker" />
+        </div>
+        <p class="hint" style="margin-top:0.6rem">
+            @if (_isNew)
+            {
+                <span>Id: <code>@(CurrentId is { Length: > 0 } cid ? cid : "…")</code></span>
+            }
+            else
+            {
+                <span>Id: <code>@_edit.Id</code> (fixed)</span>
+            }
+        </p>
+    </div>
+
+    <RuneHeading>Keyframes</RuneHeading>
+    <div class="panel">
+        <KeyframeEditor Effect="_edit.Fx" />
+    </div>
+
+    <RuneHeading>Test</RuneHeading>
+    <div class="panel">
+        <div class="field">
+            <label for="fx-test-light">On light</label>
+            <select id="fx-test-light" value="@_testLight" @onchange="e => _testLight = e.Value?.ToString() ?? string.Empty">
+                <option value="">All lights</option>
+                @foreach (var reg in _lights)
+                {
+                    <option value="@reg.Key">@reg.Name</option>
+                }
+            </select>
+        </div>
+        <div class="tl-insp-row">
+            <label>For</label>
+            <input type="number" min="1" max="60" step="1" value="@_testSeconds" @onchange="SetTestSeconds" />
+            <span class="tl-unit">seconds</span>
+        </div>
+        <div class="btn-row" style="margin-top:0.8rem">
+            <button class="btn" @onclick="Test" disabled="@_busy">▶ Test</button>
+            <button class="btn" @onclick="StopTest" disabled="@_busy">■ Stop</button>
+        </div>
+        <p class="hint" style="margin-top:0.6rem">Save first — the test runs the saved effect on the server's lights.</p>
+    </div>
+
+    <RuneHeading>Save</RuneHeading>
+    <div class="btn-row">
+        <button class="btn primary" @onclick="Save" disabled="@_busy">Save</button>
+        <button class="btn" @onclick="Cancel" disabled="@_busy">Cancel</button>
+    </div>
+    @if (!_isNew)
+    {
+        <div class="btn-row" style="margin-top:0.7rem">
+            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+                @(_confirmDelete ? "Really delete?" : "Delete effect")
+            </button>
+        </div>
+        <p class="hint" style="margin-top:0.6rem">Deleting detaches this FX: every scene / event using it keeps a private copy of the keyframes.</p>
+    }
+}
+
+@code {
+    [Parameter] public string? FxId { get; set; }
+
+    private bool _loading = true;
+    private bool _busy;
+    private bool _isNew;
+    private LightFxEdit _edit = new();
+    private List<string> _existingIds = [];
+    private List<RegisteredLightInfo> _lights = [];
+
+    private string _testLight = "";
+    private int _testSeconds = 10;
+
+    private bool _confirmDelete;
+    private Timer? _confirmTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isNew = string.IsNullOrEmpty(FxId);
+
+        var all = await Api.GetLightFxAsync();
+        _existingIds = all.Select(f => f.Id).ToList();
+        _lights = await Api.GetRegisteredLightsAsync();
+
+        if (!_isNew)
+        {
+            var fx = all.FirstOrDefault(f => string.Equals(f.Id, FxId, StringComparison.OrdinalIgnoreCase));
+            if (fx is null)
+            {
+                Ui.ReportError($"Couldn't load effect \"{FxId}\".");
+                Nav.NavigateTo("effects");
+                return;
+            }
+            _edit = LightFxEdit.FromDto(fx);
+        }
+
+        _loading = false;
+    }
+
+    // On create the id follows the name; on edit it's fixed.
+    private string CurrentId => _isNew ? SceneNaming.MakeUnique(SceneNaming.Slugify(_edit.Name), _existingIds) : _edit.Id;
+
+    private void SetTestSeconds(ChangeEventArgs e) =>
+        _testSeconds = int.TryParse(e.Value?.ToString(), out var s) ? Math.Clamp(s, 1, 60) : 10;
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.Name))
+        {
+            Ui.ReportError("Give the effect a name first.");
+            return;
+        }
+        if (_edit.Fx.Keyframes.Count == 0)
+        {
+            Ui.ReportError("Add at least one keyframe.");
+            return;
+        }
+
+        var id = CurrentId;
+        if (string.IsNullOrEmpty(id))
+        {
+            Ui.ReportError("Couldn't derive an id from that name — use some letters or digits.");
+            return;
+        }
+
+        _edit.Id = id;
+        _busy = true;
+        try
+        {
+            var (_, error) = await Api.SaveLightFxAsync(id, _edit);
+            if (error is not null)
+            {
+                Ui.ReportError(error);
+                return;
+            }
+            Ui.ReportOk($"Saved effect \"{id}\"");
+            await Vt.NavigateAsync("effects");
+        }
+        finally { _busy = false; }
+    }
+
+    // Test runs the *saved* FX, so save silently first if this is a fresh/edited effect.
+    private async Task Test()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.Name))
+        {
+            Ui.ReportError("Give the effect a name first.");
+            return;
+        }
+        if (_edit.Fx.Keyframes.Count == 0)
+        {
+            Ui.ReportError("Add at least one keyframe.");
+            return;
+        }
+
+        var id = CurrentId;
+        if (string.IsNullOrEmpty(id)) { Ui.ReportError("Couldn't derive an id from that name."); return; }
+        _edit.Id = id;
+
+        _busy = true;
+        try
+        {
+            var (_, error) = await Api.SaveLightFxAsync(id, _edit);
+            if (error is not null) { Ui.ReportError(error); return; }
+            // On create, keep editing the freshly-made effect (fixed id) rather than re-creating it.
+            if (_isNew)
+            {
+                _isNew = false;
+                if (!_existingIds.Contains(id, StringComparer.OrdinalIgnoreCase)) _existingIds.Add(id);
+                Nav.NavigateTo($"effects/{id}", replace: true);
+                FxId = id;
+            }
+            await Api.TestLightFxAsync(id, string.IsNullOrWhiteSpace(_testLight) ? null : _testLight, _testSeconds);
+        }
+        finally { _busy = false; }
+    }
+
+    private Task StopTest() => Api.StopLightFxTestAsync();
+
+    private Task Cancel() => Vt.NavigateAsync("effects");
+
+    private async Task DeleteTapped()
+    {
+        if (!_confirmDelete)
+        {
+            _confirmDelete = true;
+            _confirmTimer?.Dispose();
+            _confirmTimer = new Timer(_ => InvokeAsync(() => { _confirmDelete = false; StateHasChanged(); }),
+                null, 3000, Timeout.Infinite);
+            return;
+        }
+
+        _confirmTimer?.Dispose();
+        _confirmDelete = false;
+        _busy = true;
+        try
+        {
+            var (ok, error) = await Api.DeleteLightFxAsync(_edit.Id);
+            if (ok)
+            {
+                Ui.ReportOk($"Deleted effect \"{_edit.Id}\"");
+                await Vt.NavigateAsync("effects");
+            }
+            else
+            {
+                Ui.ReportError(error ?? "Delete failed.");
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    public void Dispose() => _confirmTimer?.Dispose();
+}

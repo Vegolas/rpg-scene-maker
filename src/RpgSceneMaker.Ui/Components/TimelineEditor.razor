@@ -232,7 +232,7 @@ else if (SelectedLight is { } lc)
             {
                 <KeyframeEditor Effect="lc.Effect" />
             }
-            else if (lc.Effect.Type != "none")
+            else if (lc.Effect.Type is not ("none" or "fx"))
             {
                 <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="lc.Effect.Speed" AriaLabel="Speed" />
                 <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="lc.Effect.Intensity" AriaLabel="Intensity" />
@@ -254,6 +254,8 @@ else if (SelectedLight is { } lc)
                     <SwatchGrid Selected="null" ShowCustom="false" OnPick="hex => AddDriftColor(lc, hex)" Style="margin-top:0.6rem" />
                 }
             }
+
+            <FxLibraryPicker Effect="lc.Effect" Library="Fx" />
         }
 
         <div class="tl-insp-row" style="margin-top:1rem">
@@ -271,6 +273,7 @@ else if (SelectedLight is { } lc)
     [Parameter, EditorRequired] public TimelineEdit Model { get; set; } = new();
     [Parameter] public IReadOnlyList<SoundDto> Sounds { get; set; } = [];
     [Parameter] public IReadOnlyList<RegisteredLightInfo> Lights { get; set; } = [];
+    [Parameter] public IReadOnlyList<LightFxDto> Fx { get; set; } = [];
 
     private const int MinPps = 10;
     private const int MaxPps = 240;
@@ -369,20 +372,37 @@ else if (SelectedLight is { } lc)
     private IReadOnlyList<int> CustomTicks(TimelineLightEdit l)
     {
         var fx = l.Effect;
-        if (fx.Type != "custom" || fx.Keyframes.Count == 0) return [];
+        // Resolve the keyframe offsets from either an embedded "custom" effect or a referenced library FX.
+        List<int> ats;
+        bool loop;
+        int? cycleMs;
+        if (fx.Type == "custom")
+        {
+            ats = fx.Keyframes.Select(k => k.AtMs).ToList();
+            (loop, cycleMs) = (fx.Loop, fx.CycleMs);
+        }
+        else if (fx.Type == "fx"
+                 && Fx.FirstOrDefault(f => string.Equals(f.Id, fx.FxId, StringComparison.OrdinalIgnoreCase)) is { } lib)
+        {
+            ats = (lib.Keyframes ?? []).Select(k => k.AtMs).ToList();
+            (loop, cycleMs) = (lib.Loop, lib.CycleMs);
+        }
+        else return [];
+
+        if (ats.Count == 0) return [];
         const int maxTicks = 60;
         var ticks = new List<int>();
-        var loop = fx.Loop && (fx.CycleMs ?? 0) > 0;
-        var cycle = loop ? fx.CycleMs!.Value : int.MaxValue;
+        var looping = loop && (cycleMs ?? 0) > 0;
+        var cycle = looping ? cycleMs!.Value : int.MaxValue;
         for (var cycleStart = 0; cycleStart <= l.DurationMs && ticks.Count < maxTicks;)
         {
-            foreach (var kf in fx.Keyframes)
+            foreach (var at in ats)
             {
-                var at = cycleStart + kf.AtMs;
-                if (at > l.DurationMs || ticks.Count >= maxTicks) break;
-                ticks.Add(Px(at));
+                var t = cycleStart + at;
+                if (t > l.DurationMs || ticks.Count >= maxTicks) break;
+                ticks.Add(Px(t));
             }
-            if (!loop) break;
+            if (!looping) break;
             cycleStart += cycle;
         }
         return ticks;

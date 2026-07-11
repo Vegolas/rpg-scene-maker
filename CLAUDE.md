@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Settings, Logs);
+- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Settings, Logs);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions). All server calls go
   through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). The top bar (in
@@ -86,6 +86,18 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   over the lights). When the timeline touched the lights they are restored afterwards via
   `SceneLightApplier.RestoreLightsAsync` (shared with the flash path). The runner is a singleton but
   `ILightService` is scoped, so each run creates one service scope for its lifetime.
+- **`LightFxStore` / `LightFxTester`** — the reusable **Light FX library** (`LightFx`, [LightFx.cs](src/RpgSceneMaker.Api/Models/LightFx.cs)):
+  a named keyframe sequence (same shape as a "custom" `LightEffect`). Scene lights and event-timeline light
+  clips reference one by id via a new `LightEffect.FxId` and `Type == "fx"`, resolved to a materialized "custom"
+  effect at apply time in `SceneLightApplier` / `EventTimelineRunner` (once per activation, not per engine tick;
+  a missing FX warns and degrades to a static light — `EffectEngine` is untouched). `/lightfx/*`
+  ([LightFxEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/LightFxEndpoints.cs)) covers `list`, put/delete and a
+  bounded `{id}/test` + `test/stop` (the `LightFxTester` singleton previews an FX as an `EffectEngine` group for
+  a window, then restores via `SceneLightApplier.RestoreLightsAsync`). **Deleting an FX detaches it**: every
+  referencing scene light / timeline clip is rewritten in place to embed a "custom" copy of the keyframes (like
+  the sound-delete scrub), so nothing dangles. Like `/screens`, there is deliberately no `GET /lightfx/{id}` and
+  nothing at the bare `/lightfx` path; the panel's Effects pages live at `/effects` and `/effects/{id}` and read
+  the library from `/lightfx/list`.
 - **`ScreenStore`** — persistence for **screens** (`Screen`, [Screen.cs](src/RpgSceneMaker.Api/Models/Screen.cs)):
   named boards of *shortcut tiles* (`ScreenTile` = a `Kind` of scene/event/sound/music/light-reset, a `Ref`
   — the entity id, or a Spotify URI for music — and a `Label`) that group existing entities onto one
@@ -135,7 +147,8 @@ Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.jso
 [AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
 as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`), `Events`
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
-`Tiles` JSON column; ids `NOCASE`) and a
+`Tiles` JSON column; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
+`NOCASE`) and a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 

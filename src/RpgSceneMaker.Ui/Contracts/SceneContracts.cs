@@ -6,7 +6,7 @@ public record SceneDto(string Id, string Name, LightDto? Light, List<SceneLightD
 public record LightDto(bool? Power, string? Color, int? Brightness, int? Temperature);
 public record SceneLightDto(string LightKey, bool? Power, int? Brightness, string? Color, int? Temperature, EffectDto? Effect);
 public record EffectDto(string Type, int Speed, int Intensity, List<string>? Colors,
-    List<KeyframeDto>? Keyframes = null, bool Loop = false, int? CycleMs = null);
+    List<KeyframeDto>? Keyframes = null, bool Loop = false, int? CycleMs = null, string? FxId = null);
 // One keyframe of a "custom" effect: a light state at a ms offset, with an optional Hue transition.
 public record KeyframeDto(int AtMs, bool? Power, string? Color, int? Brightness, int? Temperature, int? TransitionMs);
 public record MusicDto(string? PlayId, double? Volume, bool Pause);
