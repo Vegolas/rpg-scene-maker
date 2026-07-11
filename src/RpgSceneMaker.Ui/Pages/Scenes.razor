@@ -61,12 +61,26 @@ else
     {
         await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         await RefreshAsync();
-        _timer = new Timer(_ => _ = InvokeAsync(PollActiveAsync), null, 4000, 4000);
+        // Re-fetch the grid too (not just the active highlight) so edits made elsewhere —
+        // e.g. tile art uploaded from another device, or this always-on panel left open —
+        // surface without a manual reload.
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 4000, 4000);
     }
 
     private async Task RefreshAsync()
     {
         _scenes = await Api.GetScenesAsync();
+        await PollActiveAsync();
+    }
+
+    // Background refresh. Blazor diffs the grid in place, so unchanged tiles don't
+    // re-animate and a freshly-uploaded image just swaps into its tile.
+    private async Task PollAsync()
+    {
+        var scenes = await Api.GetScenesAsync();
+        // Ignore a transient empty result (fetch failure → []) so a blip can't blank a populated grid.
+        if (scenes.Count > 0 || _scenes is not { Count: > 0 })
+            _scenes = scenes;
         await PollActiveAsync();
     }
 

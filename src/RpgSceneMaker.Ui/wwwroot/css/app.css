@@ -405,13 +405,15 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
     inset: 0;
     background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.15) 55%, rgba(0, 0, 0, 0.4));
 }
-.scene-card.art .scene-emoji,
 .scene-card.art .scene-name,
 .scene-card.art .screen-count {
     position: relative;
     z-index: 1;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
+/* With full-art present, the decorative emoji would sit dead-centre on top of the
+   image and fight it — hide it so the art is the tile's face; the name stays as a caption. */
+.scene-card.art .scene-emoji { display: none; }
 .scene-card.art .scene-name { color: #fff; }
 .scene-card.art .screen-count { color: rgba(255, 255, 255, 0.85); }
 /* keep the swatch bar and active/edit affordances above the art */
