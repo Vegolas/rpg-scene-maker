@@ -36,19 +36,32 @@ else
         <div class="scene-grid">
             @foreach (var (tile, index) in _tiles.Select((t, i) => (t, i)))
             {
-                var v = View(tile);
-                var hasArt = v.Image is not null;
-                <button class="scene-card @(v.Active ? "active" : "") @(v.Playing ? "playing" : "") @(v.Missing ? "missing" : "") @(_busyIndex == index ? "busy" : "") @(hasArt ? "art" : "")"
-                        style="animation-delay:@(index * 45)ms; --sc:@v.Color;@(hasArt ? $" --art:url('{v.Image}');" : "")"
-                        @onclick="() => Tap(tile, index)">
-                    @if (hasArt)
-                    {
-                        <span class="scene-art"></span>
-                    }
-                    <span class="scene-swatch"></span>
-                    <span class="scene-emoji">@v.Emoji</span>
-                    <span class="scene-name">@v.Label</span>
-                </button>
+                @if (tile.Kind == "break")
+                {
+                    var titled = !string.IsNullOrWhiteSpace(tile.Label);
+                    <div class="grid-break @(titled ? "titled" : "")">
+                        @if (titled)
+                        {
+                            <span>@tile.Label</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    var v = View(tile);
+                    var hasArt = v.Image is not null;
+                    <button class="scene-card @(v.Active ? "active" : "") @(v.Playing ? "playing" : "") @(v.Missing ? "missing" : "") @(_busyIndex == index ? "busy" : "") @(hasArt ? "art" : "")"
+                            style="animation-delay:@(index * 45)ms; --sc:@v.Color;@(hasArt ? $" --art:url('{v.Image}');" : "")"
+                            @onclick="() => Tap(tile, index)">
+                        @if (hasArt)
+                        {
+                            <span class="scene-art"></span>
+                        }
+                        <span class="scene-swatch"></span>
+                        <span class="scene-emoji">@v.Emoji</span>
+                        <span class="scene-name">@v.Label</span>
+                    </button>
+                }
             }
         </div>
         <p class="hint" style="margin-top:1rem">Tap a shortcut to fire it. ✎ Arrange to add, reorder or remove.</p>

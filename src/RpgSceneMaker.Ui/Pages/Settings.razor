@@ -280,6 +280,14 @@ else
             </div>
         }
     </div>
+    <RuneHeading>Menu</RuneHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">Long-press a tab in the bottom bar and drag it sideways to reorder the menu. The order is saved on this device.</p>
+        <div class="btn-row" style="margin-top:0.6rem">
+            <button class="btn" @onclick="ResetMenuOrder" disabled="@(Ui.TabOrder.Count == 0)">Reset to default order</button>
+        </div>
+    </div>
+
     <RuneHeading>This Device</RuneHeading>
     <div class="panel">
         <div class="field">
@@ -530,6 +538,12 @@ else
     {
         await Api.SetApiKeyAsync(_apiKeyInput);
         Ui.ReportOk("API key saved on this device");
+    }
+
+    private async Task ResetMenuOrder()
+    {
+        await Api.ClearTabOrderAsync();
+        Ui.ReportOk("Menu order reset");
     }
 
     private async Task ToggleDevMode()
