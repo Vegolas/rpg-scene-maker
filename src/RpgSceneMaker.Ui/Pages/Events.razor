@@ -2,98 +2,11 @@
 @implements IDisposable
 @inject ApiClient Api
 @inject UiState Ui
+@inject ViewTransition Vt
 
 <PageTitle>Scene Maker — Events</PageTitle>
 
 <RuneHeading>Events</RuneHeading>
-
-@if (_edit is not null)
-{
-    <div class="panel">
-        <div class="emoji-row">
-            @foreach (var e in Palette.Emojis)
-            {
-                <button class="emoji-pick @(e == _emoji ? "picked" : "")" @onclick="() => ToggleEmoji(e)">@e</button>
-            }
-        </div>
-        <div class="field" style="margin-top:1rem;margin-bottom:0">
-            <label for="evt-label">Name</label>
-            <input id="evt-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty"
-                   placeholder="e.g. Thunder" />
-        </div>
-        <p class="hint" style="margin-top:0.6rem">
-            @if (_isNew)
-            {
-                <span>Stream Deck URL: <code>/events/@(CurrentId is { Length: > 0 } cid ? cid : "…")/trigger</code></span>
-            }
-            else
-            {
-                <span>Id: <code>@_edit.Id</code> (fixed) — <code>/events/@_edit.Id/trigger</code></span>
-            }
-        </p>
-        <ArtField @bind-Image="_edit.Image" />
-    </div>
-
-    <RuneHeading>Timeline</RuneHeading>
-    <div class="panel">
-        <p class="hint" style="margin-top:0">
-            Lay sound and light clips along the time axis. Drag a clip to move it, drag its right edge to resize,
-            tap it to edit below. Lights flash then restore the live scene; sounds overlay whatever's playing.
-        </p>
-        <TimelineEditor Model="_edit.Timeline" Sounds="_sounds" Lights="_lights" />
-    </div>
-
-    <RuneHeading>When it ends</RuneHeading>
-    <div class="panel">
-        <Segmented TValue="string" Options="AfterOptions" Value="_edit.After.Mode" ValueChanged="m => _edit.After.Mode = m" />
-        @if (_edit.After.Mode == "scene")
-        {
-            <div class="field" style="margin-top:1rem;margin-bottom:0">
-                <label for="evt-after-scene">Scene to activate</label>
-                <select id="evt-after-scene" value="@(_edit.After.SceneId ?? "")"
-                        @onchange="e => _edit.After.SceneId = (e.Value?.ToString() is { Length: > 0 } v ? v : null)">
-                    <option value="">— pick a scene —</option>
-                    @foreach (var s in _scenes)
-                    {
-                        <option value="@s.Id">@s.Name</option>
-                    }
-                    @if (_edit.After.SceneId is { Length: > 0 } sid && !_scenes.Any(s => string.Equals(s.Id, sid, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        <option value="@sid">@sid (missing)</option>
-                    }
-                </select>
-            </div>
-            <p class="hint" style="margin-top:0.6rem">Fully activates that scene — lights <em>and</em> music — when the event finishes.</p>
-        }
-        else if (_edit.After.Mode == "default")
-        {
-            <p class="hint" style="margin-top:0.8rem">Resets the lights to the configured default when the event finishes (music is left playing).</p>
-        }
-        else
-        {
-            <p class="hint" style="margin-top:0.8rem">Returns to whatever was showing before — the live scene, or the default light.</p>
-        }
-    </div>
-
-    <RuneHeading>Save</RuneHeading>
-    <div class="btn-row">
-        <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
-        <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
-        @if (!_isNew && _runningId == _edit.Id)
-        {
-            <button class="btn danger" @onclick="Stop" disabled="@_busy">⏹ Stop</button>
-        }
-        <button class="btn" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
-    </div>
-    @if (!_isNew)
-    {
-        <div class="btn-row" style="margin-top:0.7rem">
-            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
-                @(_confirmDelete ? "Really delete?" : "Delete event")
-            </button>
-        </div>
-    }
-}
 
 @if (_events is null)
 {
@@ -101,7 +14,7 @@
 }
 else
 {
-    @if (_edit is null && _events.Count == 0)
+    @if (_events.Count == 0)
     {
         <p class="empty-note">No events yet — conjure a thunderclap or a horn blast below.</p>
     }
@@ -121,7 +34,7 @@ else
                 }
                 <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit event"
-                      @onclick="() => Edit(evt)" @onclick:stopPropagation="true">✎</span>
+                      @onclick="() => Edit(evt.Id)" @onclick:stopPropagation="true">✎</span>
                 @if (running)
                 {
                     <span class="card-stop" role="button" tabindex="0" aria-label="Stop event"
@@ -144,45 +57,21 @@ else
 
 @code {
     private List<EventDto>? _events;
-    private List<SoundDto> _sounds = [];
-    private List<RegisteredLightInfo> _lights = [];
-    private List<SceneDto> _scenes = [];
-
-    // Endings offered in the "When it ends" segmented control.
-    private static readonly (string, string)[] AfterOptions =
-        [("previous", "Return to previous"), ("scene", "Go to scene"), ("default", "Default lights")];
     private string? _busyId;
     private string? _runningId;
     private Timer? _timer;
 
-    // Editor state (inline, one at a time). _edit non-null = editor open.
-    private EventEdit? _edit;
-    private bool _isNew;
-    private bool _busy;
-    private bool _confirmDelete;
-    private string _emoji = "";
-    private string _label = "";
-
     protected override async Task OnInitializedAsync()
     {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
         await RefreshAsync();
-        await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
     }
 
     private async Task RefreshAsync()
     {
-        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
-        var eventsTask = Api.GetEventsAsync();
-        var soundsTask = Api.GetSoundsAsync();
-        var lightsTask = Api.GetRegisteredLightsAsync();
-        var scenesTask = Api.GetScenesAsync();
-        await Task.WhenAll(eventsTask, soundsTask, lightsTask, scenesTask);
-        _events = await eventsTask;
-        _sounds = await soundsTask;
-        _lights = await lightsTask;
-        _scenes = await scenesTask;
-        StateHasChanged();
+        _events = await Api.GetEventsAsync();
+        await PollAsync();
     }
 
     private async Task PollAsync()
@@ -232,139 +121,9 @@ else
         }
     }
 
-    private void NewEvent()
-    {
-        _isNew = true;
-        _emoji = "";
-        _label = "";
-        _edit = new EventEdit();
-        _confirmDelete = false;
-    }
+    private Task NewEvent() => Vt.NavigateAsync("events/editor");
 
-    private void Edit(EventDto evt)
-    {
-        _isNew = false;
-        (_emoji, _label) = SceneNaming.SplitName(evt.Name);
-        _edit = EventEdit.FromDto(evt, _sounds);
-        _confirmDelete = false;
-    }
-
-    private void CancelEdit()
-    {
-        _edit = null;
-        _confirmDelete = false;
-    }
-
-    private void ToggleEmoji(string e) => _emoji = _emoji == e ? "" : e;
-
-    private string ComposedName =>
-        string.IsNullOrEmpty(_emoji) ? _label.Trim() : $"{_emoji} {_label.Trim()}";
-
-    // On create the id follows the label; on edit it's fixed.
-    private string CurrentId => _isNew
-        ? SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _events?.Select(e => e.Id).ToList() ?? [])
-        : _edit!.Id;
-
-    private async Task Save(bool test)
-    {
-        if (_edit is null) return;
-        if (string.IsNullOrWhiteSpace(_label))
-        {
-            Ui.ReportError("Give the event a name first.");
-            return;
-        }
-        if (_edit.Timeline.IsEmpty)
-        {
-            Ui.ReportError("An event needs at least one sound or light clip.");
-            return;
-        }
-        if (_edit.Timeline.EndMs > TimelineEdit.MaxEndMs)
-        {
-            Ui.ReportError("The timeline must end within 10 minutes.");
-            return;
-        }
-        // Drift needs at least two palette colours — catch it before the server 400s.
-        var badDrift = _edit.Timeline.Lights.FirstOrDefault(l =>
-            l.Mode is "color" or "white" && l.Effect.Type == "drift" && l.Effect.Colors.Count < 2);
-        if (badDrift is not null)
-        {
-            Ui.ReportError("A Drift effect needs at least 2 colors.");
-            return;
-        }
-        if (_edit.After.Mode == "scene" && string.IsNullOrWhiteSpace(_edit.After.SceneId))
-        {
-            Ui.ReportError("Pick a scene to go to when the event ends, or choose another ending.");
-            return;
-        }
-
-        var id = CurrentId;
-        if (string.IsNullOrEmpty(id))
-        {
-            Ui.ReportError("Couldn't derive an id from that name — use some letters or digits.");
-            return;
-        }
-
-        _edit.Id = id;
-        _edit.Name = ComposedName;
-
-        _busy = true;
-        try
-        {
-            var (_, error) = await Api.SaveEventAsync(id, _edit);
-            if (error is not null)
-            {
-                Ui.ReportError(error);
-                return;
-            }
-            await RefreshAsync();
-
-            if (test)
-            {
-                // Keep editing the saved event (no longer "new") so a follow-up save updates it.
-                _isNew = false;
-                _edit.Id = id;
-                var result = await Api.TriggerEventAsync(id);
-                if (result is null) return;
-                if (result.FullySucceeded)
-                    Ui.ReportOk($"Saved — event \"{id}\" fired");
-                else
-                    Ui.ReportError($"Saved, but partially fired. {result.ProblemSummary()}");
-                await PollAsync();
-            }
-            else
-            {
-                Ui.ReportOk($"Saved event \"{id}\"");
-                CancelEdit();
-            }
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task DeleteTapped()
-    {
-        if (!_confirmDelete) { _confirmDelete = true; return; }
-        if (_edit is null) return;
-
-        _busy = true;
-        try
-        {
-            var (ok, error) = await Api.DeleteEventAsync(_edit.Id);
-            if (ok)
-            {
-                Ui.ReportOk($"Deleted event \"{_edit.Id}\"");
-                await RefreshAsync();
-                CancelEdit();
-            }
-            else
-            {
-                Ui.ReportError(error ?? "Delete failed.");
-            }
-        }
-        finally { _busy = false; }
-    }
+    private Task Edit(string id) => Vt.NavigateAsync($"events/editor/{id}");
 
     public void Dispose() => _timer?.Dispose();
 }

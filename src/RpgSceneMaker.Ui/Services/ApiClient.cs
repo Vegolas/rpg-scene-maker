@@ -342,6 +342,8 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     public async Task<List<EventDto>> GetEventsAsync() =>
         await GetAsync<List<EventDto>>("events/list") ?? [];
 
+    public Task<EventDto?> GetEventAsync(string id) => GetAsync<EventDto?>($"events/{Uri.EscapeDataString(id)}");
+
     /// <summary>Upsert an event; the editor shows the returned error inline / via toast.</summary>
     public Task<(EventDto? Result, string? Error)> SaveEventAsync(string id, EventEdit edit) =>
         FetchAsync<EventDto>(HttpMethod.Put, $"events/{Uri.EscapeDataString(id)}", edit.ToDto());

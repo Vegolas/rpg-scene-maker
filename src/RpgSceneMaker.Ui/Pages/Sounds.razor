@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject ApiClient Api
 @inject UiState Ui
+@inject ViewTransition Vt
 
 <PageTitle>Scene Maker — Sounds</PageTitle>
 
@@ -23,37 +24,6 @@
         </p>
     </div>
 </div>
-
-@if (_editing is not null && _edit is not null)
-{
-    <RuneHeading>Edit Sound</RuneHeading>
-    <div class="panel">
-        <div class="field">
-            <label for="snd-name">Name</label>
-            <input id="snd-name" type="text" value="@_edit.Name" @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
-        </div>
-        <div class="field" style="margin-bottom:0">
-            <label for="snd-cat">Category</label>
-            <input id="snd-cat" type="text" value="@_edit.Category" @oninput="e => _edit.Category = e.Value?.ToString() ?? string.Empty"
-                   placeholder="e.g. Ambience, Combat" />
-        </div>
-        <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" @bind-Value="_edit.VolumePercent" AriaLabel="Volume" />
-        <div class="chip-row">
-            <Chip On="_edit.Loop" OnClick="() => _edit.Loop = !_edit.Loop">🔁 Loop</Chip>
-        </div>
-        <ArtField @bind-Image="_edit.Image" />
-        <div class="btn-row" style="margin-top:1rem">
-            <button class="btn primary" @onclick="SaveEdit" disabled="@_busy">Save</button>
-            <button class="btn" @onclick="Preview" disabled="@_busy">▶ Preview</button>
-            <button class="btn" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
-        </div>
-        <div class="btn-row" style="margin-top:0.7rem">
-            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
-                @(_confirmDelete ? "Really delete?" : "Delete sound")
-            </button>
-        </div>
-    </div>
-}
 
 @if (_sounds is null)
 {
@@ -89,7 +59,7 @@ else
                         <span class="scene-art"></span>
                     }
                     <span class="card-edit" role="button" tabindex="0" aria-label="Edit sound"
-                          @onclick="() => Edit(sound)" @onclick:stopPropagation="true">✎</span>
+                          @onclick="() => Edit(sound.Id)" @onclick:stopPropagation="true">✎</span>
                     <span class="krow-ico">@(isPlaying ? "⏹" : sound.Loop ? "🔁" : "🔊")</span>
                     <span class="krow-title">@sound.Name</span>
                 </button>
@@ -104,12 +74,8 @@ else
     private HashSet<string> _playing = [];
     private Timer? _timer;
 
-    private SoundDto? _editing;
-    private SoundEdit? _edit;
-    private bool _busy;
     private bool _uploading;
     private string _uploadName = "";
-    private bool _confirmDelete;
 
     protected override async Task OnInitializedAsync()
     {
@@ -167,7 +133,8 @@ else
             {
                 Ui.ReportOk($"Imported \"{result.Name}\"");
                 await RefreshAsync();
-                Edit(result); // open the editor so category / volume / loop can be set right away
+                // Open the editor so category / volume / loop can be set right away.
+                await Vt.NavigateAsync($"sounds/editor/{result.Id}");
             }
             else
             {
@@ -182,86 +149,7 @@ else
         }
     }
 
-    private void Edit(SoundDto sound)
-    {
-        _editing = sound;
-        _edit = new SoundEdit
-        {
-            Name = sound.Name,
-            Category = sound.Category,
-            VolumePercent = (int)Math.Round(sound.Volume * 100),
-            Loop = sound.Loop,
-            Image = sound.Image,
-        };
-        _confirmDelete = false;
-    }
-
-    private void CancelEdit()
-    {
-        _editing = null;
-        _edit = null;
-        _confirmDelete = false;
-    }
-
-    private async Task SaveEdit()
-    {
-        if (_editing is null || _edit is null) return;
-        if (string.IsNullOrWhiteSpace(_edit.Name))
-        {
-            Ui.ReportError("Give the sound a name.");
-            return;
-        }
-
-        _busy = true;
-        try
-        {
-            var (result, error) = await Api.UpdateSoundAsync(
-                _editing.Id, _edit.Name.Trim(), _edit.Category.Trim(), _edit.VolumePercent / 100.0, _edit.Loop, _edit.Image);
-            if (result is not null)
-            {
-                Ui.ReportOk($"Saved \"{result.Name}\"");
-                await RefreshAsync();
-                CancelEdit();
-            }
-            else
-            {
-                Ui.ReportError(error ?? "Save failed.");
-            }
-        }
-        finally { _busy = false; }
-    }
-
-    // Audition at the (unsaved) edited volume so it can be dialled in before saving.
-    private Task Preview()
-    {
-        if (_editing is null || _edit is null) return Task.CompletedTask;
-        var volume = (_edit.VolumePercent / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return Api.CommandAsync($"sounds/{Uri.EscapeDataString(_editing.Id)}/play?volume={volume}");
-    }
-
-    private async Task DeleteTapped()
-    {
-        if (!_confirmDelete) { _confirmDelete = true; return; }
-        if (_editing is null) return;
-
-        _busy = true;
-        try
-        {
-            var (ok, error) = await Api.DeleteSoundAsync(_editing.Id);
-            if (ok)
-            {
-                Ui.ReportOk("Sound deleted");
-                _playing.Remove(_editing.Id);
-                await RefreshAsync();
-                CancelEdit();
-            }
-            else
-            {
-                Ui.ReportError(error ?? "Delete failed.");
-            }
-        }
-        finally { _busy = false; }
-    }
+    private Task Edit(string id) => Vt.NavigateAsync($"sounds/editor/{id}");
 
     public void Dispose() => _timer?.Dispose();
 }
