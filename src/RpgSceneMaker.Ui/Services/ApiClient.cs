@@ -377,6 +377,32 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
+    /// <summary>Id of the timeline event currently playing (null when none); silent on failure like other pollers.</summary>
+    public async Task<string?> GetRunningEventIdAsync() =>
+        (await GetAsync<EventStateDto>("events/state"))?.RunningId;
+
+    /// <summary>Stop the currently-playing timeline event. Returns true when something was actually stopped.</summary>
+    public async Task<bool> StopEventAsync()
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, "events/stop");
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+            {
+                ui.ReportError(await ExtractProblemAsync(response));
+                return false;
+            }
+            var result = await response.Content.ReadFromJsonAsync<EventStopDto>(Json);
+            return result?.Stopped ?? false;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return false;
+        }
+    }
+
     // ---------- screens (shortcut boards) ----------
 
     public async Task<List<ScreenDto>> GetScreensAsync() =>

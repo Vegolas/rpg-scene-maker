@@ -1,0 +1,497 @@
+@* Video-editor-style timeline for an event: sound clips + light clips laid out along a shared time
+   axis. Drag a clip body to move, drag its right edge to resize, tap to select and edit below.
+   Fully pointer-driven (mouse + iPad touch) via wwwroot/js/timeline.js. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="tl-toolbar">
+    <div class="tl-zoom">
+        <button class="btn small" @onclick="ZoomOut" disabled="@(_pps <= MinPps)" aria-label="Zoom out">➖</button>
+        <button class="btn small" @onclick="ZoomIn" disabled="@(_pps >= MaxPps)" aria-label="Zoom in">➕</button>
+        <button class="btn small" @onclick="FitAsync">Fit</button>
+    </div>
+    <span class="tl-total">@FormatSeconds(Model.EndMs) total@(OverLimit ? " ⚠ over 10 min" : "")</span>
+</div>
+
+<div class="tl-root" data-pps="@_pps" @ref="_rootEl">
+    <div class="tl-scroll">
+        <div class="tl-inner" style="width:@(WidthPx)px">
+            @* time ruler *@
+            <div class="tl-ruler">
+                @foreach (var t in Ticks())
+                {
+                    <div class="tl-tick" style="left:@(Px(t * 1000))px">
+                        <span class="tl-tick-label">@t s</span>
+                    </div>
+                }
+            </div>
+
+            @* --- sounds --- *@
+            <div class="tl-group-label">🔊 Sounds</div>
+            @if (Model.Sounds.Count == 0)
+            {
+                <div class="tl-lane empty"><span class="tl-lane-empty">No sound clips — add one below.</span></div>
+            }
+            else
+            {
+                @foreach (var s in Model.Sounds)
+                {
+                    var w = SoundDisplayMs(s);
+                    <div class="tl-lane">
+                        <div class="tl-clip sound @(IsSelected("sound", s.Uid) ? "sel" : "")"
+                             data-clip-kind="sound" data-clip-id="@s.Uid"
+                             style="left:@(Px(s.StartMs))px;width:@(Px(w))px"
+                             title="@SoundName(s.SoundId)">
+                            <span class="tl-clip-label">@SoundName(s.SoundId)</span>
+                            <span class="tl-clip-time">@SoundClipTimeLabel(s, w)</span>
+                            <span class="tl-resize" aria-label="Resize clip"></span>
+                        </div>
+                    </div>
+                }
+            }
+
+            @* --- lights --- *@
+            <div class="tl-group-label">💡 Lights</div>
+            @if (Model.Lights.Count == 0)
+            {
+                <div class="tl-lane empty"><span class="tl-lane-empty">No light clips — add one below.</span></div>
+            }
+            else
+            {
+                @foreach (var l in Model.Lights)
+                {
+                    <div class="tl-lane">
+                        <div class="tl-clip light @(IsSelected("light", l.Uid) ? "sel" : "")"
+                             data-clip-kind="light" data-clip-id="@l.Uid"
+                             style="left:@(Px(l.StartMs))px;width:@(Px(l.DurationMs))px;--clip:@ClipTint(l)"
+                             title="@LightName(l.LightKey)">
+                            <span class="tl-clip-swatch"></span>
+                            <span class="tl-clip-label">@LightName(l.LightKey)</span>
+                            <span class="tl-clip-time">@ClipTimeLabel(l.StartMs, l.DurationMs, false)</span>
+                            <span class="tl-resize" aria-label="Resize clip"></span>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<div class="btn-row" style="margin-top:0.8rem">
+    <button class="btn small" @onclick="ToggleSoundPicker">＋ Add sound</button>
+    <button class="btn small" @onclick="AddLight">＋ Add light</button>
+</div>
+
+@if (_soundPickerOpen)
+{
+    <div class="panel" style="margin-top:0.8rem">
+        @if (Sounds.Count == 0)
+        {
+            <p class="hint" style="margin:0">No sounds imported yet. Add some on the <a href="sounds">Sounds</a> tab first.</p>
+        }
+        else
+        {
+            @foreach (var group in Sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+            {
+                <p class="kgroup-title">@group.Key</p>
+                <div class="klist">
+                    @foreach (var sound in group)
+                    {
+                        <KRow Icon="@(sound.Loop ? "🔁" : "🔊")" Title="@sound.Name"
+                              Hint="@(sound.NaturalMs is { } d ? FormatSeconds(d) : "unknown length")"
+                              OnClick="() => AddSound(sound)" />
+                    }
+                </div>
+            }
+        }
+    </div>
+}
+
+@* ---------- inspector for the selected clip ---------- *@
+@if (SelectedSound is { } sc)
+{
+    <div class="panel tl-inspector">
+        <div class="tl-insp-head">
+            <span class="tl-insp-title">🔊 @SoundName(sc.SoundId)</span>
+            <button class="btn small danger" @onclick="() => DeleteSound(sc)">Delete clip</button>
+        </div>
+
+        @{
+            var natural = SoundNatural(sc.SoundId);
+            var isLoop = SoundLoop(sc.SoundId);
+        }
+
+        <div class="tl-insp-row">
+            <label>Start</label>
+            <input type="number" min="0" step="0.1" value="@Sec(sc.StartMs)" @onchange="e => SetStart(sc, e)" /> <span class="tl-unit">s</span>
+        </div>
+        <div class="tl-insp-row">
+            <label>Duration</label>
+            @if (sc.DurationMs is { } d)
+            {
+                <input type="number" min="0.1" step="0.1" value="@Sec(d)" @onchange="e => SetSoundDuration(sc, e)" /> <span class="tl-unit">s</span>
+            }
+            else if (isLoop)
+            {
+                <span class="tl-unit">🔁 until stopped</span>
+            }
+            else
+            {
+                <span class="tl-unit">natural@(natural is { } n ? $" (~{FormatSeconds(n)})" : "")</span>
+            }
+        </div>
+
+        <div class="chip-row">
+            <Chip On="sc.DurationMs is null" OnClick="() => ToggleNatural(sc)">@(isLoop ? "Loop until stopped" : "Play to natural end")</Chip>
+            <Chip On="sc.Volume is not null" OnClick="() => ToggleSoundVolume(sc)">Set volume</Chip>
+        </div>
+        @if (sc.Volume is not null)
+        {
+            <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" Value="@VolPct(sc)" ValueChanged="v => SetSoundVolume(sc, v)" AriaLabel="Clip volume" />
+        }
+
+        @if (sc.DurationMs is { } dur && natural is { } nat && !isLoop && dur < nat)
+        {
+            <p class="hint" style="margin-top:0.6rem">✂ Cut short: plays @FormatSeconds(dur) of the sound's ~@FormatSeconds(nat).</p>
+        }
+        else if (sc.DurationMs is { } dl && isLoop)
+        {
+            <p class="hint" style="margin-top:0.6rem">🔁 Looping sound — repeats to fill @FormatSeconds(dl).</p>
+        }
+        else if (sc.DurationMs is null && isLoop)
+        {
+            <p class="hint" style="margin-top:0.6rem">🔁 Loops until the event is stopped.</p>
+        }
+        @if (!SoundKnown(sc.SoundId))
+        {
+            <p class="hint" style="margin-top:0.6rem">⚠️ This sound is no longer in your library.</p>
+        }
+    </div>
+}
+else if (SelectedLight is { } lc)
+{
+    <div class="panel tl-inspector">
+        <div class="tl-insp-head">
+            <span class="tl-insp-title">💡 @LightName(lc.LightKey)</span>
+            <button class="btn small danger" @onclick="() => DeleteLight(lc)">Delete clip</button>
+        </div>
+
+        <div class="field" style="margin-bottom:0.8rem">
+            <label for="tl-lightpick">Light</label>
+            <select id="tl-lightpick" value="@(lc.LightKey ?? "")" @onchange="e => SetLightKey(lc, e)">
+                <option value="">All lights</option>
+                @foreach (var reg in Lights)
+                {
+                    <option value="@reg.Key">@reg.Name</option>
+                }
+                @if (lc.LightKey is { Length: > 0 } lk && !Lights.Any(r => string.Equals(r.Key, lk, StringComparison.OrdinalIgnoreCase)))
+                {
+                    <option value="@lk">@lk (unknown light)</option>
+                }
+            </select>
+        </div>
+
+        <Segmented TValue="string" Options="ModeOptions" Value="lc.Mode" ValueChanged="m => lc.Mode = m" />
+
+        @if (lc.Mode == "color")
+        {
+            <SwatchGrid Selected="lc.Color" OnPick="hex => lc.Color = hex" Style="margin-top:1rem" />
+            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
+        }
+        else if (lc.Mode == "white")
+        {
+            <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="lc.Temperature" AriaLabel="Color temperature" />
+            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0.8rem">This clip switches the light off for its window.</p>
+        }
+
+        @if (lc.Mode is "color" or "white")
+        {
+            <p class="kgroup-title">Effect</p>
+            <div class="chip-row">
+                @foreach (var (type, label) in Palette.Effects)
+                {
+                    <Chip On="lc.Effect.Type == type" OnClick="() => lc.Effect.Type = type">@label</Chip>
+                }
+            </div>
+            @if (lc.Effect.Type != "none")
+            {
+                <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="lc.Effect.Speed" AriaLabel="Speed" />
+                <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="lc.Effect.Intensity" AriaLabel="Intensity" />
+                @if (lc.Effect.Type == "drift")
+                {
+                    <p class="hint" style="margin-top:0.6rem">Tap colors to build a palette (2–4). Drift blends between them.</p>
+                    @if (lc.Effect.Colors.Count > 0)
+                    {
+                        <div class="palette-chips">
+                            @foreach (var c in lc.Effect.Colors)
+                            {
+                                <span class="pal-chip">
+                                    <span class="pal-dot" style="background:@c"></span>@c.ToUpperInvariant()
+                                    <button class="pal-x" aria-label="Remove color" @onclick="() => lc.Effect.Colors.Remove(c)">✕</button>
+                                </span>
+                            }
+                        </div>
+                    }
+                    <SwatchGrid Selected="null" ShowCustom="false" OnPick="hex => AddDriftColor(lc, hex)" Style="margin-top:0.6rem" />
+                }
+            }
+        }
+
+        <div class="tl-insp-row" style="margin-top:1rem">
+            <label>Start</label>
+            <input type="number" min="0" step="0.1" value="@Sec(lc.StartMs)" @onchange="e => SetStart(lc, e)" /> <span class="tl-unit">s</span>
+        </div>
+        <div class="tl-insp-row">
+            <label>Duration</label>
+            <input type="number" min="0.1" step="0.1" value="@Sec(lc.DurationMs)" @onchange="e => SetLightDuration(lc, e)" /> <span class="tl-unit">s</span>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public TimelineEdit Model { get; set; } = new();
+    [Parameter] public IReadOnlyList<SoundDto> Sounds { get; set; } = [];
+    [Parameter] public IReadOnlyList<RegisteredLightInfo> Lights { get; set; } = [];
+
+    private const int MinPps = 10;
+    private const int MaxPps = 240;
+    private const int SnapMs = 100;
+    private const int DefaultSoundMs = 2000;
+
+    private static readonly (string, string)[] ModeOptions = [("color", "Color"), ("white", "White"), ("off", "Off")];
+
+    private ElementReference _rootEl;
+    private DotNetObjectReference<TimelineEditor>? _selfRef;
+
+    private int _pps = 60;
+    private bool _soundPickerOpen;
+
+    private string? _selKind;
+    private string? _selUid;
+
+    // ---------- geometry ----------
+
+    private int TotalMs => Math.Min(TimelineEdit.MaxEndMs, Math.Max(Model.EndMs + 3000, 12000));
+    private int WidthPx => (int)Math.Round(TotalMs / 1000.0 * _pps);
+    private bool OverLimit => Model.EndMs > TimelineEdit.MaxEndMs;
+
+    private int Px(int ms) => (int)Math.Round(ms / 1000.0 * _pps);
+
+    private IEnumerable<int> Ticks()
+    {
+        var step = _pps >= 80 ? 1 : _pps >= 40 ? 2 : _pps >= 20 ? 5 : 10;
+        var last = (int)Math.Ceiling(TotalMs / 1000.0);
+        for (var t = 0; t <= last; t += step)
+            yield return t;
+    }
+
+    // Width a sound clip occupies on screen: its explicit duration; else, for an open-ended clip, a fixed
+    // width for a "until stopped" loop, or the file's natural length for a one-shot; else a default.
+    private int SoundDisplayMs(TimelineSoundEdit s)
+    {
+        if (s.DurationMs is { } d) return d;
+        if (SoundLoop(s.SoundId)) return DefaultSoundMs;
+        return SoundNatural(s.SoundId) ?? DefaultSoundMs;
+    }
+
+    // Time caption on a sound clip: explicit window, "🔁 until stopped" for an open-ended loop, else "→end".
+    private string SoundClipTimeLabel(TimelineSoundEdit s, int displayMs)
+    {
+        if (s.DurationMs is { } d) return ClipTimeLabel(s.StartMs, d, false);
+        if (SoundLoop(s.SoundId)) return $"{Sec(s.StartMs)}s · 🔁 until stopped";
+        return ClipTimeLabel(s.StartMs, displayMs, true);
+    }
+
+    // ---------- lookups ----------
+
+    // Sound library keyed by id, rebuilt on parameter change so per-clip/per-render lookups are O(1).
+    private Dictionary<string, SoundDto> _soundsById = new(StringComparer.OrdinalIgnoreCase);
+
+    private SoundDto? Sound(string id) => _soundsById.GetValueOrDefault(id);
+    private bool SoundKnown(string id) => _soundsById.ContainsKey(id);
+    private string SoundName(string id) => Sound(id)?.Name ?? id;
+    private int? SoundNatural(string id) => Sound(id)?.NaturalMs;
+    private bool SoundLoop(string id) => Sound(id)?.Loop ?? false;
+
+    private string LightName(string? key) =>
+        string.IsNullOrWhiteSpace(key) ? "All lights"
+        : Lights.FirstOrDefault(r => string.Equals(r.Key, key, StringComparison.OrdinalIgnoreCase))?.Name ?? key;
+
+    private static string ClipTint(TimelineLightEdit l) => l.Mode switch
+    {
+        "color" => l.Color,
+        "white" => "#f0e6cf",
+        _ => "#5b5566",
+    };
+
+    // ---------- selection ----------
+
+    private bool IsSelected(string kind, string uid) => _selKind == kind && _selUid == uid;
+    private TimelineSoundEdit? SelectedSound => _selKind == "sound" ? Model.Sounds.FirstOrDefault(s => s.Uid == _selUid) : null;
+    private TimelineLightEdit? SelectedLight => _selKind == "light" ? Model.Lights.FirstOrDefault(l => l.Uid == _selUid) : null;
+
+    private void Select(string kind, string uid)
+    {
+        _selKind = kind;
+        _selUid = uid;
+    }
+
+    // ---------- JS interop ----------
+
+    protected override void OnParametersSet() =>
+        _soundsById = Sounds.ToDictionary(s => s.Id, s => s, StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("rpgTimeline.init", _rootEl, _selfRef);
+        }
+    }
+
+    // Called from timeline.js when a drag/resize gesture ends (deltaMs 0 = a tap → just select).
+    [JSInvokable]
+    public void OnClipDragEnd(string kind, string uid, string mode, int deltaMs)
+    {
+        Select(kind, uid);
+
+        if (deltaMs != 0)
+        {
+            if (kind == "sound" && Model.Sounds.FirstOrDefault(s => s.Uid == uid) is { } s)
+            {
+                if (mode == "move") s.StartMs = ClampStart(Snap(s.StartMs + deltaMs), SoundDisplayMs(s));
+                else ResizeSound(s, Snap(SoundDisplayMs(s) + deltaMs));
+            }
+            else if (kind == "light" && Model.Lights.FirstOrDefault(l => l.Uid == uid) is { } l)
+            {
+                if (mode == "move") l.StartMs = ClampStart(Snap(l.StartMs + deltaMs), l.DurationMs);
+                else l.DurationMs = ClampDuration(l.StartMs, Snap(l.DurationMs + deltaMs), TimelineEdit.MinClipMs);
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private static int Snap(int ms) => (int)Math.Round(ms / (double)SnapMs) * SnapMs;
+
+    // Keep a clip on the axis and its end within the 10-minute cap.
+    private static int ClampStart(int start, int durationMs)
+    {
+        start = Math.Max(0, start);
+        if (start + durationMs > TimelineEdit.MaxEndMs)
+            start = Math.Max(0, TimelineEdit.MaxEndMs - durationMs);
+        return start;
+    }
+
+    private static int ClampDuration(int start, int duration, int min)
+    {
+        duration = Math.Max(min, duration);
+        if (start + duration > TimelineEdit.MaxEndMs)
+            duration = TimelineEdit.MaxEndMs - start;
+        return Math.Max(min, duration);
+    }
+
+    // Resizing a sound makes its duration explicit; non-loop sounds cap at the file's natural length.
+    private void ResizeSound(TimelineSoundEdit s, int duration)
+    {
+        duration = ClampDuration(s.StartMs, duration, TimelineEdit.MinClipMs);
+        if (!SoundLoop(s.SoundId) && SoundNatural(s.SoundId) is { } natural && duration > natural)
+            duration = natural;
+        s.DurationMs = duration;
+    }
+
+    // ---------- zoom ----------
+
+    private void ZoomIn() => _pps = Math.Min(MaxPps, (int)Math.Round(_pps * 1.5));
+    private void ZoomOut() => _pps = Math.Max(MinPps, (int)Math.Round(_pps / 1.5));
+
+    private async Task FitAsync()
+    {
+        var vp = await JS.InvokeAsync<double>("rpgTimeline.viewportWidth", _rootEl);
+        var seconds = TotalMs / 1000.0;
+        if (vp > 0 && seconds > 0)
+            _pps = Math.Clamp((int)Math.Floor((vp - 8) / seconds), MinPps, MaxPps);
+    }
+
+    // ---------- add / remove clips ----------
+
+    private void ToggleSoundPicker() => _soundPickerOpen = !_soundPickerOpen;
+
+    private void AddSound(SoundDto sound)
+    {
+        var clip = new TimelineSoundEdit { SoundId = sound.Id, StartMs = 0, DurationMs = null, Volume = null };
+        Model.Sounds.Add(clip);
+        _soundPickerOpen = false;
+        Select("sound", clip.Uid);
+    }
+
+    private void AddLight()
+    {
+        var clip = new TimelineLightEdit { LightKey = null, StartMs = 0, DurationMs = 1000, Mode = "color", Color = "#ffffff", Brightness = 100 };
+        Model.Lights.Add(clip);
+        Select("light", clip.Uid);
+    }
+
+    private void DeleteSound(TimelineSoundEdit s)
+    {
+        Model.Sounds.Remove(s);
+        if (_selKind == "sound" && _selUid == s.Uid) { _selKind = null; _selUid = null; }
+    }
+
+    private void DeleteLight(TimelineLightEdit l)
+    {
+        Model.Lights.Remove(l);
+        if (_selKind == "light" && _selUid == l.Uid) { _selKind = null; _selUid = null; }
+    }
+
+    // ---------- inspector edits ----------
+
+    private void SetStart(TimelineSoundEdit s, ChangeEventArgs e) => s.StartMs = ClampStart(Snap(ParseMs(e)), SoundDisplayMs(s));
+    private void SetStart(TimelineLightEdit l, ChangeEventArgs e) => l.StartMs = ClampStart(Snap(ParseMs(e)), l.DurationMs);
+
+    private void SetSoundDuration(TimelineSoundEdit s, ChangeEventArgs e) => ResizeSound(s, Snap(ParseMs(e)));
+    private void SetLightDuration(TimelineLightEdit l, ChangeEventArgs e) => l.DurationMs = ClampDuration(l.StartMs, Snap(ParseMs(e)), TimelineEdit.MinClipMs);
+
+    private void ToggleNatural(TimelineSoundEdit s) =>
+        s.DurationMs = s.DurationMs is null ? (SoundNatural(s.SoundId) ?? DefaultSoundMs) : null;
+
+    private void ToggleSoundVolume(TimelineSoundEdit s) =>
+        s.Volume = s.Volume is null ? (Sound(s.SoundId)?.Volume ?? 1.0) : null;
+
+    private static int VolPct(TimelineSoundEdit s) => (int)Math.Round((s.Volume ?? 1.0) * 100);
+    private static void SetSoundVolume(TimelineSoundEdit s, int pct) => s.Volume = pct / 100.0;
+
+    private void SetLightKey(TimelineLightEdit l, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        l.LightKey = string.IsNullOrWhiteSpace(v) ? null : v;
+    }
+
+    private static void AddDriftColor(TimelineLightEdit l, string hex)
+    {
+        if (l.Effect.Colors.Count >= 4 || l.Effect.Colors.Any(c => c.Equals(hex, StringComparison.OrdinalIgnoreCase))) return;
+        l.Effect.Colors.Add(hex);
+    }
+
+    // ---------- formatting ----------
+
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+    private static string Sec(int ms) => (ms / 1000.0).ToString("0.##", Inv);
+    private static int ParseMs(ChangeEventArgs e) =>
+        double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, Inv, out var s) ? (int)Math.Round(s * 1000) : 0;
+    private static string FormatSeconds(int ms) => (ms / 1000.0).ToString("0.#", Inv) + "s";
+
+    private string ClipTimeLabel(int startMs, int durMs, bool natural) =>
+        $"{Sec(startMs)}s · {(natural ? "→end" : FormatSeconds(durMs))}";
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("rpgTimeline.dispose", _rootEl); } catch { }
+        _selfRef?.Dispose();
+    }
+}

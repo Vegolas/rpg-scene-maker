@@ -6,52 +6,77 @@ namespace RpgSceneMaker.Api.Services;
 public record EffectJob(ILightService Service, string? TargetId, bool IsHue, SceneLight Light);
 
 /// <summary>
-/// Runs light effects (flicker/glow/storm/drift) as background loops — one Task per light,
-/// all sharing a linked cancellation token. StartAsync replaces any running set; StopAll cancels it.
-/// Each loop is self-healing: it backs off on failure and gives up on a persistently unreachable light,
-/// and never crashes the app.
+/// Runs light effects (flicker/glow/storm/drift) as background loops — one Task per light. Loops are
+/// organized into independent <em>groups</em>, each with its own linked cancellation token:
+/// <see cref="StartAsync"/> replaces every group (scene-activation semantics — this set is the whole
+/// state); <see cref="StartGroupAsync"/> adds a group without disturbing the others (event-timeline
+/// clips) and returns a handle for <see cref="StopGroup"/>; <see cref="StopAll"/> cancels every group
+/// (reset-lights / a new scene taking over). Each loop is self-healing: it backs off on failure and
+/// gives up on a persistently unreachable light, and never crashes the app.
 /// </summary>
 public class EffectEngine(ILogger<EffectEngine> logger)
 {
     private const string WarmWhite = "#FF8C2A";
 
     private readonly Lock _lock = new();
-    private CancellationTokenSource? _cts;
-    private List<Task> _tasks = [];
+    private readonly Dictionary<Guid, Group> _groups = [];
 
+    private sealed record Group(CancellationTokenSource Cts, Task[] Tasks);
+
+    /// <summary>Stop every running group, then run <paramref name="jobs"/> as a fresh group — the scene
+    /// activation semantics (this set replaces the whole running state).</summary>
     public Task StartAsync(IReadOnlyList<EffectJob> jobs)
     {
         StopAll();
-        if (jobs.Count == 0) return Task.CompletedTask;
+        StartGroupAsync(jobs);
+        return Task.CompletedTask;
+    }
 
+    /// <summary>Run <paramref name="jobs"/> as an independent group without disturbing other groups.
+    /// Returns a handle for <see cref="StopGroup"/>; <see cref="Guid.Empty"/> when there are no jobs.</summary>
+    public Guid StartGroupAsync(IReadOnlyList<EffectJob> jobs)
+    {
+        if (jobs.Count == 0) return Guid.Empty;
+
+        var handle = Guid.NewGuid();
+        var cts = new CancellationTokenSource();
+        var token = cts.Token;
+        // Floor Hue command rate across this group's loops so the bridge isn't flooded (~8 cmd/sec).
+        var hueLoops = jobs.Count(j => j.IsHue);
+        var tasks = jobs.Select(job => Task.Run(() => RunLoopAsync(job, hueLoops, token), token)).ToArray();
+        lock (_lock)
+            _groups[handle] = new Group(cts, tasks);
+        return handle;
+    }
+
+    /// <summary>Stop and drain a single group (no-op for <see cref="Guid.Empty"/> or an already-stopped handle).</summary>
+    public void StopGroup(Guid handle)
+    {
+        Group? group;
         lock (_lock)
         {
-            _cts = new CancellationTokenSource();
-            var token = _cts.Token;
-            // Floor Hue command rate across all loops so the bridge isn't flooded (~8 cmd/sec total).
-            var hueLoops = jobs.Count(j => j.IsHue);
-            _tasks = jobs.Select(job => Task.Run(() => RunLoopAsync(job, hueLoops, token), token)).ToList();
+            if (!_groups.Remove(handle, out group)) return;
         }
-        return Task.CompletedTask;
+        Drain(group);
     }
 
     public void StopAll()
     {
-        CancellationTokenSource? cts;
-        Task[] tasks;
+        Group[] groups;
         lock (_lock)
         {
-            cts = _cts;
-            _cts = null;
-            tasks = [.. _tasks];
-            _tasks = [];
+            groups = [.. _groups.Values];
+            _groups.Clear();
         }
-        if (cts is null) return;
+        foreach (var group in groups) Drain(group);
+    }
 
-        try { cts.Cancel(); } catch (ObjectDisposedException) { }
+    private static void Drain(Group group)
+    {
+        try { group.Cts.Cancel(); } catch (ObjectDisposedException) { }
         // Don't block the request thread longer than ~2s waiting for loops to drain.
-        try { Task.WaitAll(tasks, TimeSpan.FromSeconds(2)); } catch { /* loops observe cancellation and exit */ }
-        cts.Dispose();
+        try { Task.WaitAll(group.Tasks, TimeSpan.FromSeconds(2)); } catch { /* loops observe cancellation and exit */ }
+        group.Cts.Dispose();
     }
 
     private async Task RunLoopAsync(EffectJob job, int hueLoops, CancellationToken token)

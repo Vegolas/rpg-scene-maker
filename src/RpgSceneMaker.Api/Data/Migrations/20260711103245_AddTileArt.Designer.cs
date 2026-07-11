@@ -10,7 +10,7 @@ using RpgSceneMaker.Api.Data;
 namespace RpgSceneMaker.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260710123820_AddTileArt")]
+    [Migration("20260711103245_AddTileArt")]
     partial class AddTileArt
     {
         /// <inheritdoc />
@@ -130,6 +130,9 @@ namespace RpgSceneMaker.Api.Data.Migrations
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -301,7 +304,108 @@ namespace RpgSceneMaker.Api.Data.Migrations
                                 .HasForeignKey("GameEventId");
                         });
 
+                    b.OwnsOne("RpgSceneMaker.Api.Models.EventTimeline", "Timeline", b1 =>
+                        {
+                            b1.Property<string>("GameEventId");
+
+                            b1.HasKey("GameEventId");
+
+                            b1.ToTable("Events");
+
+                            b1
+                                .ToJson("Timeline")
+                                .HasColumnType("TEXT");
+
+                            b1.WithOwner()
+                                .HasForeignKey("GameEventId");
+
+                            b1.OwnsMany("RpgSceneMaker.Api.Models.TimelineLightClip", "Lights", b2 =>
+                                {
+                                    b2.Property<string>("EventTimelineGameEventId");
+
+                                    b2.Property<int>("__synthesizedOrdinal")
+                                        .ValueGeneratedOnAddOrUpdate();
+
+                                    b2.Property<int?>("Brightness");
+
+                                    b2.Property<string>("Color");
+
+                                    b2.Property<int>("DurationMs");
+
+                                    b2.Property<string>("LightKey");
+
+                                    b2.Property<bool?>("Power");
+
+                                    b2.Property<int>("StartMs");
+
+                                    b2.Property<int?>("Temperature");
+
+                                    b2.HasKey("EventTimelineGameEventId", "__synthesizedOrdinal");
+
+                                    b2.ToTable("Events");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("EventTimelineGameEventId");
+
+                                    b2.OwnsOne("RpgSceneMaker.Api.Models.LightEffect", "Effect", b3 =>
+                                        {
+                                            b3.Property<string>("TimelineLightClipEventTimelineGameEventId");
+
+                                            b3.Property<int>("TimelineLightClip__synthesizedOrdinal");
+
+                                            b3.PrimitiveCollection<string>("Colors")
+                                                .IsRequired();
+
+                                            b3.Property<int>("Intensity");
+
+                                            b3.Property<int>("Speed");
+
+                                            b3.Property<string>("Type")
+                                                .IsRequired();
+
+                                            b3.HasKey("TimelineLightClipEventTimelineGameEventId", "TimelineLightClip__synthesizedOrdinal");
+
+                                            b3.ToTable("Events");
+
+                                            b3.WithOwner()
+                                                .HasForeignKey("TimelineLightClipEventTimelineGameEventId", "TimelineLightClip__synthesizedOrdinal");
+                                        });
+
+                                    b2.Navigation("Effect");
+                                });
+
+                            b1.OwnsMany("RpgSceneMaker.Api.Models.TimelineSoundClip", "Sounds", b2 =>
+                                {
+                                    b2.Property<string>("EventTimelineGameEventId");
+
+                                    b2.Property<int>("__synthesizedOrdinal")
+                                        .ValueGeneratedOnAddOrUpdate();
+
+                                    b2.Property<int?>("DurationMs");
+
+                                    b2.Property<string>("SoundId")
+                                        .IsRequired();
+
+                                    b2.Property<int>("StartMs");
+
+                                    b2.Property<double?>("Volume");
+
+                                    b2.HasKey("EventTimelineGameEventId", "__synthesizedOrdinal");
+
+                                    b2.ToTable("Events");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("EventTimelineGameEventId");
+                                });
+
+                            b1.Navigation("Lights");
+
+                            b1.Navigation("Sounds");
+                        });
+
                     b.Navigation("Flash");
+
+                    b.Navigation("Timeline");
                 });
 
             modelBuilder.Entity("RpgSceneMaker.Api.Models.Scene", b =>

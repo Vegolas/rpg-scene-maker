@@ -41,6 +41,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Event ids appear in hand-typed /events/{id}/trigger URLs, so match them case-insensitively too.
             evt.Property(e => e.Id).UseCollation("NOCASE");
             evt.OwnsOne(e => e.Flash, b => b.ToJson());
+            // The advanced timeline is a small object graph (sound + light clips) — one JSON column, like Flash.
+            evt.OwnsOne(e => e.Timeline, timeline =>
+            {
+                timeline.ToJson();
+                timeline.OwnsMany(t => t.Sounds);
+                timeline.OwnsMany(t => t.Lights, lights => lights.OwnsOne(l => l.Effect));
+            });
         });
 
         modelBuilder.Entity<Screen>(screen =>

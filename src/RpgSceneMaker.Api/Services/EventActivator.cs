@@ -4,7 +4,10 @@ namespace RpgSceneMaker.Api.Services;
 
 public record EventResult(string Event, string Light, string Sound)
 {
-    public bool FullySucceeded => Light is "ok" or "skipped" && Sound is "ok" or "skipped";
+    // Fail only on an actual "error: …" status (the UI's ProblemSummary keys off that prefix); "ok",
+    // "skipped" and "started" (a timeline part handed to the background runner) all count as success.
+    public bool FullySucceeded =>
+        !Light.StartsWith("error", StringComparison.Ordinal) && !Sound.StartsWith("error", StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -18,9 +21,7 @@ public class EventActivator(
     ILightService lights,
     EffectEngine effects,
     SceneLightApplier sceneLights,
-    SceneStore sceneStore,
-    SettingsStore settings,
-    CurrentState state,
+    EventTimelineRunner runner,
     SoundStore soundStore,
     SoundFileStorage soundFiles,
     SoundboardPlayer player,
@@ -28,6 +29,18 @@ public class EventActivator(
 {
     public async Task<EventResult> TriggerAsync(GameEvent evt)
     {
+        // A non-empty timeline runs in the background: hand it to the singleton runner and return at once.
+        // Each part reports "started" when it has clips, else "skipped" (validation keeps a timeline event
+        // free of legacy flash/sounds, so this fully describes the trigger).
+        if (evt.Timeline is { } timeline && (timeline.Sounds.Count > 0 || timeline.Lights.Count > 0))
+        {
+            runner.Start(evt);
+            return new EventResult(evt.Id,
+                timeline.Lights.Count > 0 ? "started" : "skipped",
+                timeline.Sounds.Count > 0 ? "started" : "skipped");
+        }
+
+        // Legacy event: flash + overlapping sounds, run concurrently and awaited.
         var lightTask = RunAsync("light", () => FlashAsync(evt.Flash));
         var soundTask = RunAsync("sound", () => PlaySoundsAsync(evt.SoundEffects));
 
@@ -44,25 +57,8 @@ public class EventActivator(
         effects.StopAll();
         await lights.SetColorAsync(flash.Color, flash.Brightness);
         await Task.Delay(flash.DurationMs);
-        await RestoreLightsAsync();
+        await sceneLights.RestoreLightsAsync();
         return true;
-    }
-
-    // Return to the live scene's lighting (this also restarts its effects); otherwise the configured
-    // default light; otherwise leave the flash showing — there's nothing known to restore to.
-    private async Task RestoreLightsAsync()
-    {
-        if (state.ActiveSceneId is { } id && await sceneStore.GetAsync(id) is { } scene)
-        {
-            await sceneLights.ApplyAsync(scene);
-            return;
-        }
-
-        if (settings.Current.DefaultLight is { } def)
-        {
-            effects.StopAll();
-            await lights.ApplyAsync(def);
-        }
     }
 
     private async Task<bool> PlaySoundsAsync(List<string> soundEffects)

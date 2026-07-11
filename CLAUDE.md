@@ -72,8 +72,20 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `SceneLightApplier`, else the configured default light) and/or **sounds** that *overlay* current playback
   (no `StopAll`, unlike a scene). Light + sound run concurrently and each reports ok/skipped/error (207 if any
   failed). `/events/*` ([EventEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/EventEndpoints.cs)) covers `list`,
-  get/put/delete and `trigger`; like `/sounds`, nothing is mapped at the bare `/events` path so the panel's
-  Events tab can live there.
+  get/put/delete, `trigger`, `stop` and `state`; like `/sounds`, nothing is mapped at the bare `/events` path
+  so the panel's Events tab can live there.
+- **`EventTimelineRunner`** — plays an event's optional **timeline** (`GameEvent.Timeline`: sound and light
+  *clips* placed at ms offsets with durations, edited in the panel's video-editor-style timeline). A non-empty
+  timeline makes `trigger` start this singleton runner and return immediately (`"started"`, HTTP 200); the
+  legacy flash+sounds path is unchanged. Only one timeline runs at a time (re-trigger restarts, `/events/stop`
+  cancels, `/events/state` reports the running id). Each clip is its own delayed task: sound clips get per-voice
+  stop handles (`SoundboardPlayer.StopVoice`) so an explicit window cuts them off, natural-end one-shots hold
+  the run open, and a windowless *looping* clip holds the run open and plays until the run is stopped; each
+  animated light clip runs as its own **job group** on the shared `EffectEngine` (`StartGroupAsync`/`StopGroup`;
+  a global `StopAll` — reset-lights, scene activation — stops clip effects too, since that caller is taking
+  over the lights). When the timeline touched the lights they are restored afterwards via
+  `SceneLightApplier.RestoreLightsAsync` (shared with the flash path). The runner is a singleton but
+  `ILightService` is scoped, so each run creates one service scope for its lifetime.
 - **`ScreenStore`** — persistence for **screens** (`Screen`, [Screen.cs](src/RpgSceneMaker.Api/Models/Screen.cs)):
   named boards of *shortcut tiles* (`ScreenTile` = a `Kind` of scene/event/sound/music/light-reset, a `Ref`
   — the entity id, or a Spotify URI for music — and a `Label`) that group existing entities onto one
@@ -86,11 +98,13 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 - **`SoundboardPlayer` / `SoundStore` / `SoundFileStorage`** — the soundboard. `SoundboardPlayer` plays
   sound effects on the **server's own audio device** via NAudio (a `MixingSampleProvider` mixes any number
   of overlapping "voices", each with its own volume and optional looping) — this is what Kenku FM used to
-  do. `SoundStore` persists per-sound metadata (name/category/volume/loop) in SQLite; `SoundFileStorage`
+  do. `SoundStore` persists per-sound metadata (name/category/volume/loop, plus `DurationMs` — measured at
+  import, lazily backfilled on `list`; the timeline editor uses it to size clips) in SQLite; `SoundFileStorage`
   keeps the audio files on disk. `/sounds/*` ([SoundEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SoundEndpoints.cs))
   covers `list`, `import` (multipart), update, delete, play/stop/stop-all, and `state` (playing ids); a scene
   fires its `SoundEffects` (sound ids) on activation. Deleting a sound also scrubs its id from every scene's
-  and event's `SoundEffects`, so activations/triggers never warn about a dangling reference. Nothing is mapped at the bare `/sounds` path so the
+  and event's `SoundEffects` and from event timeline clips, so activations/triggers never warn about a
+  dangling reference. Nothing is mapped at the bare `/sounds` path so the
   panel's Sounds tab can live there (same reason `/lights` uses `/lights/list`). **NAudio output is Windows-only.**
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
@@ -120,8 +134,8 @@ Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.jso
 `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path`). Context:
 [AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
 as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`), `Events`
-(one-shot triggered effects; `Flash` JSON column; ids `NOCASE`), `Screens` (shortcut boards; `Tiles`
-JSON column; ids `NOCASE`) and a
+(one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
+`Tiles` JSON column; ids `NOCASE`) and a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 

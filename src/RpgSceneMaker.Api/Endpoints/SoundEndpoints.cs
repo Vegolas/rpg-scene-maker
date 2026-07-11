@@ -18,8 +18,19 @@ public static class SoundEndpoints
         // full-page load of /sounds must fall through to index.html (same reason /lights uses /lights/list).
         var sounds = app.MapGroup("/sounds");
 
-        sounds.MapGet("/list", async (SoundStore store) =>
-            (await store.GetAllAsync()).Select(ToDto));
+        sounds.MapGet("/list", async (SoundStore store, SoundFileStorage files) =>
+        {
+            var all = await store.GetAllAsync();
+            // Backfill natural length for any sound imported before duration tracking; persist what we can,
+            // but never fail the list. A file that won't decode persists the 0 "unmeasurable" sentinel so
+            // the DurationMs==null filter converges (we don't re-probe it on every list).
+            foreach (var sound in all.Where(s => s.DurationMs is null))
+            {
+                sound.DurationMs = SoundboardPlayer.TryMeasureDurationMs(files.FullPath(sound)) ?? 0;
+                try { await store.UpsertAsync(sound); } catch { /* leave for next list; not worth failing this one */ }
+            }
+            return all.Select(ToDto);
+        });
 
         // Live playback state for the panel poll. Declared before "/{id}" routes; the literal wins anyway.
         sounds.MapGet("/state", (SoundboardPlayer player) => new SoundStateDto(player.PlayingIds));
@@ -52,6 +63,9 @@ public static class SoundEndpoints
             await using var stream = file.OpenReadStream();
             var storedName = await files.SaveAsync(id, ext, stream);
             var sound = new Sound { Id = id, Name = name, Category = category, FileName = storedName };
+            // Measure the file's natural length now (same reader logic as playback); 0 "unmeasurable"
+            // sentinel if it won't decode, so /sounds/list never re-probes it.
+            sound.DurationMs = SoundboardPlayer.TryMeasureDurationMs(files.FullPath(sound)) ?? 0;
             SoundValidation.Validate(sound);
             await store.UpsertAsync(sound);
             return Results.Ok(ToDto(sound));
@@ -97,11 +111,30 @@ public static class SoundEndpoints
             }
             foreach (var evt in await events.GetAllAsync())
             {
+                var dirty = false;
                 if (Scrub(evt.SoundEffects, sound.Id) is { } kept)
                 {
                     evt.SoundEffects = kept;
-                    await events.UpsertAsync(evt);
+                    dirty = true;
                 }
+                // Also drop any timeline sound clip that referenced the now-gone sound.
+                if (evt.Timeline is { } timeline)
+                {
+                    var keptClips = timeline.Sounds
+                        .Where(c => !string.Equals(c.SoundId, sound.Id, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (keptClips.Count != timeline.Sounds.Count)
+                    {
+                        timeline.Sounds = keptClips;
+                        dirty = true;
+                        // A timeline stripped of all clips fails validation on the next round-trip and
+                        // triggers as a silent no-op — drop it back to a legacy (null-timeline) event.
+                        if (timeline.Sounds.Count == 0 && timeline.Lights.Count == 0)
+                            evt.Timeline = null;
+                    }
+                }
+                if (dirty)
+                    await events.UpsertAsync(evt);
             }
             return Results.NoContent();
         });
@@ -137,7 +170,7 @@ public static class SoundEndpoints
         return kept.Count != soundEffects.Count ? kept : null;
     }
 
-    private static SoundDto ToDto(Sound s) => new(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.Image);
+    private static SoundDto ToDto(Sound s) => new(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.Image, s.DurationMs);
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 

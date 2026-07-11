@@ -33,6 +33,7 @@ public class EventStore(IDbContextFactory<AppDbContext> dbFactory)
             existing.Flash = evt.Flash;
             existing.SoundEffects = evt.SoundEffects;
             existing.Image = evt.Image;
+            existing.Timeline = evt.Timeline;
         }
         await db.SaveChangesAsync();
     }

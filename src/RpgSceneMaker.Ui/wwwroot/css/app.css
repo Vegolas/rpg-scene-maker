@@ -320,6 +320,24 @@ h2.rune::after { content: ""; flex: 1; height: 1px; background: linear-gradient(
 .scene-card .card-edit:hover { color: var(--ember); background: rgba(232, 163, 61, 0.08); }
 .scene-card .card-edit:active { transform: scale(0.9); }
 
+/* corner ⏹ affordance shown on a playing event card */
+.scene-card .card-stop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    font-size: 1rem;
+    color: var(--danger);
+    border-bottom-right-radius: 12px;
+    z-index: 2;
+    transition: color 0.2s, background 0.2s;
+}
+.scene-card .card-stop:hover { background: rgba(255, 93, 93, 0.1); }
+.scene-card .card-stop:active { transform: scale(0.9); }
+
 /* dashed "add" tile at the end of the grid */
 .scene-card.ghost {
     background: none;
@@ -1001,3 +1019,104 @@ ol.steps li { margin: 0.3rem 0; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- timeline editor (events) ---------- */
+.tl-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin: 0.2rem 0 0.7rem; flex-wrap: wrap; }
+.tl-zoom { display: flex; gap: 0.5rem; }
+.tl-total { color: var(--ink-dim); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+
+.tl-root {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-deep);
+    overflow: hidden;
+}
+/* the only horizontal scroller — the page itself must never scroll sideways */
+.tl-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.tl-inner { position: relative; min-width: 100%; padding: 0 0 0.5rem; }
+
+/* time ruler */
+.tl-ruler { position: relative; height: 26px; border-bottom: 1px solid var(--line); margin-bottom: 0.4rem; }
+.tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid rgba(255, 255, 255, 0.08); }
+.tl-tick-label { position: absolute; top: 4px; left: 4px; font-size: 0.72rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* section label pinned to the left edge while the track scrolls */
+.tl-group-label {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--ember);
+    font-size: 0.82rem;
+    padding: 0.5rem 0.7rem 0.3rem;
+    width: max-content;
+    background: linear-gradient(90deg, var(--bg-deep) 70%, transparent);
+}
+
+/* one clip per lane — no overlap math */
+.tl-lane { position: relative; height: 42px; margin: 0 0.4rem 0.4rem; }
+.tl-lane.empty { display: flex; align-items: center; }
+.tl-lane-empty { position: sticky; left: 0.7rem; color: var(--ink-dim); font-size: 0.85rem; }
+
+.tl-clip {
+    position: absolute;
+    top: 4px;
+    height: 34px;
+    min-width: 26px;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 0.55rem;
+    border-radius: 9px;
+    border: 1px solid var(--line-strong);
+    color: var(--ink);
+    font-size: 0.82rem;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: grab;
+    touch-action: none; /* a drag never scrolls the track */
+    user-select: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.tl-clip.tl-dragging { cursor: grabbing; opacity: 0.9; z-index: 5; }
+.tl-clip.sel { outline: 2px solid var(--ember); outline-offset: 1px; }
+.tl-clip.sound { background: linear-gradient(160deg, rgba(122, 168, 255, 0.35), rgba(58, 122, 74, 0.22)); }
+.tl-clip.light { background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.2)); border-left: 4px solid var(--clip, var(--ember)); }
+.tl-clip-swatch { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%; background: var(--clip, var(--ember)); border: 1px solid rgba(255, 255, 255, 0.3); }
+.tl-clip-label { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.tl-clip-time { flex: 0 0 auto; color: var(--ink-dim); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+/* right-edge resize handle */
+.tl-resize {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 16px;
+    cursor: ew-resize;
+    touch-action: none;
+    background: linear-gradient(90deg, transparent, rgba(232, 163, 61, 0.35));
+    border-top-right-radius: 9px;
+    border-bottom-right-radius: 9px;
+}
+.tl-resize::after { content: ""; position: absolute; top: 50%; right: 5px; width: 2px; height: 14px; margin-top: -7px; background: var(--ink-dim); border-radius: 1px; }
+
+/* inspector for the selected clip */
+.tl-inspector { margin-top: 0.8rem; }
+.tl-insp-head { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.6rem; }
+.tl-insp-title { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
+.tl-insp-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.5rem 0; }
+.tl-insp-row label { flex: 0 0 78px; color: var(--ink-dim); font-size: 0.9rem; }
+.tl-insp-row input[type="number"] {
+    width: 96px;
+    background: var(--bg-deep);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    min-height: 44px;
+    padding: 0.4rem 0.6rem;
+}
+.tl-insp-row input[type="number"]:focus { outline: none; border-color: var(--line-strong); }
+.tl-unit { color: var(--ink-dim); font-size: 0.9rem; }

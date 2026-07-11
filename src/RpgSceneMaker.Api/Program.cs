@@ -52,6 +52,8 @@ builder.Services.AddSingleton<EffectEngine>();
 builder.Services.AddScoped<SceneLightApplier>();
 builder.Services.AddScoped<SceneActivator>();
 builder.Services.AddScoped<EventActivator>();
+// Runs an event's background timeline; creates its own scope per run (ILightService is scoped).
+builder.Services.AddSingleton<EventTimelineRunner>();
 
 // Spotify: cloud Web API (PKCE) to control a Spotify Connect device on the LAN.
 builder.Services.AddSingleton<SpotifyStore>();

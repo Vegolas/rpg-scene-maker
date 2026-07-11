@@ -22,6 +22,60 @@ public class GameEvent
 
     /// <summary>Stored file name of an optional full-art tile background (uploaded via <c>/images</c>), or null.</summary>
     public string? Image { get; set; }
+
+    /// <summary>Optional advanced timeline: sound and light clips placed at millisecond offsets, played in
+    /// the background when the event is triggered. Null on legacy events (Flash + <see cref="SoundEffects"/>).</summary>
+    public EventTimeline? Timeline { get; set; }
+}
+
+/// <summary>A background timeline of sound and light clips triggered together, each placed at an offset.</summary>
+public class EventTimeline
+{
+    public List<TimelineSoundClip> Sounds { get; set; } = [];
+    public List<TimelineLightClip> Lights { get; set; } = [];
+}
+
+/// <summary>A sound clip on the timeline: play a soundboard <see cref="Sound"/> at an offset.</summary>
+public class TimelineSoundClip
+{
+    /// <summary>Id of the soundboard <see cref="Sound"/> to play.</summary>
+    public string SoundId { get; set; } = "";
+
+    /// <summary>Offset from the timeline start, in milliseconds.</summary>
+    public int StartMs { get; set; }
+
+    /// <summary>How long to play before stopping the clip, in milliseconds. Null = play to the file's natural end.</summary>
+    public int? DurationMs { get; set; }
+
+    /// <summary>Playback volume 0.0 - 1.0. Null = use the sound's own stored volume.</summary>
+    public double? Volume { get; set; }
+}
+
+/// <summary>A light clip on the timeline: hold a static state (or run an effect) for a window at an offset.</summary>
+public class TimelineLightClip
+{
+    /// <summary>Registry key of the light. Null or empty = "all lights" via the configured provider group (like the legacy scene <c>Light</c> block).</summary>
+    public string? LightKey { get; set; }
+
+    /// <summary>Offset from the timeline start, in milliseconds.</summary>
+    public int StartMs { get; set; }
+
+    /// <summary>How long the clip holds before the light is left / restored, in milliseconds.</summary>
+    public int DurationMs { get; set; }
+
+    public bool? Power { get; set; }
+
+    /// <summary>Hex color like "#FF8C2A". When set, the light switches to colour mode.</summary>
+    public string? Color { get; set; }
+
+    /// <summary>0-100.</summary>
+    public int? Brightness { get; set; }
+
+    /// <summary>White color temperature, 0 (warm) - 100 (cold). Used when no Color is set.</summary>
+    public int? Temperature { get; set; }
+
+    /// <summary>When set, the light is animated for the clip's window instead of held at a static state.</summary>
+    public LightEffect? Effect { get; set; }
 }
 
 /// <summary>A brief light flash: jump the lights to a colour/brightness, hold, then restore the prior lighting.</summary>

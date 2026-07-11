@@ -32,8 +32,9 @@ public sealed class SoundboardPlayer : IDisposable
         }
     }
 
-    /// <summary>Start playing <paramref name="filePath"/>; overlaps anything already playing.</summary>
-    public void Play(string soundId, string filePath, bool loop, double volume)
+    /// <summary>Start playing <paramref name="filePath"/>; overlaps anything already playing. Returns a
+    /// per-voice handle for <see cref="StopVoice"/> (e.g. a timeline clip stopping just its own voice).</summary>
+    public Guid Play(string soundId, string filePath, bool loop, double volume)
     {
         if (!File.Exists(filePath))
             throw new SoundboardException($"Sound file is missing: {Path.GetFileName(filePath)}");
@@ -67,8 +68,10 @@ public sealed class SoundboardPlayer : IDisposable
                 throw;
             }
 
+            var handle = Guid.NewGuid();
             _mixer!.AddMixerInput(chain);
-            _voices.Add(new Voice(soundId, chain, source));
+            _voices.Add(new Voice(handle, soundId, chain, source));
+            return handle;
         }
     }
 
@@ -78,6 +81,16 @@ public sealed class SoundboardPlayer : IDisposable
         lock (_lock)
         {
             foreach (var voice in _voices.Where(v => v.SoundId.Equals(soundId, StringComparison.OrdinalIgnoreCase)).ToList())
+                Remove(voice);
+        }
+    }
+
+    /// <summary>Stop just the voice with this handle (no-op if it already finished on its own).</summary>
+    public void StopVoice(Guid handle)
+    {
+        lock (_lock)
+        {
+            if (_voices.FirstOrDefault(v => v.Handle == handle) is { } voice)
                 Remove(voice);
         }
     }
@@ -147,6 +160,22 @@ public sealed class SoundboardPlayer : IDisposable
             ? new VorbisWaveReader(path)
             : new AudioFileReader(path);
 
+    /// <summary>Measure a file's natural length using the same reader logic as playback. Returns null when
+    /// the file is missing or can't be decoded (callers persist/skip accordingly, never failing on it).</summary>
+    public static int? TryMeasureDurationMs(string filePath)
+    {
+        if (!File.Exists(filePath)) return null;
+        try
+        {
+            using var reader = CreateReader(filePath);
+            return (int)reader.TotalTime.TotalMilliseconds;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // Bring any reader to the mixer's 44.1 kHz / stereo float format.
     private static ISampleProvider Normalize(ISampleProvider source)
     {
@@ -173,9 +202,10 @@ public sealed class SoundboardPlayer : IDisposable
         }
     }
 
-    // Root is the provider handed to the mixer (used to remove it / match the ended event);
-    // Source is the underlying stream to dispose (a LoopStream disposes its inner reader).
-    private sealed record Voice(string SoundId, ISampleProvider Root, WaveStream Source);
+    // Handle identifies this specific voice (StopVoice targets it); Root is the provider handed to the
+    // mixer (used to remove it / match the ended event); Source is the underlying stream to dispose
+    // (a LoopStream disposes its inner reader).
+    private sealed record Voice(Guid Handle, string SoundId, ISampleProvider Root, WaveStream Source);
 }
 
 /// <summary>A <see cref="WaveStream"/> that restarts from the beginning when it reaches the end.</summary>

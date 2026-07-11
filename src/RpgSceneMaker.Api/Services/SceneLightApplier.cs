@@ -13,6 +13,9 @@ public class SceneLightApplier(
     ILightService lights,
     LightRegistry registry,
     EffectEngine effects,
+    SceneStore sceneStore,
+    SettingsStore settings,
+    CurrentState state,
     ILogger<SceneLightApplier> logger)
 {
     // Per-light mode wins; legacy Light is the "all lights" fallback; a scene may also not touch lights at all.
@@ -29,7 +32,7 @@ public class SceneLightApplier(
                 try
                 {
                     var resolved = registry.Resolve(entry.LightKey);
-                    await ApplyBaseAsync(resolved, entry);
+                    await ApplyBaseAsync(resolved.Service, resolved.TargetId, entry);
                     if (entry.Effect is not null)
                         jobs.Add(new EffectJob(resolved.Service, resolved.TargetId, resolved.IsHue, entry));
                 }
@@ -68,18 +71,37 @@ public class SceneLightApplier(
     }
 
     // Apply the static base state so the light reaches a sensible look before the effect loop's first tick.
-    private static async Task ApplyBaseAsync(ResolvedLight r, SceneLight e)
+    // Power-off wins, else colour, else white, else power-on. Shared with EventTimelineRunner's clips.
+    internal static async Task ApplyBaseAsync(ILightService service, string? targetId, SceneLight e)
     {
         if (e.Power == false)
         {
-            await r.Service.SetPowerAsync(false, r.TargetId);
+            await service.SetPowerAsync(false, targetId);
             return;
         }
         if (!string.IsNullOrWhiteSpace(e.Color))
-            await r.Service.SetColorAsync(e.Color, e.Brightness, r.TargetId);
+            await service.SetColorAsync(e.Color, e.Brightness, targetId);
         else if (e.Brightness is not null || e.Temperature is not null)
-            await r.Service.SetWhiteAsync(e.Brightness ?? 100, e.Temperature, r.TargetId);
+            await service.SetWhiteAsync(e.Brightness ?? 100, e.Temperature, targetId);
         else if (e.Power == true)
-            await r.Service.SetPowerAsync(true, r.TargetId);
+            await service.SetPowerAsync(true, targetId);
+    }
+
+    /// <summary>Restore the lighting after an event's flash/timeline: the live scene if one is active
+    /// (re-running its effects), else the configured default light, else leave the lights as-is (there's
+    /// nothing known to restore to). Shared by <see cref="EventActivator"/> and <c>EventTimelineRunner</c>.</summary>
+    public async Task RestoreLightsAsync()
+    {
+        if (state.ActiveSceneId is { } id && await sceneStore.GetAsync(id) is { } scene)
+        {
+            await ApplyAsync(scene);
+            return;
+        }
+
+        if (settings.Current.DefaultLight is { } def)
+        {
+            effects.StopAll();
+            await lights.ApplyAsync(def);
+        }
     }
 }

@@ -43,19 +43,7 @@ public static class SceneValidation
                 entry.Color = LightValidation.NormalizeHex(entry.Color);
 
             if (entry.Effect is { } fx)
-            {
-                fx.Colors ??= [];
-                if (fx.Type is not ("flicker" or "glow" or "storm" or "drift"))
-                    throw new ArgumentException($"Unknown effect type '{fx.Type}' on light '{entry.LightKey}'. Use flicker, glow, storm or drift.");
-                if (fx.Speed is < 1 or > 10)
-                    throw new ArgumentException($"Effect speed on light '{entry.LightKey}' must be between 1 and 10.");
-                if (fx.Intensity is < 1 or > 10)
-                    throw new ArgumentException($"Effect intensity on light '{entry.LightKey}' must be between 1 and 10.");
-                for (var i = 0; i < fx.Colors.Count; i++)
-                    fx.Colors[i] = LightValidation.NormalizeHex(fx.Colors[i]);
-                if (fx.Type == "drift" && fx.Colors.Count < 2)
-                    throw new ArgumentException($"The 'drift' effect on light '{entry.LightKey}' needs at least 2 colors.");
-            }
+                LightValidation.ValidateEffect(fx, $"light '{entry.LightKey}'");
         }
 
         if (scene.Music is { } music)

@@ -1,4 +1,5 @@
 @page "/events"
+@implements IDisposable
 @inject ApiClient Api
 @inject UiState Ui
 
@@ -33,70 +34,23 @@
         <ArtField @bind-Image="_edit.Image" />
     </div>
 
-    <RuneHeading>Light Flash</RuneHeading>
+    <RuneHeading>Timeline</RuneHeading>
     <div class="panel">
-        <div class="chip-row" style="margin-top:0">
-            <Chip On="_edit.FlashEnabled" OnClick="() => _edit.FlashEnabled = !_edit.FlashEnabled">⚡ Flash the lights</Chip>
-        </div>
-        @if (_edit.FlashEnabled)
-        {
-            <SwatchGrid Selected="_edit.FlashColor" OnPick="@(hex => _edit.FlashColor = hex)" Style="margin-top:1rem" />
-            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="_edit.FlashBrightness" AriaLabel="Flash brightness" />
-            <SliderRow LeftIcon="⏱️" Min="50" Max="1500" Suffix="ms" @bind-Value="_edit.FlashDurationMs" AriaLabel="Flash duration" />
-            <p class="hint" style="margin-top:0.6rem">The lights jump to this colour, hold, then return to the live scene (or the default lighting).</p>
-        }
-        else
-        {
-            <p class="hint" style="margin-top:0.8rem">This event doesn't touch the lights — sound only.</p>
-        }
-    </div>
-
-    <RuneHeading>Sound</RuneHeading>
-    <div class="panel">
-        @if (_sounds is null || _sounds.Count == 0)
-        {
-            <p class="hint" style="margin:0">
-                No sounds imported yet. Add some on the <a href="sounds">Sounds</a> tab, then pick them here.
-            </p>
-        }
-        else
-        {
-            <p class="hint" style="margin-top:0">Triggering the event plays these <em>over</em> whatever's already playing (a clap on top of the music).</p>
-            @foreach (var group in _sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
-            {
-                <p class="kgroup-title">@group.Key</p>
-                <div class="klist">
-                    @foreach (var sound in group)
-                    {
-                        var picked = _edit.SoundEffects.Contains(sound.Id);
-                        <KRow Icon="@(picked ? "☑" : "☐")" Title="@sound.Name" Hint="@(sound.Loop ? "🔁 loop" : null)"
-                              Selected="picked" OnClick="() => ToggleSound(sound.Id)" />
-                    }
-                </div>
-            }
-        }
-
-        @* Sound ids the event still references but that are no longer in the library. *@
-        @{
-            var knownIds = _sounds?.Select(s => s.Id).ToHashSet() ?? [];
-            var unknownSoundIds = _edit.SoundEffects.Where(sid => !knownIds.Contains(sid)).ToList();
-        }
-        @if (unknownSoundIds.Count > 0)
-        {
-            <p class="kgroup-title">Unknown — no longer in your library</p>
-            <div class="klist">
-                @foreach (var sid in unknownSoundIds)
-                {
-                    <KRow Icon="⚠️" Title="@sid" Hint="removed sound — tap to drop" OnClick="() => RemoveSound(sid)" />
-                }
-            </div>
-        }
+        <p class="hint" style="margin-top:0">
+            Lay sound and light clips along the time axis. Drag a clip to move it, drag its right edge to resize,
+            tap it to edit below. Lights flash then restore the live scene; sounds overlay whatever's playing.
+        </p>
+        <TimelineEditor Model="_edit.Timeline" Sounds="_sounds" Lights="_lights" />
     </div>
 
     <RuneHeading>Save</RuneHeading>
     <div class="btn-row">
         <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
+        @if (!_isNew && _runningId == _edit.Id)
+        {
+            <button class="btn danger" @onclick="Stop" disabled="@_busy">⏹ Stop</button>
+        }
         <button class="btn" @onclick="CancelEdit" disabled="@_busy">Cancel</button>
     </div>
     @if (!_isNew)
@@ -125,7 +79,8 @@ else
             var (emoji, label) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
             var artUrl = Api.ImageUrl(evt.Image);
             var hasArt = artUrl is not null;
-            <button class="scene-card @(_busyId == evt.Id ? "busy" : "") @(hasArt ? "art" : "")"
+            var running = _runningId == evt.Id;
+            <button class="scene-card @(_busyId == evt.Id ? "busy" : "") @(running ? "playing" : "") @(hasArt ? "art" : "")"
                     style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(evt));@(hasArt ? $" --art:url('{artUrl}');" : "")"
                     @onclick="() => Trigger(evt.Id)">
                 @if (hasArt)
@@ -135,6 +90,11 @@ else
                 <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit event"
                       @onclick="() => Edit(evt)" @onclick:stopPropagation="true">✎</span>
+                @if (running)
+                {
+                    <span class="card-stop" role="button" tabindex="0" aria-label="Stop event"
+                          @onclick="Stop" @onclick:stopPropagation="true">⏹</span>
+                }
                 <span class="scene-emoji">@emoji</span>
                 <span class="scene-name">@label</span>
             </button>
@@ -146,14 +106,17 @@ else
     </div>
     @if (_events.Count > 0)
     {
-        <p class="hint" style="margin-top:1rem">Tap to fire. ✎ to edit the flash and sound.</p>
+        <p class="hint" style="margin-top:1rem">Tap to fire. ✎ to edit the timeline. ⏹ appears while an event is playing.</p>
     }
 }
 
 @code {
     private List<EventDto>? _events;
-    private List<SoundDto>? _sounds;
+    private List<SoundDto> _sounds = [];
+    private List<RegisteredLightInfo> _lights = [];
     private string? _busyId;
+    private string? _runningId;
+    private Timer? _timer;
 
     // Editor state (inline, one at a time). _edit non-null = editor open.
     private EventEdit? _edit;
@@ -163,18 +126,42 @@ else
     private string _emoji = "";
     private string _label = "";
 
-    protected override async Task OnInitializedAsync() => await RefreshAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
+    }
 
     private async Task RefreshAsync()
     {
         await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
-        _events = await Api.GetEventsAsync();
-        _sounds = await Api.GetSoundsAsync();
+        var eventsTask = Api.GetEventsAsync();
+        var soundsTask = Api.GetSoundsAsync();
+        var lightsTask = Api.GetRegisteredLightsAsync();
+        await Task.WhenAll(eventsTask, soundsTask, lightsTask);
+        _events = await eventsTask;
+        _sounds = await soundsTask;
+        _lights = await lightsTask;
         StateHasChanged();
     }
 
-    // Flash colour tints the card swatch, like a scene's colour.
-    private static string SwatchColor(EventDto evt) => evt.Flash?.Color ?? "transparent";
+    private async Task PollAsync()
+    {
+        var running = await Api.GetRunningEventIdAsync();
+        if (running != _runningId)
+        {
+            _runningId = running;
+            StateHasChanged();
+        }
+    }
+
+    // Card tint: the first light clip's colour (or the legacy flash colour), like a scene's swatch.
+    private static string SwatchColor(EventDto evt)
+    {
+        var color = evt.Timeline?.Lights?.FirstOrDefault(l => l.Color is not null)?.Color;
+        return color ?? evt.Flash?.Color ?? "transparent";
+    }
 
     private async Task Trigger(string id)
     {
@@ -188,10 +175,20 @@ else
                 Ui.ReportOk($"Event \"{id}\" fired");
             else
                 Ui.ReportError($"Partially fired. {result.ProblemSummary()}");
+            await PollAsync();
         }
         finally
         {
             _busyId = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Stop()
+    {
+        if (await Api.StopEventAsync())
+        {
+            _runningId = null;
             StateHasChanged();
         }
     }
@@ -209,16 +206,7 @@ else
     {
         _isNew = false;
         (_emoji, _label) = SceneNaming.SplitName(evt.Name);
-        _edit = new EventEdit
-        {
-            Id = evt.Id,
-            FlashEnabled = evt.Flash is not null,
-            FlashColor = evt.Flash?.Color ?? "#ffffff",
-            FlashBrightness = evt.Flash?.Brightness ?? 100,
-            FlashDurationMs = evt.Flash?.DurationMs ?? 200,
-            SoundEffects = [.. evt.SoundEffects ?? []],
-            Image = evt.Image,
-        };
+        _edit = EventEdit.FromDto(evt, _sounds);
         _confirmDelete = false;
     }
 
@@ -238,15 +226,6 @@ else
         ? SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _events?.Select(e => e.Id).ToList() ?? [])
         : _edit!.Id;
 
-    private void ToggleSound(string id)
-    {
-        if (_edit is null) return;
-        if (!_edit.SoundEffects.Remove(id))
-            _edit.SoundEffects.Add(id);
-    }
-
-    private void RemoveSound(string id) => _edit?.SoundEffects.Remove(id);
-
     private async Task Save(bool test)
     {
         if (_edit is null) return;
@@ -255,9 +234,22 @@ else
             Ui.ReportError("Give the event a name first.");
             return;
         }
-        if (!_edit.FlashEnabled && _edit.SoundEffects.Count == 0)
+        if (_edit.Timeline.IsEmpty)
         {
-            Ui.ReportError("An event needs a light flash, a sound, or both.");
+            Ui.ReportError("An event needs at least one sound or light clip.");
+            return;
+        }
+        if (_edit.Timeline.EndMs > TimelineEdit.MaxEndMs)
+        {
+            Ui.ReportError("The timeline must end within 10 minutes.");
+            return;
+        }
+        // Drift needs at least two palette colours — catch it before the server 400s.
+        var badDrift = _edit.Timeline.Lights.FirstOrDefault(l =>
+            l.Mode is "color" or "white" && l.Effect.Type == "drift" && l.Effect.Colors.Count < 2);
+        if (badDrift is not null)
+        {
+            Ui.ReportError("A Drift effect needs at least 2 colors.");
             return;
         }
 
@@ -293,6 +285,7 @@ else
                     Ui.ReportOk($"Saved — event \"{id}\" fired");
                 else
                     Ui.ReportError($"Saved, but partially fired. {result.ProblemSummary()}");
+                await PollAsync();
             }
             else
             {
@@ -328,4 +321,6 @@ else
         }
         finally { _busy = false; }
     }
+
+    public void Dispose() => _timer?.Dispose();
 }
