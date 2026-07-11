@@ -47,7 +47,7 @@ else
             Lay sound and light clips along the time axis. Drag a clip to move it, drag its right edge to resize,
             tap it to edit below. Lights flash then restore the live scene; sounds overlay whatever's playing.
         </p>
-        <TimelineEditor Model="_edit.Timeline" Sounds="_sounds" Lights="_lights" />
+        <TimelineEditor Model="_edit.Timeline" Sounds="_sounds" Lights="_lights" Fx="_fxLibrary" />
     </div>
 
     <RuneHeading>When it ends</RuneHeading>
@@ -113,6 +113,7 @@ else
     private List<SoundDto> _sounds = [];
     private List<RegisteredLightInfo> _lights = [];
     private List<SceneDto> _scenes = [];
+    private List<LightFxDto> _fxLibrary = [];
 
     // Endings offered in the "When it ends" segmented control.
     private static readonly (string, string)[] AfterOptions =
@@ -133,11 +134,13 @@ else
         var soundsTask = Api.GetSoundsAsync();
         var lightsTask = Api.GetRegisteredLightsAsync();
         var scenesTask = Api.GetScenesAsync();
-        await Task.WhenAll(eventsTask, soundsTask, lightsTask, scenesTask);
+        var fxTask = Api.GetLightFxAsync();
+        await Task.WhenAll(eventsTask, soundsTask, lightsTask, scenesTask, fxTask);
         _existingIds = (await eventsTask).Select(e => e.Id).ToList();
         _sounds = await soundsTask;
         _lights = await lightsTask;
         _scenes = await scenesTask;
+        _fxLibrary = await fxTask;
 
         if (!_isNew)
         {

@@ -24,6 +24,7 @@ public static class Palette
         ("glow", "✨ Glow"),
         ("storm", "⛈️ Storm"),
         ("drift", "🌀 Drift"),
+        ("custom", "🎬 Custom"),
     ];
 
     // Emoji choices for the scene name picker.

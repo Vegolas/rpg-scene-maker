@@ -5,7 +5,10 @@ namespace RpgSceneMaker.Ui.Contracts;
 public record SceneDto(string Id, string Name, LightDto? Light, List<SceneLightDto>? Lights, MusicDto? Music, List<string>? SoundEffects, string? Image);
 public record LightDto(bool? Power, string? Color, int? Brightness, int? Temperature);
 public record SceneLightDto(string LightKey, bool? Power, int? Brightness, string? Color, int? Temperature, EffectDto? Effect);
-public record EffectDto(string Type, int Speed, int Intensity, List<string>? Colors);
+public record EffectDto(string Type, int Speed, int Intensity, List<string>? Colors,
+    List<KeyframeDto>? Keyframes = null, bool Loop = false, int? CycleMs = null, string? FxId = null);
+// One keyframe of a "custom" effect: a light state at a ms offset, with an optional Hue transition.
+public record KeyframeDto(int AtMs, bool? Power, string? Color, int? Brightness, int? Temperature, int? TransitionMs);
 public record MusicDto(string? PlayId, double? Volume, bool Pause);
 public record RegisteredLightInfo(string Key, string Name, string Provider);
 public record ActivationDto(string Scene, string Light, string Music, string SoundEffects, bool FullySucceeded);

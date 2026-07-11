@@ -183,8 +183,7 @@ public class TimelineLightEdit
         else if (d.Power == false) { edit.Mode = "off"; }
         else { edit.Mode = "white"; }
 
-        if (d.Effect is { } fx)
-            edit.Effect = new EffectEdit { Type = fx.Type, Speed = fx.Speed, Intensity = fx.Intensity, Colors = [.. fx.Colors ?? []] };
+        edit.Effect = EffectEdit.FromDto(d.Effect);
         return edit;
     }
 }

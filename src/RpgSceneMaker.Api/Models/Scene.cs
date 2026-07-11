@@ -45,17 +45,59 @@ public class SceneLight
 /// <summary>A background animation applied to a single light.</summary>
 public class LightEffect
 {
-    /// <summary>"flicker" | "glow" | "storm" | "drift".</summary>
+    /// <summary>"flicker" | "glow" | "storm" | "drift" | "custom" | "fx".</summary>
     public string Type { get; set; } = "";
 
-    /// <summary>1 (slow) - 10 (fast).</summary>
+    /// <summary>"fx" only: id of the library <see cref="LightFx"/> this effect references. Resolved at apply
+    /// time into a "custom" effect (its keyframes/loop/cycle); a missing FX degrades to a static light.</summary>
+    public string? FxId { get; set; }
+
+    /// <summary>1 (slow) - 10 (fast). Unused for "custom".</summary>
     public int Speed { get; set; } = 5;
 
-    /// <summary>1 (subtle) - 10 (extreme).</summary>
+    /// <summary>1 (subtle) - 10 (extreme). Unused for "custom".</summary>
     public int Intensity { get; set; } = 5;
 
     /// <summary>Hex colors. Required (≥2) for "drift"; "storm" uses the first as its flash color (else cold white).</summary>
     public List<string> Colors { get; set; } = [];
+
+    /// <summary>Keyframe sequence, used only when <see cref="Type"/> is "custom": a hand-authored series of
+    /// light states at ms offsets, each with its own optional Hue transition. Self-contained on the effect so
+    /// a reusable "Light FX library" can be layered on later.</summary>
+    public List<LightKeyframe> Keyframes { get; set; } = [];
+
+    /// <summary>"custom" only: when true the keyframe cycle repeats forever; when false it plays once and holds
+    /// the last keyframe's state.</summary>
+    public bool Loop { get; set; }
+
+    /// <summary>"custom" only: total cycle length in ms. Required when <see cref="Loop"/> is true (must be
+    /// ≥ last keyframe <see cref="LightKeyframe.AtMs"/> + 100); defines the hold after the last keyframe
+    /// before wrapping to the first. Null when not looping.</summary>
+    public int? CycleMs { get; set; }
+}
+
+/// <summary>One keyframe of a "custom" <see cref="LightEffect"/>: a light state applied at an offset within
+/// the cycle. Power/Color/Brightness/Temperature share the semantics of <see cref="SceneLight"/>
+/// (power-off wins, else colour, else white, else power-on).</summary>
+public class LightKeyframe
+{
+    /// <summary>Offset within the cycle, in milliseconds.</summary>
+    public int AtMs { get; set; }
+
+    public bool? Power { get; set; }
+
+    /// <summary>Hex color like "#FF8C2A". When set, the light switches to colour mode.</summary>
+    public string? Color { get; set; }
+
+    /// <summary>0-100.</summary>
+    public int? Brightness { get; set; }
+
+    /// <summary>White color temperature, 0 (warm) - 100 (cold). Used when no Color is set.</summary>
+    public int? Temperature { get; set; }
+
+    /// <summary>Fade duration passed straight to the light service (Hue maps it to transitiontime, 0 = instant
+    /// snap; Tuya ignores it). Null = provider default (Hue ~400 ms).</summary>
+    public int? TransitionMs { get; set; }
 }
 
 public class LightSettings

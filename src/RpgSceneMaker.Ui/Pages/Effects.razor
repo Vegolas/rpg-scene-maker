@@ -1,0 +1,54 @@
+@page "/effects"
+@inject ApiClient Api
+@inject ViewTransition Vt
+
+<PageTitle>Scene Maker — Effects</PageTitle>
+
+<RuneHeading>Light FX Library</RuneHeading>
+
+@if (_fx is null)
+{
+    <p class="empty-note">Gathering the glimmers…</p>
+}
+else
+{
+    <p class="hint" style="margin-top:0">
+        Reusable light effects authored on the keyframe editor. Reference them from scene lights and event
+        timelines — edits here flow through everywhere they're used.
+    </p>
+
+    @if (_fx.Count > 0)
+    {
+        <div class="klist">
+            @foreach (var fx in _fx)
+            {
+                <KRow Icon="✨" Title="@fx.Name" Hint="@Meta(fx)" OnClick="() => Edit(fx.Id)" />
+            }
+        </div>
+    }
+    else
+    {
+        <p class="empty-note">No effects yet — craft your first shimmer below.</p>
+    }
+
+    <div class="btn-row" style="margin-top:1rem">
+        <button class="btn primary" @onclick="NewFx">＋ New effect</button>
+    </div>
+}
+
+@code {
+    private List<LightFxDto>? _fx;
+
+    protected override async Task OnInitializedAsync() => _fx = await Api.GetLightFxAsync();
+
+    private static string Meta(LightFxDto fx)
+    {
+        var count = fx.Keyframes?.Count ?? 0;
+        var kf = $"{count} keyframe{(count == 1 ? "" : "s")}";
+        return fx.Loop ? $"{kf} · 🔁 loop" : kf;
+    }
+
+    private Task NewFx() => Vt.NavigateAsync("effects/new");
+
+    private Task Edit(string id) => Vt.NavigateAsync($"effects/{id}");
+}

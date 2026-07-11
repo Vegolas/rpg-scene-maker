@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Sound> Sounds => Set<Sound>();
     public DbSet<GameEvent> Events => Set<GameEvent>();
     public DbSet<Screen> Screens => Set<Screen>();
+    public DbSet<LightFx> LightFxs => Set<LightFx>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
 
@@ -24,7 +25,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             scene.OwnsMany(s => s.Lights, lights =>
             {
                 lights.ToJson();
-                lights.OwnsOne(l => l.Effect);
+                // Effect (and its "custom" keyframe list) live inside the same JSON document.
+                lights.OwnsOne(l => l.Effect, fx => fx.OwnsMany(e => e.Keyframes));
             });
         });
 
@@ -46,7 +48,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             {
                 timeline.ToJson();
                 timeline.OwnsMany(t => t.Sounds);
-                timeline.OwnsMany(t => t.Lights, lights => lights.OwnsOne(l => l.Effect));
+                timeline.OwnsMany(t => t.Lights, lights =>
+                    lights.OwnsOne(l => l.Effect, fx => fx.OwnsMany(e => e.Keyframes)));
             });
             // What the lights do when the event finishes — one small JSON column, like Flash.
             evt.OwnsOne(e => e.After, b => b.ToJson());
@@ -59,6 +62,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             screen.Property(s => s.Id).UseCollation("NOCASE");
             // Tiles are a small ordered list of value objects — stored as one JSON column (like Scene.Lights).
             screen.OwnsMany(s => s.Tiles, b => b.ToJson());
+        });
+
+        modelBuilder.Entity<LightFx>(fx =>
+        {
+            fx.HasKey(f => f.Id);
+            // FX ids appear in hand-typed /lightfx/{id}/… URLs, so match them case-insensitively too.
+            fx.Property(f => f.Id).UseCollation("NOCASE");
+            // The keyframe sequence is a small ordered list of value objects — one JSON column (like Scene.Lights).
+            fx.OwnsMany(f => f.Keyframes, b => b.ToJson());
         });
 
         modelBuilder.Entity<LightingConfig>(config =>
