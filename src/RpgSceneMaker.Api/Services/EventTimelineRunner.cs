@@ -21,6 +21,7 @@ public sealed class EventTimelineRunner(
     SoundStore soundStore,
     SoundFileStorage soundFiles,
     SoundboardPlayer player,
+    LightFxStore fxStore,
     ILogger<EventTimelineRunner> logger)
 {
     private readonly object _lock = new();
@@ -91,6 +92,11 @@ public sealed class EventTimelineRunner(
         var sounds = new Dictionary<string, Sound>(StringComparer.OrdinalIgnoreCase);
         foreach (var sound in await soundStore.GetAllAsync()) sounds[sound.Id] = sound;
 
+        // Same for any "fx" light clips: resolve the FX library once up front, not per engine tick.
+        Dictionary<string, LightFx>? fxLib = null;
+        if (timeline.Lights.Any(c => c.Effect is { Type: "fx" }))
+            fxLib = (await fxStore.GetAllAsync()).ToDictionary(f => f.Id, StringComparer.OrdinalIgnoreCase);
+
         try
         {
             // Stop any running scene effects so they don't fight the clips (same reason the flash does).
@@ -100,7 +106,7 @@ public sealed class EventTimelineRunner(
             var soundTasks = timeline.Sounds
                 .Select(clip => RunSoundClipAsync(clip, sounds, cancelHandles, ct));
             var lightTasks = timeline.Lights
-                .Select(clip => RunLightClipAsync(clip, groupLights, registry, globalEffects, lightGroups, ct));
+                .Select(clip => RunLightClipAsync(clip, groupLights, registry, globalEffects, lightGroups, fxLib, ct));
 
             await Task.WhenAll(soundTasks.Concat(lightTasks));
         }
@@ -192,7 +198,8 @@ public sealed class EventTimelineRunner(
 
     private async Task RunLightClipAsync(
         TimelineLightClip clip, ILightService groupLights, LightRegistry registry,
-        EffectEngine globalEffects, ConcurrentBag<Guid> lightGroups, CancellationToken ct)
+        EffectEngine globalEffects, ConcurrentBag<Guid> lightGroups,
+        IReadOnlyDictionary<string, LightFx>? fxLib, CancellationToken ct)
     {
         await Task.Delay(clip.StartMs, ct); // OCE here propagates so cancellation surfaces to the run
         try
@@ -213,6 +220,20 @@ public sealed class EventTimelineRunner(
                 (service, targetId, isHue) = (resolved.Service, resolved.TargetId, resolved.IsHue);
             }
 
+            // A "fx" clip is a live reference to a library FX: resolve it once into a materialized "custom"
+            // effect (a missing FX degrades to a static clip). Every other effect type runs as authored.
+            var effect = clip.Effect;
+            if (effect is { Type: "fx" })
+            {
+                if (fxLib is not null && effect.FxId is { } fxId && fxLib.TryGetValue(fxId, out var lib))
+                    effect = SceneLightApplier.MaterializeFx(lib);
+                else
+                {
+                    logger.LogWarning("Event timeline: Light FX '{FxId}' not found — showing a static clip", effect.FxId);
+                    effect = null;
+                }
+            }
+
             var sceneLight = new SceneLight
             {
                 LightKey = clip.LightKey ?? "",
@@ -220,12 +241,12 @@ public sealed class EventTimelineRunner(
                 Color = clip.Color,
                 Brightness = clip.Brightness,
                 Temperature = clip.Temperature,
-                Effect = clip.Effect,
+                Effect = effect,
             };
 
             await SceneLightApplier.ApplyBaseAsync(service, targetId, sceneLight);
 
-            if (clip.Effect is not null)
+            if (effect is not null)
             {
                 // Run the effect as its own group on the shared engine (not a private one): a global
                 // StopAll then correctly stops this clip too when something takes over the lights.

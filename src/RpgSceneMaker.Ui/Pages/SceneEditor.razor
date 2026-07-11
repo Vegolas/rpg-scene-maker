@@ -122,7 +122,7 @@ else
                                         {
                                             <KeyframeEditor Effect="row.Edit.Effect" />
                                         }
-                                        else if (row.Edit.Effect.Type != "none")
+                                        else if (row.Edit.Effect.Type is not ("none" or "fx"))
                                         {
                                             <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="row.Edit.Effect.Speed" AriaLabel="Speed" />
                                             <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="row.Edit.Effect.Intensity" AriaLabel="Intensity" />
@@ -145,6 +145,8 @@ else
                                                 <SwatchGrid Selected="null" ShowCustom="false" OnPick="@(hex => AddPaletteColor(row, hex))" Style="margin-top:0.6rem" />
                                             }
                                         }
+
+                                        <FxLibraryPicker Effect="row.Edit.Effect" Library="_fxLibrary" />
                                     }
 
                                     <div class="btn-row" style="margin-top:1rem">
@@ -295,6 +297,7 @@ else
     private int _temperature = 40;
     private List<RegisteredLightInfo> _registry = [];
     private List<LightRow> _perLight = [];
+    private List<LightFxDto> _fxLibrary = [];
 
     // music
     private MusicChoice _music = MusicChoice.None;
@@ -318,6 +321,7 @@ else
         var scenes = await Api.GetScenesAsync();
         _existingIds = scenes.Select(s => s.Id).ToList();
         _registry = await Api.GetRegisteredLightsAsync();
+        _fxLibrary = await Api.GetLightFxAsync();
 
         if (!_isNew)
         {
