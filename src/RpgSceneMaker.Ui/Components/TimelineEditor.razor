@@ -204,21 +204,6 @@ else if (SelectedLight is { } lc)
 
         <Segmented TValue="string" Options="ModeOptions" Value="lc.Mode" ValueChanged="m => lc.Mode = m" />
 
-        @if (lc.Mode == "color")
-        {
-            <SwatchGrid Selected="lc.Color" OnPick="hex => lc.Color = hex" Style="margin-top:1rem" />
-            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
-        }
-        else if (lc.Mode == "white")
-        {
-            <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="lc.Temperature" AriaLabel="Color temperature" />
-            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
-        }
-        else
-        {
-            <p class="hint" style="margin-top:0.8rem">This clip switches the light off for its window.</p>
-        }
-
         @if (lc.Mode is "color" or "white")
         {
             <p class="kgroup-title">Effect</p>
@@ -228,6 +213,31 @@ else if (SelectedLight is { } lc)
                     <Chip On="lc.Effect.Type == type" OnClick="() => lc.Effect.Type = type">@label</Chip>
                 }
             </div>
+
+            @* Base colour/white — shown only for effects that build on it (static + flicker/glow/storm);
+               drift needs just its brightness; custom/fx set colour + brightness per keyframe. *@
+            @if (Palette.EffectUsesBaseColor(lc.Effect.Type))
+            {
+                @if (lc.Mode == "color")
+                {
+                    <SwatchGrid Selected="lc.Color" OnPick="hex => lc.Color = hex" Style="margin-top:1rem" />
+                    <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
+                }
+                else
+                {
+                    <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="lc.Temperature" AriaLabel="Color temperature" />
+                    <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
+                }
+                @if (lc.Effect.Type != "none")
+                {
+                    <p class="hint" style="margin-top:0.6rem">✨ The effect animates from this base @(lc.Mode == "color" ? "color" : "white tone") and brightness.</p>
+                }
+            }
+            else if (Palette.EffectUsesBaseBrightness(lc.Effect.Type))
+            {
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="lc.Brightness" AriaLabel="Brightness" />
+            }
+
             @if (lc.Effect.Type == "custom")
             {
                 <KeyframeEditor Effect="lc.Effect" />
@@ -256,6 +266,10 @@ else if (SelectedLight is { } lc)
             }
 
             <FxLibraryPicker Effect="lc.Effect" Library="Fx" />
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0.8rem">This clip switches the light off for its window.</p>
         }
 
         <div class="tl-insp-row" style="margin-top:1rem">

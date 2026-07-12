@@ -1258,23 +1258,57 @@ ol.steps li { margin: 0.3rem 0; }
     margin-bottom: 0.7rem;
     background: rgba(255, 255, 255, 0.02);
 }
-.kf-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
 .kf-num {
     font-family: var(--font-display);
     font-weight: 700;
     color: var(--ember);
     font-variant-numeric: tabular-nums;
 }
-.kf-at {
-    width: 84px;
-    background: var(--bg-deep);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    color: var(--ink);
-    font-family: var(--font-body);
-    font-size: 1rem;
-    min-height: 44px;
-    padding: 0.4rem 0.6rem;
-}
-.kf-at:focus { outline: none; border-color: var(--line-strong); }
 .kf-spacer { flex: 1; }
+
+/* toolbar above the track: add button + keyframe count */
+.kf-toolbar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+
+/* time track: keyframe diamonds positioned by time; tap one to edit it in the single inspector below */
+.kf-track { position: relative; height: 64px; margin: 0.2rem 0.9rem 0; }
+.kf-track-line { position: absolute; left: 0; right: 0; top: 22px; height: 2px; background: var(--line); border-radius: 1px; }
+
+.kf-marker {
+    position: absolute; top: 9px; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 11px;
+    min-width: 40px; padding: 0 7px; background: none; border: 0; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+/* rotated square = diamond, threaded on the track line; fill shows the keyframe's colour */
+.kf-marker-head {
+    width: 26px; height: 26px; border-radius: 5px;
+    border: 2px solid var(--line-strong); background: var(--ember);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    transform: rotate(45deg);
+    transition: transform 0.1s ease, box-shadow 0.1s ease, border-color 0.1s ease;
+}
+.kf-marker-head.mode-white { background: linear-gradient(135deg, #fff2d0, #cfe0ff); }
+.kf-marker-head.mode-off { background: var(--bg-deep); border-style: dashed; }
+.kf-marker-num {
+    font-family: var(--font-display); font-weight: 700; font-size: 0.78rem;
+    color: var(--ink-dim); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.kf-marker:hover .kf-marker-head { transform: rotate(45deg) scale(1.08); }
+.kf-marker.sel .kf-marker-head {
+    border-color: var(--ember);
+    box-shadow: 0 0 0 3px rgba(232, 163, 61, 0.4), 0 3px 9px rgba(0, 0, 0, 0.55);
+    transform: rotate(45deg) scale(1.18);
+}
+.kf-marker.sel .kf-marker-num { color: var(--ember); }
+.kf-marker:focus-visible { outline: none; }
+.kf-marker:focus-visible .kf-marker-head { border-color: var(--ember); box-shadow: 0 0 0 3px rgba(232, 163, 61, 0.4); }
+
+.kf-track-ends {
+    display: flex; justify-content: space-between; margin: 0 0.9rem 0.2rem;
+    color: var(--ink-dim); font-size: 0.72rem; font-variant-numeric: tabular-nums;
+}
+
+/* selected-keyframe inspector header: ◀ #n / total ▶ steppers + duplicate/delete */
+.kf-insp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.7rem; }
+.kf-steppers { display: flex; align-items: center; gap: 0.5rem; }
+.kf-steppers .kf-num { min-width: 4.2em; text-align: center; }
