@@ -57,15 +57,15 @@ public class SceneNamingTests
 public class LightFormatTests
 {
     [Theory]
-    [InlineData(0, "warm")]
-    [InlineData(33, "warm")]
-    [InlineData(34, "neutral")]
-    [InlineData(50, "neutral")]
-    [InlineData(66, "neutral")]
-    [InlineData(67, "cold")]
-    [InlineData(100, "cold")]
-    public void TempWord_boundaries(int temperature, string word) =>
-        Assert.Equal(word, LightFormat.TempWord(temperature));
+    [InlineData(0, "light.temp.warm")]
+    [InlineData(33, "light.temp.warm")]
+    [InlineData(34, "light.temp.neutral")]
+    [InlineData(50, "light.temp.neutral")]
+    [InlineData(66, "light.temp.neutral")]
+    [InlineData(67, "light.temp.cold")]
+    [InlineData(100, "light.temp.cold")]
+    public void TempWordKey_boundaries(int temperature, string key) =>
+        Assert.Equal(key, LightFormat.TempWordKey(temperature));
 }
 
 public class UiExtensionsTests
