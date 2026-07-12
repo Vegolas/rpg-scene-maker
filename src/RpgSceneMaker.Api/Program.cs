@@ -72,6 +72,11 @@ builder.Services.AddSingleton<AnthropicStore>();
 // MCP server and the in-panel assistant (both added in later commits).
 builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AiToolService>();
 
+// The in-panel assistant: the tool executor (hand-written Anthropic Tool schemas over the façade) plus the
+// singleton service that runs the agentic loop and holds the polled transcript.
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AssistantTools>();
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AssistantService>();
+
 // MCP server hosted in-process at /mcp (streamable HTTP, stateless — MCP clients resend the API key on every
 // request, so there is no session to keep). The four tool-type classes are thin adapters over AiToolService.
 builder.Services.AddMcpServer()
@@ -122,6 +127,7 @@ app.Use(async (context, next) =>
             HueException => (StatusCodes.Status502BadGateway, "Philips Hue error"),
             SpotifyException => (StatusCodes.Status502BadGateway, "Spotify error"),
             SoundboardException => (StatusCodes.Status503ServiceUnavailable, "Soundboard error"),
+            RpgSceneMaker.Api.Services.Ai.AnthropicException => (StatusCodes.Status502BadGateway, "Anthropic error"),
             HttpRequestException or TaskCanceledException =>
                 (StatusCodes.Status502BadGateway, "Spotify unreachable — check the internet connection"),
             SocketException or IOException or TimeoutException =>
@@ -167,7 +173,8 @@ app.Use(async (context, next) =>
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
          path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
-         path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp"));
+         path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp") ||
+         path.StartsWithSegments("/assistant"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -188,6 +195,7 @@ app.MapImageEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
 app.MapDiagnosticsEndpoints();
+app.MapAssistantEndpoints();
 
 // The in-process MCP server (streamable HTTP) — point Claude Code / Claude Desktop at this.
 app.MapMcp("/mcp");
