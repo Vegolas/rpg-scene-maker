@@ -92,7 +92,15 @@
 .tl-insp-title { font: var(--text-lg); }
 .tl-insp-row { display: flex; align-items: center; gap: var(--s-2); margin: var(--s-2) 0; }
 .tl-insp-row label { flex: 0 0 78px; color: var(--text-muted); font: var(--text-sm); }
-.tl-insp-row input[type="number"], .tl-insp-row select {
+
+/* inline groups: several label+field pairs on one row (Start+Duration, Loop+Cycle).
+   Wraps to stacked pairs when the row is too narrow (iPad portrait). */
+.tl-insp-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); margin: var(--s-2) 0; }
+.tl-insp-inline .tl-fld { display: flex; align-items: center; gap: var(--s-2); }
+.tl-insp-inline .tl-fld label { color: var(--text-muted); font: var(--text-sm); }
+
+.tl-insp-row input[type="number"], .tl-insp-row select,
+.tl-insp-inline input[type="number"], .tl-insp-inline select {
   width: 96px;
   background: var(--input);
   border: 1px solid var(--border);
@@ -102,7 +110,8 @@
   min-height: var(--hit-min);
   padding: 0 var(--s-2);
 }
-.tl-insp-row input[type="number"]:focus, .tl-insp-row select:focus { outline: none; border-color: var(--accent); }
+.tl-insp-row input[type="number"]:focus, .tl-insp-row select:focus,
+.tl-insp-inline input[type="number"]:focus, .tl-insp-inline select:focus { outline: none; border-color: var(--accent); }
 .tl-unit { color: var(--text-muted); font: var(--text-sm); }
 
 /* decorative keyframe tick marks on a "custom" light clip (never intercept drag/resize) */

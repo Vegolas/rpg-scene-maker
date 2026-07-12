@@ -6,9 +6,9 @@
 
 <div class="tl-toolbar">
     <div class="tl-zoom">
-        <button class="btn btn--small" @onclick="ZoomOut" disabled="@(_pps <= MinPps)" aria-label="Zoom out"><Icon Name="zoom-out" /></button>
-        <button class="btn btn--small" @onclick="ZoomIn" disabled="@(_pps >= MaxPps)" aria-label="Zoom in"><Icon Name="zoom-in" /></button>
-        <button class="btn btn--small" @onclick="FitAsync">Fit</button>
+        <button class="btn btn--small" @onclick="ZoomOut" disabled="@(_pps <= MinPps)" title="Zoom out" aria-label="Zoom out"><Icon Name="zoom-out" /></button>
+        <button class="btn btn--small" @onclick="ZoomIn" disabled="@(_pps >= MaxPps)" title="Zoom in" aria-label="Zoom in"><Icon Name="zoom-in" /></button>
+        <button class="btn btn--small" @onclick="FitAsync" title="Fit timeline to view">Fit</button>
     </div>
     <span class="tl-total">@FormatSeconds(Model.EndMs) total@if (OverLimit) {<text> </text><Icon Name="warn" /><text> over 10 min</text>}</span>
 </div>
@@ -132,24 +132,28 @@
             var isLoop = SoundLoop(sc.SoundId);
         }
 
-        <div class="tl-insp-row">
-            <label>Start</label>
-            <input type="number" min="0" step="0.1" value="@Sec(sc.StartMs)" @onchange="e => SetStart(sc, e)" /> <span class="tl-unit">s</span>
-        </div>
-        <div class="tl-insp-row">
-            <label>Duration</label>
-            @if (sc.DurationMs is { } d)
-            {
-                <input type="number" min="0.1" step="0.1" value="@Sec(d)" @onchange="e => SetSoundDuration(sc, e)" /> <span class="tl-unit">s</span>
-            }
-            else if (isLoop)
-            {
-                <span class="tl-unit"><Icon Name="repeat" /> until stopped</span>
-            }
-            else
-            {
-                <span class="tl-unit">natural@(natural is { } n ? $" (~{FormatSeconds(n)})" : "")</span>
-            }
+        <div class="tl-insp-inline">
+            <div class="tl-fld">
+                <label>Start</label>
+                <input type="number" min="0" step="0.1" value="@Sec(sc.StartMs)" @onchange="e => SetStart(sc, e)" aria-label="Clip start" />
+                <span class="tl-unit">s</span>
+            </div>
+            <div class="tl-fld">
+                <label>Duration</label>
+                @if (sc.DurationMs is { } d)
+                {
+                    <input type="number" min="0.1" step="0.1" value="@Sec(d)" @onchange="e => SetSoundDuration(sc, e)" aria-label="Clip duration" />
+                    <span class="tl-unit">s</span>
+                }
+                else if (isLoop)
+                {
+                    <span class="tl-unit"><Icon Name="repeat" /> until stopped</span>
+                }
+                else
+                {
+                    <span class="tl-unit">natural@(natural is { } n ? $" (~{FormatSeconds(n)})" : "")</span>
+                }
+            </div>
         </div>
 
         <div class="chip-row">
@@ -214,6 +218,10 @@ else if (SelectedLight is { } lc)
                 }
             </div>
 
+            @* "From library" belongs with the effect chooser: picking a saved FX (Type "fx") replaces the
+               built-in effect and hides the per-effect controls below. *@
+            <FxLibraryPicker Effect="lc.Effect" Library="Fx" />
+
             @* Base colour/white — shown only for effects that build on it (static + flicker/glow/storm);
                drift needs just its brightness; custom/fx set colour + brightness per keyframe. *@
             @if (Palette.EffectUsesBaseColor(lc.Effect.Type))
@@ -256,7 +264,7 @@ else if (SelectedLight is { } lc)
                             {
                                 <span class="pal-chip">
                                     <span class="pal-dot" style="background:@c"></span>@c.ToUpperInvariant()
-                                    <button class="pal-x" aria-label="Remove color" @onclick="() => lc.Effect.Colors.Remove(c)"><Icon Name="close" /></button>
+                                    <button class="pal-x" title="Remove color" aria-label="Remove color" @onclick="() => lc.Effect.Colors.Remove(c)"><Icon Name="close" /></button>
                                 </span>
                             }
                         </div>
@@ -264,21 +272,23 @@ else if (SelectedLight is { } lc)
                     <SwatchGrid Selected="null" ShowCustom="false" OnPick="hex => AddDriftColor(lc, hex)" Style="margin-top:0.6rem" />
                 }
             }
-
-            <FxLibraryPicker Effect="lc.Effect" Library="Fx" />
         }
         else
         {
             <p class="hint" style="margin-top:0.8rem">This clip switches the light off for its window.</p>
         }
 
-        <div class="tl-insp-row" style="margin-top:1rem">
-            <label>Start</label>
-            <input type="number" min="0" step="0.1" value="@Sec(lc.StartMs)" @onchange="e => SetStart(lc, e)" /> <span class="tl-unit">s</span>
-        </div>
-        <div class="tl-insp-row">
-            <label>Duration</label>
-            <input type="number" min="0.1" step="0.1" value="@Sec(lc.DurationMs)" @onchange="e => SetLightDuration(lc, e)" /> <span class="tl-unit">s</span>
+        <div class="tl-insp-inline" style="margin-top:1rem">
+            <div class="tl-fld">
+                <label>Start</label>
+                <input type="number" min="0" step="0.1" value="@Sec(lc.StartMs)" @onchange="e => SetStart(lc, e)" aria-label="Clip start" />
+                <span class="tl-unit">s</span>
+            </div>
+            <div class="tl-fld">
+                <label>Duration</label>
+                <input type="number" min="0.1" step="0.1" value="@Sec(lc.DurationMs)" @onchange="e => SetLightDuration(lc, e)" aria-label="Clip duration" />
+                <span class="tl-unit">s</span>
+            </div>
         </div>
     </div>
 }
