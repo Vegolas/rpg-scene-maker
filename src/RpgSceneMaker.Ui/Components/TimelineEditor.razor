@@ -10,7 +10,7 @@
         <button class="btn btn--small" @onclick="ZoomIn" disabled="@(_pps >= MaxPps)" title="Zoom in" aria-label="Zoom in"><Icon Name="zoom-in" /></button>
         <button class="btn btn--small" @onclick="FitAsync" title="Fit timeline to view">Fit</button>
     </div>
-    <span class="tl-total">@FormatSeconds(Model.EndMs) total@if (OverLimit) {<text> </text><Icon Name="warn" /><text> over 10 min</text>}</span>
+    <span class="tl-total">@FormatSeconds(Model.EndMs) total @if (OverLimit) {<text> </text><Icon Name="warn" /><text> over 10 min</text>}</span>
 </div>
 
 <div class="tl-root" data-pps="@_pps" @ref="_rootEl">
