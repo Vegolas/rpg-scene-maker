@@ -16,7 +16,13 @@
 }
 else
 {
-    <div class="page-head"><h1>@(_isNew ? L["effectEditor.titleNew"] : L["effectEditor.titleEdit"])</h1></div>
+    <div class="page-head">
+        <h1>@(_isNew ? L["effectEditor.titleNew"] : L["effectEditor.titleEdit"])</h1>
+        @if (Ui.AssistantConfigured && !_isNew)
+        {
+            <button class="btn" @onclick="AskAssistant"><Icon Name="assistant" /> @L["assistant.ask"]</button>
+        }
+    </div>
 
     <div class="panel">
         <div class="field" style="margin-bottom:0">
@@ -119,6 +125,8 @@ else
 
         _loading = false;
     }
+
+    private Task AskAssistant() => Vt.NavigateAsync($"assistant?ctx=effect:{Uri.EscapeDataString(_edit.Id)}");
 
     // On create the id follows the name; on edit it's fixed.
     private string CurrentId => _isNew ? SceneNaming.MakeUnique(SceneNaming.Slugify(_edit.Name), _existingIds) : _edit.Id;

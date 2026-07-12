@@ -83,6 +83,10 @@ else
 }
 
 @code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "ctx")]
+    public string? Ctx { get; set; }
+
     private readonly List<AssistantEntryDto> _entries = [];
     private string _input = "";
     private long _rev;
@@ -95,8 +99,35 @@ else
     {
         await PollAsync();
         _loaded = true;
+        PrefillFromContext();
         StateHasChanged();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1000, 1000);
+    }
+
+    // An editor's "Ask the assistant" button navigates here with ?ctx=<kind>:<id>. Seed the composer
+    // with an editable draft naming the entity so the assistant (via its get_* tools) can read it; the
+    // user confirms/edits before sending. Malformed or unknown ctx is silently ignored.
+    private void PrefillFromContext()
+    {
+        if (!string.IsNullOrWhiteSpace(_input) || string.IsNullOrEmpty(Ctx)) return;
+
+        var sep = Ctx.IndexOf(':');
+        if (sep <= 0 || sep == Ctx.Length - 1) return;
+
+        var kind = Ctx[..sep];
+        var id = Uri.UnescapeDataString(Ctx[(sep + 1)..]);
+        if (string.IsNullOrWhiteSpace(id)) return;
+
+        var key = kind switch
+        {
+            "scene" => "assistant.ctxDraft.scene",
+            "event" => "assistant.ctxDraft.event",
+            "effect" => "assistant.ctxDraft.effect",
+            _ => null,
+        };
+        if (key is null) return;
+
+        _input = L.Format(key, id);
     }
 
     private async Task PollAsync()
