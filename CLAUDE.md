@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Settings, Logs);
+- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions). All server calls go
   through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). The top bar (in
@@ -129,6 +129,32 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   everything else at Warning+) and surfaced by `/logs/list` + the panel's Logs tab. The error middleware
   logs every caught failure here.
 - **`SceneStore` / `SettingsStore`** — persistence (see below).
+- **`AiToolService`** ([AiToolService.cs](src/RpgSceneMaker.Api/Services/Ai/AiToolService.cs)) — the shared
+  AI **tool façade** (a singleton) behind both AI surfaces (MCP + the assistant): full CRUD + live control
+  over scenes, events and Light FX, plus read-only context (`list_lights` via the registry, `list_sounds`,
+  `list_spotify_playlists`, `search_spotify_tracks`) and `reset_lights` — 23 ops total. It reuses the exact
+  HTTP paths' machinery: the `Validation/*` guards, the stores, and Scene/Event image cleanup (capture old
+  `Image`, upsert, `ImageFileStorage.Delete` on replace/delete). Because `SceneActivator`/`EventActivator`/
+  `ILightService`/`SpotifyClient` are **scoped**, every op that touches them does `using var scope =
+  scopeFactory.CreateScope()` and resolves per call (the `EventTimelineRunner`/`LightFxTester` pattern);
+  `AiJson` gives it a `JsonSerializerDefaults.Web` options so tool JSON matches the wire exactly. The FX
+  detach-on-delete logic is factored into `LightFxDetacher` ([LightFxDetacher.cs](src/RpgSceneMaker.Api/Services/LightFxDetacher.cs))
+  so the endpoint and the façade delete FX identically.
+- **MCP server** — `ModelContextProtocol.AspNetCore` (stateless streamable HTTP) mapped at **`/mcp`**
+  (`AddMcpServer().WithHttpTransport(o => o.Stateless = true)` + `MapMcp("/mcp")` in
+  [Program.cs](src/RpgSceneMaker.Api/Program.cs), before `MapFallbackToFile`). The 23 tools
+  ([McpTools.cs](src/RpgSceneMaker.Api/Services/Ai/McpTools.cs)) are thin `[McpServerTool]` adapters over
+  `AiToolService` (upserts take the typed entity so schemas auto-generate from the models). Point Claude Code
+  / Claude Desktop here; it is behind the optional API-key gate like the rest of the API.
+- **`AssistantService` / `AnthropicStore`** — the in-panel **BYOK assistant**. `AnthropicStore`
+  ([AnthropicStore.cs](src/RpgSceneMaker.Api/Services/AnthropicStore.cs)) persists the user's Anthropic API
+  key + model in SQLite via `/setup/anthropic/*` (`AnthropicConfig` single row; the key is **never echoed** —
+  endpoints return only `{configured, model}`). `AssistantService`
+  ([AssistantService.cs](src/RpgSceneMaker.Api/Services/Ai/AssistantService.cs), a singleton) runs a single
+  in-memory chat session as a non-streaming agentic tool loop (official `Anthropic` SDK, tools from
+  `AssistantTools` → the same façade); the panel drives it over `/assistant/*` (`send`/`state`/`stop`/`clear`)
+  by **polling `/assistant/state?rev=`** (the codebase's real-time idiom — no SSE). `AnthropicException`
+  maps to a `502` arm in the Program.cs error switch.
 
 ### Conventions
 
@@ -139,8 +165,10 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   status + Problem responses by the first middleware in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
   When adding a new failure mode, throw a meaningful exception and add a `switch` arm there rather than
   returning ad-hoc error bodies.
-- **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /sounds /setup /logs` require it
-  (`X-Api-Key` header or `?apiKey=`). The panel stores it in browser localStorage.
+- **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /sounds /events /screens
+  /lightfx /images /setup /logs /diagnostics /mcp /assistant` require it (`X-Api-Key` header or `?apiKey=`;
+  the Spotify OAuth callback is exempt). The panel stores it in browser localStorage. Keep new protected
+  prefixes in `IsProtectedPath` in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
 - **DTOs are duplicated**, not shared: the API's wire DTOs live in `Contracts/` and the UI keeps its own
   copies in [its own `Contracts/`](src/RpgSceneMaker.Ui/Contracts) (there is no shared contracts project).
   If you change an API DTO, update the matching UI DTO by hand.

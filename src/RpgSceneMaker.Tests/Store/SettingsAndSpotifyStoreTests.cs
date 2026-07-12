@@ -72,3 +72,56 @@ public class SpotifyStoreTests
         Assert.True(store.Current.IsConnected);
     }
 }
+
+public class AnthropicStoreTests
+{
+    [Fact]
+    public void Fresh_store_is_unconfigured_with_the_default_model()
+    {
+        using var db = new SqliteTestDb();
+        var store = new AnthropicStore(db);
+
+        Assert.False(store.Current.IsConfigured);
+        Assert.Equal("claude-opus-4-8", store.Current.Model);
+    }
+
+    [Fact]
+    public void Save_persists_key_and_model_for_a_fresh_store()
+    {
+        using var db = new SqliteTestDb();
+        new AnthropicStore(db).Save("sk-ant-secret", "claude-sonnet-4-5");
+
+        // A second store instance loads the same row from SQLite.
+        var reloaded = new AnthropicStore(db);
+        Assert.True(reloaded.Current.IsConfigured);
+        Assert.Equal("sk-ant-secret", reloaded.Current.ApiKey);
+        Assert.Equal("claude-sonnet-4-5", reloaded.Current.Model);
+    }
+
+    [Fact]
+    public void Saving_an_empty_key_keeps_the_stored_key_while_updating_the_model()
+    {
+        using var db = new SqliteTestDb();
+        var store = new AnthropicStore(db);
+        store.Save("sk-ant-secret", "claude-opus-4-8");
+
+        store.Save("", "claude-sonnet-4-5");   // model-only change, no re-paste
+
+        Assert.Equal("sk-ant-secret", store.Current.ApiKey);
+        Assert.Equal("claude-sonnet-4-5", store.Current.Model);
+    }
+
+    [Fact]
+    public void Clear_empties_the_key_but_keeps_the_model()
+    {
+        using var db = new SqliteTestDb();
+        var store = new AnthropicStore(db);
+        store.Save("sk-ant-secret", "claude-sonnet-4-5");
+
+        store.Clear();
+
+        Assert.False(store.Current.IsConfigured);
+        Assert.Equal("", store.Current.ApiKey);
+        Assert.Equal("claude-sonnet-4-5", store.Current.Model);
+    }
+}
