@@ -26,7 +26,8 @@ a:hover { color: var(--text); }
   gap: var(--s-4);
   background: var(--bg);
 }
-.boot-die { font-size: 3.25rem; animation: bootPulse 1.4s ease-in-out infinite; }
+.boot-die { color: var(--accent-text); animation: bootPulse 1.4s ease-in-out infinite; }
+.boot-die svg { width: 3.25rem; height: 3.25rem; display: block; }
 .boot-text { font: 600 14px/1 var(--font); color: var(--text-muted); }
 @keyframes bootPulse {
   0%, 100% { transform: scale(1); opacity: .7; }
@@ -80,6 +81,7 @@ a:hover { color: var(--text); }
 }
 #blazor-error-ui .reload { color: var(--danger); text-decoration: underline; }
 #blazor-error-ui .dismiss { position: absolute; right: var(--s-4); top: var(--s-3); cursor: pointer; }
+#blazor-error-ui .dismiss svg { width: 16px; height: 16px; display: block; }
 
 /* ---------- view transitions (tab nav + scene changes) ---------- */
 /* The persistent chrome gets its own snapshots so the page transition can animate

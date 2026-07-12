@@ -33,8 +33,12 @@ Two projects under `src/`; the solution file lives at
   address is the same origin.
 - **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
-  constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions). All server calls go
-  through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). The top bar (in
+  constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
+  through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). **UI chrome icons** are Phosphor Fill
+  SVGs: [`Icon.razor`](src/RpgSceneMaker.Ui/Components/Icon.razor) renders a glyph by semantic name from
+  [`Icons.cs`](src/RpgSceneMaker.Ui/Shared/Icons.cs) (tinted `currentColor`); user-picked scene/sound emoji
+  stay content, and [`Glyph.razor`](src/RpgSceneMaker.Ui/Components/Glyph.razor) shows a user's emoji or falls
+  back to a chrome icon. The top bar (in
   [MainLayout.razor](src/RpgSceneMaker.Ui/Layout/MainLayout.razor)) hosts always-visible
   [QuickControls.razor](src/RpgSceneMaker.Ui/Components/QuickControls.razor): music play/pause + volume
   (shown only when Spotify is connected) and a reset-lights button, on every tab.
@@ -187,7 +191,7 @@ Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.jso
 [AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
 as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`), `Events`
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
-`Tiles` JSON column; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
+`Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
 `NOCASE`) and a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.

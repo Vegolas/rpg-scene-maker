@@ -1,11 +1,12 @@
-@* A clickable list row: leading icon, title, and a muted hint. Use inside a .klist. *@
+@* A clickable list row: leading chrome icon, title, and a muted hint. Use inside a .klist. *@
 <button class="krow @(Selected ? "selected" : "")" @onclick="OnClick">
-    <span class="krow-ico">@Icon</span>
+    <span class="krow-ico">@if (!string.IsNullOrEmpty(IconName)) { <Icon Name="@IconName" /> }</span>
     <span class="krow-title">@Title @if (!string.IsNullOrEmpty(Hint)) {<small class="hint">@Hint</small>}</span>
 </button>
 
 @code {
-    [Parameter] public string Icon { get; set; } = "";
+    // A chrome icon name from Shared/Icons.cs (e.g. "track", "check-on").
+    [Parameter] public string? IconName { get; set; }
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public string? Hint { get; set; }
     [Parameter] public bool Selected { get; set; }

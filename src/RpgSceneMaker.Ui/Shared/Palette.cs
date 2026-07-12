@@ -16,16 +16,28 @@ public static class Palette
         ("#20e0c0", "Poison / ghost"),
     ];
 
-    // Per-light effect options (type + button label).
+    // Per-light effect options (type + button label). The picker shows a chrome icon beside the label
+    // via EffectIcon(type); the label itself is plain text (also used in the collapsed light summary).
     public static readonly (string Type, string Label)[] Effects =
     [
         ("none", "None"),
-        ("flicker", "🕯️ Flicker"),
-        ("glow", "✨ Glow"),
-        ("storm", "⛈️ Storm"),
-        ("drift", "🌀 Drift"),
-        ("custom", "🎬 Custom"),
+        ("flicker", "Flicker"),
+        ("glow", "Glow"),
+        ("storm", "Storm"),
+        ("drift", "Drift"),
+        ("custom", "Custom"),
     ];
+
+    // Chrome icon name (Shared/Icons.cs key) for an effect type; "none" (and unknowns) show no icon.
+    public static string EffectIcon(string type) => type switch
+    {
+        "flicker" => "fx-flicker",
+        "glow" => "fx-glow",
+        "storm" => "fx-storm",
+        "drift" => "fx-drift",
+        "custom" => "fx-custom",
+        _ => "",
+    };
 
     // Which effects actually consume the light's base state, so the editor shows the base pickers only when
     // they do something (mirrors EffectEngine on the server):

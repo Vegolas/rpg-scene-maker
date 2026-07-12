@@ -28,7 +28,7 @@ else
         <div class="klist">
             @foreach (var fx in _fx)
             {
-                <KRow Icon="✨" Title="@fx.Name" Hint="@Meta(fx)" OnClick="() => Edit(fx.Id)" />
+                <KRow IconName="effects" Title="@fx.Name" Hint="@Meta(fx)" OnClick="() => Edit(fx.Id)" />
             }
         </div>
     }
@@ -38,7 +38,7 @@ else
     }
 
     <div class="btn-row" style="margin-top:1rem">
-        <button class="btn btn--primary" @onclick="NewFx">＋ New effect</button>
+        <button class="btn btn--primary" @onclick="NewFx"><Icon Name="add" /> New effect</button>
     </div>
 }
 
@@ -51,7 +51,7 @@ else
     {
         var count = fx.Keyframes?.Count ?? 0;
         var kf = $"{count} keyframe{(count == 1 ? "" : "s")}";
-        return fx.Loop ? $"{kf} · 🔁 loop" : kf;
+        return fx.Loop ? $"{kf} · loop" : kf;
     }
 
     private Task NewFx() => Vt.NavigateAsync("effects/new");

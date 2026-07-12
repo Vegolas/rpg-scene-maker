@@ -34,7 +34,7 @@ else
 
         @if (HueIsPaired)
         {
-            <p class="status ok">✓ Paired with the bridge</p>
+            <p class="status ok"><Icon Name="ok" /> Paired with the bridge</p>
             <div class="btn-row">
                 <button class="btn" @onclick="LoadHueLights" disabled="@_busy">Refresh lights</button>
                 <button class="btn" @onclick="TestLight" disabled="@_busy">Test (toggle)</button>
@@ -51,7 +51,7 @@ else
                             <input type="checkbox"
                                    checked="@_config.Hue.LightIds.Contains(light.Id)"
                                    @onchange="e => ToggleLight(light.Id, e)" />
-                            <span class="krow-ico">@(light.Reachable ? "💡" : "⚠️")</span>
+                            <span class="krow-ico"><Icon Name="@(light.Reachable ? "lights" : "warn")" /></span>
                             <span class="krow-title">@light.Name <small class="hint">@light.Type@(light.Reachable ? "" : " — unreachable")</small></span>
                         </label>
                     }
@@ -144,7 +144,7 @@ else
                         <span class="reg-badge @(light.Provider == "hue" ? "hue" : "tuya")">@LightFormat.ProviderLabel(light.Provider)</span>
                         <input class="reg-name" type="text" @bind="light.Name" placeholder="Light name" />
                         <code class="reg-key" title="Stable key used by scenes and endpoints">@light.Key</code>
-                        <button class="reg-remove" aria-label="Remove light" @onclick="() => RemoveLight(light)">✕</button>
+                        <button class="reg-remove" aria-label="Remove light" @onclick="() => RemoveLight(light)"><Icon Name="close" /></button>
                     </div>
                 }
             </div>
@@ -176,7 +176,7 @@ else
                     {
                         var added = _config.Lights.Any(l => l.Provider == "hue" && l.HueId == hl.Id);
                         <div class="reg-row">
-                            <span class="krow-ico">@(hl.Reachable ? "💡" : "⚠️")</span>
+                            <span class="krow-ico"><Icon Name="@(hl.Reachable ? "lights" : "warn")" /></span>
                             <span class="reg-name-static">@hl.Name</span>
                             <button class="btn btn--small" disabled="@added" @onclick="() => AddHue(hl)">@(added ? "Added" : "Add")</button>
                         </div>
@@ -192,7 +192,7 @@ else
 
     <SectionHeading>Default Lighting</SectionHeading>
     <div class="panel">
-        <p class="hint">The state the top-bar 💡 reset button restores — e.g. bright white “house lights up” for a break.</p>
+        <p class="hint">The state the top-bar reset-lights button restores — e.g. bright white “house lights up” for a break.</p>
 
         <Segmented TValue="string" Options="DefaultModes" Value="@(DefaultMode ?? "")" ValueChanged="SetDefaultMode" />
 
@@ -201,14 +201,14 @@ else
             <div style="margin-top:1rem">
                 <SwatchGrid Selected="_config.DefaultLight?.Color" OnPick="OnDefaultColorPicked" />
             </div>
-            <SliderRow LeftIcon="🔆" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
+            <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
                        ValueChanged="OnDefaultBrightnessChanged" AriaLabel="Default brightness" />
         }
         else if (DefaultMode == "white")
         {
-            <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" Value="@(_config.DefaultLight?.Temperature ?? 50)"
+            <SliderRow LeftIcon="warm" RightIcon="cold" Min="0" Max="100" Value="@(_config.DefaultLight?.Temperature ?? 50)"
                        ValueChanged="OnDefaultTemperatureChanged" AriaLabel="Default color temperature" />
-            <SliderRow LeftIcon="🔆" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
+            <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
                        ValueChanged="OnDefaultBrightnessChanged" AriaLabel="Default brightness" />
         }
         else if (DefaultMode == "off")
@@ -247,7 +247,7 @@ else
 
         @if (_spotify.Connected)
         {
-            <p class="status ok">✓ Connected to Spotify</p>
+            <p class="status ok"><Icon Name="ok" /> Connected to Spotify</p>
             <div class="field" style="margin-top:1rem">
                 <label for="spotify-device">Playback device (empty = whatever is active)</label>
                 <div class="field-row">

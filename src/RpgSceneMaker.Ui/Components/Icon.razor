@@ -1,0 +1,10 @@
+@* A chrome icon: an inline Phosphor Fill SVG tinted with `currentColor`. `Name` is a semantic key from
+   Shared/Icons.cs (e.g. "edit", "play", "warn"). Sized by CSS (`.ico` → 20px default, 24px in tiles).
+   Icon-only buttons already carry their own aria-label, so the glyph itself is aria-hidden. *@
+<svg class="ico @Class" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false">@((MarkupString)Icons.Inner(Name))</svg>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    // Extra class(es) for one-off sizing/tinting at a call site.
+    [Parameter] public string? Class { get; set; }
+}

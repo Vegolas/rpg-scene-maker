@@ -121,10 +121,18 @@ Font: Inter (fallback system-ui). No serif, no display fonts.
 
 ## Iconography
 
-Current emoji are placeholders. Target: a single-weight solid icon set
-(e.g. Lucide/Phosphor **fill** style) at 20px in rails/rows, 24px in tiles,
-tinted `currentColor`. Until swapped, keep emoji at the sizes used in the
-reference screens; inactive nav emoji get `opacity: .5`.
+UI chrome uses a single-weight **solid icon set** — Phosphor **Fill** — rendered
+as inline SVG by `Components/Icon.razor` (path data in `Shared/Icons.cs`, keyed by
+a semantic name like `edit` / `play` / `warn`). Icons are tinted `currentColor` and
+sized `1em`, so each slot's font-size sets the glyph: ~20–22px in rails/rows,
+24–26px in tiles. Inactive nav icons get `opacity: .5`. Add a glyph by dropping its
+Phosphor Fill inner markup into `Icons.cs` under a new semantic key — never inline
+raw emoji in chrome.
+
+**Emoji are content, not chrome.** The emoji a user picks for a scene/event/screen
+name (from `Shared/Palette.cs` → `Emojis`) stay as emoji; a tile or row with no
+picked emoji falls back to its section's icon via `Components/Glyph.razor`. The
+only iOS side-bearing nudge left applies to the emoji **picker** cells.
 
 ## Voice
 

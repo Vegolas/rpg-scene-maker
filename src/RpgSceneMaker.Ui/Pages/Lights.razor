@@ -33,13 +33,13 @@
 
 <SectionHeading>Brightness</SectionHeading>
 <div class="panel">
-    <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" Value="_brightness"
+    <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" Value="_brightness"
                ValueChanged="OnBrightnessChanged" AriaLabel="Brightness" />
 </div>
 
 <SectionHeading>White Light</SectionHeading>
 <div class="panel">
-    <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" Value="_temperature"
+    <SliderRow LeftIcon="warm" RightIcon="cold" Min="0" Max="100" Value="_temperature"
                ValueChanged="OnTemperatureChanged" AriaLabel="Color temperature" />
     <div class="btn-row">
         <button class="btn btn--primary" @onclick="ApplyWhite">Set white (@_brightness%, @TempLabel)</button>

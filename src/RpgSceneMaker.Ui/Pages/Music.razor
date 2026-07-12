@@ -38,24 +38,24 @@ else
         }
 
         <div class="transport">
-            <button class="btn" @onclick="@(() => Send("music/previous"))" aria-label="Previous">⏮</button>
+            <button class="btn" @onclick="@(() => Send("music/previous"))" aria-label="Previous"><Icon Name="prev" /></button>
             @if (_state?.IsPlaying == true)
             {
-                <button class="btn btn--primary play" @onclick="@(() => Send("music/pause"))" aria-label="Pause">⏸</button>
+                <button class="btn btn--primary play" @onclick="@(() => Send("music/pause"))" aria-label="Pause"><Icon Name="pause" /></button>
             }
             else
             {
-                <button class="btn btn--primary play" @onclick="@(() => Send("music/resume"))" aria-label="Play">▶</button>
+                <button class="btn btn--primary play" @onclick="@(() => Send("music/resume"))" aria-label="Play"><Icon Name="play" /></button>
             }
-            <button class="btn" @onclick="@(() => Send("music/next"))" aria-label="Next">⏭</button>
+            <button class="btn" @onclick="@(() => Send("music/next"))" aria-label="Next"><Icon Name="next" /></button>
         </div>
 
-        <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" Value="_volumePercent"
+        <SliderRow LeftIcon="volume" Min="0" Max="100" Suffix="%" Value="_volumePercent"
                    ValueChanged="OnVolumeChanged" AriaLabel="Volume" />
 
         <div class="chip-row">
-            <Chip On="ShuffleOn" OnClick="ToggleShuffle">🔀 Shuffle</Chip>
-            <Chip On="RepeatOn" OnClick="CycleRepeat">@RepeatLabel()</Chip>
+            <Chip On="ShuffleOn" OnClick="ToggleShuffle"><Icon Name="shuffle" /> Shuffle</Chip>
+            <Chip On="RepeatOn" OnClick="CycleRepeat"><Icon Name="@RepeatIcon()" /> @RepeatText()</Chip>
         </div>
     </div>
 
@@ -75,7 +75,7 @@ else
                 @foreach (var t in _results)
                 {
                     var label = string.IsNullOrEmpty(t.Artist) ? t.Name : $"{t.Name} — {t.Artist}";
-                    <KRow Icon="♪" Title="@t.Name" Hint="@t.Artist" OnClick="() => Play(t.Uri, label)" />
+                    <KRow IconName="track" Title="@t.Name" Hint="@t.Artist" OnClick="() => Play(t.Uri, label)" />
                 }
             </div>
         }
@@ -153,11 +153,13 @@ else
             ? Math.Clamp(p / d * 100, 0, 100)
             : 0;
 
-    private string RepeatLabel() => _state?.Repeat switch
+    private string RepeatIcon() => _state?.Repeat == "track" ? "repeat-one" : "repeat";
+
+    private string RepeatText() => _state?.Repeat switch
     {
-        "track" => "🔂 Repeat track",
-        "playlist" => "🔁 Repeat list",
-        _ => "🔁 No repeat",
+        "track" => "Repeat track",
+        "playlist" => "Repeat list",
+        _ => "No repeat",
     };
 
     // off → playlist → track → off

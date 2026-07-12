@@ -1,11 +1,11 @@
 @* Library-reference controls for a light effect, shared by the scene editor's per-light section and the
-   event timeline's light-clip inspector. Renders a "📚 From library" chip that opens a picker of saved
+   event timeline's light-clip inspector. Renders a "From library" chip that opens a picker of saved
    Light FX; picking one makes the effect a live reference (Type "fx" + FxId). When referencing an FX it
    shows its name, an "Edit in library" link, and a "Detach to edit locally" button that copies the
-   keyframes into an embedded "custom" effect. A dangling reference shows a ⚠ hint. *@
+   keyframes into an embedded "custom" effect. A dangling reference shows a warning hint. *@
 
 <div class="chip-row" style="margin-top:0.6rem">
-    <Chip On="@(Effect.Type == "fx")" OnClick="TogglePicker">📚 From library</Chip>
+    <Chip On="@(Effect.Type == "fx")" OnClick="TogglePicker"><Icon Name="library" /> From library</Chip>
 </div>
 
 @if (_pickerOpen)
@@ -20,7 +20,7 @@
             <div class="klist">
                 @foreach (var fx in Library)
                 {
-                    <KRow Icon="✨" Title="@fx.Name" Hint="@Meta(fx)"
+                    <KRow IconName="effects" Title="@fx.Name" Hint="@Meta(fx)"
                           Selected="@(Effect.Type == "fx" && string.Equals(Effect.FxId, fx.Id, StringComparison.OrdinalIgnoreCase))"
                           OnClick="() => Pick(fx)" />
                 }
@@ -35,7 +35,7 @@
     <div class="panel" style="margin-top:0.6rem">
         @if (lib is not null)
         {
-            <p style="margin:0"><strong>✨ @lib.Name</strong> <small class="hint">@Meta(lib)</small></p>
+            <p style="margin:0"><strong><Icon Name="effects" /> @lib.Name</strong> <small class="hint">@Meta(lib)</small></p>
             <div class="btn-row" style="margin-top:0.6rem">
                 <a class="btn btn--small" href="effects/@lib.Id">Edit in library</a>
                 <button class="btn btn--small" @onclick="() => Detach(lib)">Detach to edit locally</button>
@@ -44,7 +44,7 @@
         }
         else
         {
-            <p class="hint" style="margin:0">⚠ References a missing effect (<code>@Effect.FxId</code>). Pick another above, or choose a different effect type.</p>
+            <p class="hint" style="margin:0"><Icon Name="warn" /> References a missing effect (<code>@Effect.FxId</code>). Pick another above, or choose a different effect type.</p>
         }
     </div>
 }
@@ -79,6 +79,6 @@
     {
         var count = fx.Keyframes?.Count ?? 0;
         var kf = $"{count} keyframe{(count == 1 ? "" : "s")}";
-        return fx.Loop ? $"{kf} · 🔁 loop" : kf;
+        return fx.Loop ? $"{kf} · loop" : kf;
     }
 }

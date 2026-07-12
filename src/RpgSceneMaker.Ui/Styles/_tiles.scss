@@ -53,7 +53,9 @@
 }
 .scene-card:hover { border-color: var(--border-strong); }
 .scene-card:active { transform: scale(.985); }
-.scene-card .scene-emoji { font-size: 26px; line-height: 1; margin-bottom: auto; }
+/* .scene-emoji = user's picked emoji (content); .scene-glyph = fallback chrome Icon (Glyph.razor). */
+.scene-card .scene-emoji,
+.scene-card .scene-glyph { font-size: 26px; line-height: 1; margin-bottom: auto; }
 .scene-card .scene-name { font: var(--text-xl); }
 .scene-card .screen-count { font: var(--text-sm); color: var(--text-muted); }
 
@@ -92,6 +94,7 @@
   padding: 4px 9px; border-radius: var(--r-pill);
 }
 .scene-card.active > .scene-emoji,
+.scene-card.active > .scene-glyph,
 .scene-card.active > .scene-name,
 .scene-card.active > .screen-count { position: relative; z-index: 2; }
 
@@ -161,7 +164,8 @@
   inset: 0;
   background: linear-gradient(to top, rgba(0, 0, 0, .75), rgba(0, 0, 0, .15) 55%, rgba(0, 0, 0, .4));
 }
-.scene-card.art .scene-emoji { display: none; }
+.scene-card.art .scene-emoji,
+.scene-card.art .scene-glyph { display: none; }
 .scene-card.art .scene-name,
 .scene-card.art .screen-count {
   position: relative;
@@ -199,3 +203,24 @@
   height: 1px;
   background: var(--border-subtle);
 }
+
+/* ---------- compact board (Screen.razor, per-screen "Compact layout" toggle) ----------
+   Denser tiles so a board with lots of shortcuts fits more on screen. Still well above the
+   44px touch-target minimum. Only affects screens grids that opt in via .compact. */
+.scene-grid.compact {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--s-2);
+}
+.scene-grid.compact .scene-card {
+  min-height: 74px;
+  padding: var(--s-2);
+  gap: 2px;
+  border-radius: var(--r-md);
+}
+.scene-grid.compact .scene-card .scene-emoji,
+.scene-grid.compact .scene-card .scene-glyph { font-size: 20px; }
+.scene-grid.compact .scene-card .scene-name { font: var(--text-md); }
+/* the LIVE pill shrinks a touch so it doesn't dominate a small tile */
+.scene-grid.compact .scene-card.active::after { padding: 2px 6px; }
+/* tighten the section-heading break spacing to match the denser grid */
+.scene-grid.compact .grid-break.titled { margin: var(--s-3) 0 0; }

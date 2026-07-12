@@ -9,12 +9,12 @@
     {
         <button class="q-btn primary" @onclick="PlayPause"
                 title="@(Playing ? "Pause music" : "Play music")"
-                aria-label="@(Playing ? "Pause music" : "Play music")">@(Playing ? "⏸" : "▶")</button>
+                aria-label="@(Playing ? "Pause music" : "Play music")"><Icon Name="@(Playing ? "pause" : "play")" /></button>
         <input class="q-vol" type="range" min="0" max="100" value="@_volume"
                @onchange="OnVolumeChanged" title="Music volume" aria-label="Music volume" />
     }
     <button class="q-btn" @onclick="ResetLights"
-            title="Reset lights to default" aria-label="Reset lights to default">💡</button>
+            title="Reset lights to default" aria-label="Reset lights to default"><Icon Name="lights" /></button>
 </div>
 
 @code {

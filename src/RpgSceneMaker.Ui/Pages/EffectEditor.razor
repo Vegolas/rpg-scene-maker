@@ -58,8 +58,8 @@ else
             <span class="tl-unit">seconds</span>
         </div>
         <div class="btn-row" style="margin-top:0.8rem">
-            <button class="btn" @onclick="Test" disabled="@_busy">▶ Test</button>
-            <button class="btn" @onclick="StopTest" disabled="@_busy">■ Stop</button>
+            <button class="btn" @onclick="Test" disabled="@_busy"><Icon Name="play" /> Test</button>
+            <button class="btn" @onclick="StopTest" disabled="@_busy"><Icon Name="stop" /> Stop</button>
         </div>
         <p class="hint" style="margin-top:0.6rem">Save first — the test runs the saved effect on the server's lights.</p>
     </div>

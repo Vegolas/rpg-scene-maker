@@ -28,7 +28,7 @@ else
     <div class="scene-grid">
         @foreach (var (evt, index) in shown.Select((e, i) => (e, i)))
         {
-            var (emoji, label) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
+            var (emoji, label) = SceneNaming.SplitName(evt.Name, "", evt.Id);
             var artUrl = Api.ImageUrl(evt.Image);
             var hasArt = artUrl is not null;
             var running = _runningId == evt.Id;
@@ -41,20 +41,20 @@ else
                 }
                 <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit event"
-                      @onclick="() => Edit(evt.Id)" @onclick:stopPropagation="true">✎</span>
+                      @onclick="() => Edit(evt.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
                 @if (running)
                 {
                     <span class="card-stop" role="button" tabindex="0" aria-label="Stop event"
-                          @onclick="Stop" @onclick:stopPropagation="true">⏹</span>
+                          @onclick="Stop" @onclick:stopPropagation="true"><Icon Name="stop" /></span>
                 }
-                <span class="scene-emoji">@emoji</span>
+                <Glyph Emoji="@emoji" Fallback="events" />
                 <span class="scene-name">@label</span>
             </button>
         }
         @if (!Searching)
         {
             <button class="scene-card ghost" @onclick="NewEvent">
-                <span class="scene-emoji">＋</span>
+                <span class="scene-emoji"><Icon Name="add" /></span>
                 <span class="scene-name">New event</span>
             </button>
         }
@@ -65,7 +65,7 @@ else
     }
     else if (_events.Count > 0)
     {
-        <p class="hint" style="margin-top:1rem">Tap to fire. ✎ to edit the timeline. ⏹ appears while an event is playing.</p>
+        <p class="hint" style="margin-top:1rem">Tap to fire. Use the edit corner to change the timeline; a stop button appears while an event is playing.</p>
     }
 }
 

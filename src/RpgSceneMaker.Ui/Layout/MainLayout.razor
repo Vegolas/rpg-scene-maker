@@ -11,7 +11,7 @@
         {
             <a @key="tab.Href" href="@tab.Href" class="rail__item @ActiveClass(tab)"
                @onclick:preventDefault @onclick="() => Vt.NavigateAsync(tab.Href)">
-                <span class="icon">@tab.Icon</span>@tab.Label
+                <span class="icon"><Icon Name="@tab.Icon" /></span>@tab.Label
             </a>
         }
     </nav>
@@ -22,12 +22,12 @@
             @if (SearchPlaceholder is { } placeholder)
             {
                 <div class="searchbar">
-                    <span class="searchbar-ico" aria-hidden="true">⌕</span>
+                    <span class="searchbar-ico" aria-hidden="true"><Icon Name="search" /></span>
                     <input type="search" inputmode="search" placeholder="@placeholder" value="@Ui.SearchQuery"
                            aria-label="@placeholder" @oninput="e => Ui.SetSearchQuery(e.Value?.ToString())" />
                     @if (Ui.SearchQuery.Length > 0)
                     {
-                        <button class="searchbar-clear" @onclick='() => Ui.SetSearchQuery("")' aria-label="Clear search">✕</button>
+                        <button class="searchbar-clear" @onclick='() => Ui.SetSearchQuery("")' aria-label="Clear search"><Icon Name="close" /></button>
                     }
                 </div>
             }
@@ -44,7 +44,7 @@
                 <span class="badge badge--offline" title="API unreachable"><span class="dot"></span>OFFLINE</span>
             }
             <QuickControls />
-            <button class="btn btn--icon" @onclick='() => Vt.NavigateAsync("settings")' aria-label="Settings">⚙</button>
+            <button class="btn btn--icon" @onclick='() => Vt.NavigateAsync("settings")' aria-label="Settings"><Icon Name="settings" /></button>
         </header>
 
         <main class="page">
@@ -58,7 +58,7 @@
         {
             <a @key="tab.Href" href="@tab.Href" class="@ActiveClass(tab)"
                @onclick:preventDefault @onclick="() => Vt.NavigateAsync(tab.Href)">
-                <span class="tab-ico">@tab.Icon</span>@tab.Label
+                <span class="tab-ico"><Icon Name="@tab.Icon" /></span>@tab.Label
             </a>
         }
     </nav>
@@ -74,18 +74,17 @@
 
     private static readonly Tab[] Tabs =
     [
-        new("", "🎲", "Scenes", Exact: true),
-        new("screens", "🎛️", "Screens"),
-        new("music", "🎵", "Music"),
-        new("lights", "💡", "Lights"),
-        new("sounds", "🔊", "Sounds"),
-        new("events", "⚡", "Events"),
-        new("effects", "✨", "Effects"),
-        new("assistant", "🤖", "Assistant"),
+        new("", "scenes", "Scenes", Exact: true),
+        new("screens", "screens", "Screens"),
+        new("music", "music", "Music"),
+        new("lights", "lights", "Lights"),
+        new("sounds", "sounds", "Sounds"),
+        new("events", "events", "Events"),
+        new("effects", "effects", "Effects"),
     ];
 
     // The Logs tab (with its diagnostics panel) only appears when developer mode is on.
-    private static readonly Tab LogsTab = new("logs", "📜", "Logs");
+    private static readonly Tab LogsTab = new("logs", "logs", "Logs");
 
     // Routes that show the header search bar, with their placeholder. Exact path match, so deep pages
     // (a board, an editor) don't inherit it. Each page filters its own contents by Ui.SearchQuery.

@@ -53,12 +53,12 @@ else
             @if (_lightMode == LightMode.Color)
             {
                 <SwatchGrid Selected="_color" OnPick="@(hex => _color = hex)" Style="margin-top:1rem" />
-                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="_brightness" AriaLabel="Brightness" />
+                <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="_brightness" AriaLabel="Brightness" />
             }
             else if (_lightMode == LightMode.White)
             {
-                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="_temperature" AriaLabel="Color temperature" />
-                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="_brightness" AriaLabel="Brightness" />
+                <SliderRow LeftIcon="warm" RightIcon="cold" Min="0" Max="100" @bind-Value="_temperature" AriaLabel="Color temperature" />
+                <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="_brightness" AriaLabel="Brightness" />
             }
             else
             {
@@ -81,7 +81,7 @@ else
                                 <span class="reg-badge @(row.Provider == "hue" ? "hue" : "tuya")">@LightFormat.ProviderLabel(row.Provider)</span>
                                 <span class="light-name">@row.Name @(row.Known ? "" : "(unknown light)")</span>
                                 <span class="light-summary">@Summary(row)</span>
-                                <span class="light-caret">@(row.Expanded ? "▾" : "▸")</span>
+                                <span class="light-caret"><Icon Name="@(row.Expanded ? "caret-down" : "caret-right")" /></span>
                             </button>
 
                             @if (row.Expanded)
@@ -95,9 +95,13 @@ else
                                         <div class="chip-row">
                                             @foreach (var (type, label) in Palette.Effects)
                                             {
-                                                <Chip On="row.Edit.Effect.Type == type" OnClick="() => SetEffect(row, type)">@label</Chip>
+                                                <Chip On="row.Edit.Effect.Type == type" OnClick="() => SetEffect(row, type)">@if (Palette.EffectIcon(type) is { Length: > 0 } ic) { <Icon Name="@ic" /> }@label</Chip>
                                             }
                                         </div>
+
+                                        @* "From library" belongs with the effect chooser: picking a saved FX (Type "fx")
+                                           replaces the built-in effect and hides the per-effect controls below. *@
+                                        <FxLibraryPicker Effect="row.Edit.Effect" Library="_fxLibrary" />
 
                                         @* Base colour/white — shown only for effects that build on it (static + flicker/glow/storm);
                                            drift needs just its brightness; custom/fx set colour + brightness per keyframe. *@
@@ -106,21 +110,21 @@ else
                                             @if (row.Edit.Mode == "color")
                                             {
                                                 <SwatchGrid Selected="row.Edit.Color" OnPick="@(hex => row.Edit.Color = hex)" Style="margin-top:1rem" />
-                                                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
+                                                <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
                                             }
                                             else
                                             {
-                                                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="row.Edit.Temperature" AriaLabel="Color temperature" />
-                                                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
+                                                <SliderRow LeftIcon="warm" RightIcon="cold" Min="0" Max="100" @bind-Value="row.Edit.Temperature" AriaLabel="Color temperature" />
+                                                <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
                                             }
                                             @if (row.Edit.Effect.Type != "none")
                                             {
-                                                <p class="hint" style="margin-top:0.6rem">✨ The effect animates from this base @(row.Edit.Mode == "color" ? "color" : "white tone") and brightness.</p>
+                                                <p class="hint" style="margin-top:0.6rem"><Icon Name="effects" /> The effect animates from this base @(row.Edit.Mode == "color" ? "color" : "white tone") and brightness.</p>
                                             }
                                         }
                                         else if (Palette.EffectUsesBaseBrightness(row.Edit.Effect.Type))
                                         {
-                                            <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
+                                            <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="row.Edit.Brightness" AriaLabel="Brightness" />
                                         }
 
                                         @if (row.Edit.Effect.Type == "custom")
@@ -129,8 +133,8 @@ else
                                         }
                                         else if (row.Edit.Effect.Type is not ("none" or "fx"))
                                         {
-                                            <SliderRow LeftIcon="🏃" Min="1" Max="10" @bind-Value="row.Edit.Effect.Speed" AriaLabel="Speed" />
-                                            <SliderRow LeftIcon="🔆" Min="1" Max="10" @bind-Value="row.Edit.Effect.Intensity" AriaLabel="Intensity" />
+                                            <SliderRow LeftIcon="speed" Min="1" Max="10" @bind-Value="row.Edit.Effect.Speed" AriaLabel="Speed" />
+                                            <SliderRow LeftIcon="bright" Min="1" Max="10" @bind-Value="row.Edit.Effect.Intensity" AriaLabel="Intensity" />
 
                                             @if (row.Edit.Effect.Type == "drift")
                                             {
@@ -142,7 +146,7 @@ else
                                                         {
                                                             <span class="pal-chip">
                                                                 <span class="pal-dot" style="background:@c"></span>@c.ToUpperInvariant()
-                                                                <button class="pal-x" aria-label="Remove color" @onclick="() => RemovePaletteColor(row, c)">✕</button>
+                                                                <button class="pal-x" title="Remove color" aria-label="Remove color" @onclick="() => RemovePaletteColor(row, c)"><Icon Name="close" /></button>
                                                             </span>
                                                         }
                                                     </div>
@@ -150,8 +154,6 @@ else
                                                 <SwatchGrid Selected="null" ShowCustom="false" OnPick="@(hex => AddPaletteColor(row, hex))" Style="margin-top:0.6rem" />
                                             }
                                         }
-
-                                        <FxLibraryPicker Effect="row.Edit.Effect" Library="_fxLibrary" />
                                     }
                                     else if (row.Edit.Mode == "off")
                                     {
@@ -197,7 +199,7 @@ else
             </div>
             @if (_setVolume)
             {
-                <SliderRow LeftIcon="🔉" Min="0" Max="100" Suffix="%" @bind-Value="_volumePercent" AriaLabel="Volume" />
+                <SliderRow LeftIcon="volume" Min="0" Max="100" Suffix="%" @bind-Value="_volumePercent" AriaLabel="Volume" />
             }
         }
         else if (_music == MusicChoice.Pause)
@@ -224,7 +226,7 @@ else
                     @foreach (var sound in group)
                     {
                         var picked = _soundEffects.Contains(sound.Id);
-                        <KRow Icon="@(picked ? "☑" : "☐")" Title="@sound.Name" Hint="@(sound.Loop ? "🔁 loop" : null)"
+                        <KRow IconName="@(picked ? "check-on" : "check-off")" Title="@sound.Name" Hint="@(sound.Loop ? "loop" : null)"
                               Selected="picked" OnClick="() => ToggleSound(sound.Id)" />
                     }
                 </div>
@@ -243,7 +245,7 @@ else
             <div class="klist">
                 @foreach (var sid in unknownSoundIds)
                 {
-                    <KRow Icon="⚠️" Title="@sid" Hint="removed sound — tap to drop" OnClick="() => RemoveSound(sid)" />
+                    <KRow IconName="warn" Title="@sid" Hint="removed sound — tap to drop" OnClick="() => RemoveSound(sid)" />
                 }
             </div>
         }
@@ -571,7 +573,7 @@ else
         Ui.ReportOk("Copied to every light");
     }
 
-    // Collapsed one-line summary, e.g. "🕯️ Flicker · #FF8C2A 80%" or "White · warm 60%" or "Skip".
+    // Collapsed one-line summary, e.g. "Flicker · #FF8C2A 80%" or "White · warm 60%" or "Skip".
     private static string Summary(LightRow row)
     {
         var e = row.Edit;

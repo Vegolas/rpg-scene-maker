@@ -1,0 +1,18 @@
+@* The scene/event/screen display glyph. Shows the user's picked emoji when they set one (content — kept as an
+   emoji), otherwise the section's fallback chrome Icon. The two branches use different wrapper classes so the
+   iOS emoji side-bearing nudge (_layout.scss) stays scoped to real emoji and never shifts an SVG. *@
+@if (!string.IsNullOrEmpty(Emoji))
+{
+    <span class="scene-emoji">@Emoji</span>
+}
+else
+{
+    <span class="scene-glyph"><Icon Name="@Fallback" /></span>
+}
+
+@code {
+    // The parsed leading emoji from a scene/event/screen name (empty when the user didn't pick one).
+    [Parameter] public string? Emoji { get; set; }
+    // Fallback chrome icon (a Shared/Icons.cs key) shown when Emoji is empty — the section's kind icon.
+    [Parameter, EditorRequired] public string Fallback { get; set; } = "scenes";
+}

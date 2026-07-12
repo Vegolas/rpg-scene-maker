@@ -23,7 +23,7 @@ else if (_scenes.Count == 0)
     <p class="empty-note">No scenes yet — tap below to create your first one.</p>
     <div class="scene-grid">
         <button class="scene-card ghost" @onclick="NewScene">
-            <span class="scene-emoji">＋</span>
+            <span class="scene-emoji"><Icon Name="add" /></span>
             <span class="scene-name">New scene</span>
         </button>
     </div>
@@ -34,7 +34,7 @@ else
     <div class="scene-grid">
         @foreach (var scene in shown)
         {
-            var (emoji, label) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
+            var (emoji, label) = SceneNaming.SplitName(scene.Name, "", scene.Id);
             var artUrl = Api.ImageUrl(scene.Image);
             var hasArt = artUrl is not null;
             var color = SwatchColor(scene);
@@ -48,15 +48,15 @@ else
                     <span class="scene-art"></span>
                 }
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit scene"
-                      @onclick="() => Edit(scene.Id)" @onclick:stopPropagation="true">✎</span>
-                <span class="scene-emoji">@emoji</span>
+                      @onclick="() => Edit(scene.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
+                <Glyph Emoji="@emoji" Fallback="scenes" />
                 <span class="scene-name">@label</span>
             </button>
         }
         @if (!Searching)
         {
             <button class="scene-card ghost" @onclick="NewScene">
-                <span class="scene-emoji">＋</span>
+                <span class="scene-emoji"><Icon Name="add" /></span>
                 <span class="scene-name">New scene</span>
             </button>
         }

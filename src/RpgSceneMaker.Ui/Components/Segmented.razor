@@ -6,7 +6,7 @@
     @foreach (var opt in Options)
     {
         <button type="button" class="seg__opt @(Equals(opt.Value, Value) ? "seg__opt--active" : "")"
-                @onclick="() => ValueChanged.InvokeAsync(opt.Value)">@opt.Label</button>
+                @onclick="() => ValueChanged.InvokeAsync(opt.Value)">@if (IconFor?.Invoke(opt.Value) is { Length: > 0 } icon) { <Icon Name="@icon" /> }@opt.Label</button>
     }
 </div>
 
@@ -15,4 +15,6 @@
     [Parameter] public TValue? Value { get; set; }
     [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
     [Parameter] public string? Style { get; set; }
+    // Optional: map an option's value to a chrome icon name (Shared/Icons.cs) shown before its label.
+    [Parameter] public Func<TValue, string?>? IconFor { get; set; }
 }

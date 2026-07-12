@@ -1,10 +1,11 @@
-@* An icon + range slider row. Shows a numeric value on the right, unless RightIcon is set. *@
+@* A chrome-icon + range slider row. Shows a numeric value on the right, unless RightIcon is set.
+   LeftIcon/RightIcon are icon names from Shared/Icons.cs (e.g. "dim", "warm"). *@
 <div class="slider-row">
-    <span class="slider-ico">@LeftIcon</span>
+    <span class="slider-ico"><Icon Name="@LeftIcon" /></span>
     <input type="range" min="@Min" max="@Max" value="@Value" @onchange="OnChanged" aria-label="@AriaLabel" />
     @if (RightIcon is not null)
     {
-        <span class="slider-ico">@RightIcon</span>
+        <span class="slider-ico"><Icon Name="@RightIcon" /></span>
     }
     else
     {

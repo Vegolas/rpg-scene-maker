@@ -44,7 +44,7 @@ else
     @if (_playing.Count > 0)
     {
         <div class="btn-row" style="margin:0.2rem 0 1rem">
-            <button class="btn" @onclick="StopAll">⏹ Stop all (@_playing.Count)</button>
+            <button class="btn" @onclick="StopAll"><Icon Name="stop" /> Stop all (@_playing.Count)</button>
         </div>
     }
 
@@ -72,14 +72,14 @@ else
                             <span class="scene-art"></span>
                         }
                         <span class="card-edit" role="button" tabindex="0" aria-label="Edit sound"
-                              @onclick="() => Edit(sound.Id)" @onclick:stopPropagation="true">✎</span>
-                        <span class="krow-ico">@(isPlaying ? "⏹" : sound.Loop ? "🔁" : "🔊")</span>
+                              @onclick="() => Edit(sound.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
+                        <span class="krow-ico"><Icon Name="@(isPlaying ? "stop" : sound.Loop ? "repeat" : "sounds")" /></span>
                         <span class="krow-title">@sound.Name</span>
                     </button>
                 }
             </div>
         }
-        <p class="hint" style="margin-top:1rem">Tap to play; tap again to stop. ✎ to rename, set volume or looping.</p>
+        <p class="hint" style="margin-top:1rem">Tap to play; tap again to stop. Tap the edit corner to rename, set volume or looping.</p>
     }
 }
 

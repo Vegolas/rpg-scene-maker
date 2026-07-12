@@ -6,13 +6,10 @@
 @inject ApiClient Api
 @inject NavigationManager Nav
 
-@if (_emoji is not null || _name is not null)
+@if (_activeId is not null)
 {
     <div class="now-running" role="status" aria-live="polite">
-        @if (_emoji is not null)
-        {
-            <span class="now-running__emoji" aria-hidden="true">@_emoji</span>
-        }
+        <span class="now-running__emoji" aria-hidden="true"><Glyph Emoji="@_emoji" Fallback="scenes" /></span>
         <div class="now-running__text">
             <span class="now-running__label">Now Running</span>
             <span class="now-running__name">@(_name ?? _activeId)</span>
@@ -54,19 +51,20 @@
         if (id == _activeId) return; // unchanged — skip the scene fetch and re-render
 
         _activeId = id;
-        // Resolve the display emoji + label from the scenes list.
+        // Resolve the display emoji + label from the scenes list. An empty emoji makes the strip's
+        // Glyph fall back to the scenes icon (chrome), matching a scene tile with no user emoji.
         var scenes = await Api.GetScenesAsync();
         var scene = scenes.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase));
         if (scene is not null)
         {
-            var (emoji, label) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
+            var (emoji, label) = SceneNaming.SplitName(scene.Name, "", scene.Id);
             _emoji = emoji;
             _name = label;
         }
         else
         {
             // Scene id no longer in the list (deleted?) — still announce it by id.
-            _emoji = "🎲";
+            _emoji = "";
             _name = id;
         }
         StateHasChanged();

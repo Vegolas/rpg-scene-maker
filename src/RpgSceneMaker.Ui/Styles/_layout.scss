@@ -47,7 +47,7 @@
 }
 .rail__item:hover { color: var(--text-muted); background: var(--card); }
 .rail__item.active { background: var(--accent-soft); color: var(--accent-text); }
-.rail__item .icon { font-size: 19px; line-height: 1; }
+.rail__item .icon { font-size: 22px; line-height: 1; }
 .rail__item:not(.active) .icon { opacity: .5; }
 
 /* ---------- top bar ---------- */
@@ -151,27 +151,19 @@
   text-transform: uppercase;
   transition: background var(--t-fast), color var(--t-fast);
 }
-.tabbar a .tab-ico { font-size: 19px; line-height: 1; opacity: .5; transition: opacity var(--t-fast); }
+.tabbar a .tab-ico { font-size: 22px; line-height: 1; opacity: .5; transition: opacity var(--t-fast); }
 .tabbar a.active { color: var(--accent-text); background: var(--accent-soft); }
 .tabbar a.active .tab-ico { opacity: 1; }
 
-/* Emoji icons are a single glyph — the inherited label letter-spacing does nothing
-   useful here and only muddies centering. */
+/* The nav icon slot sits above a letter-tracked uppercase label; keep the slot itself untracked. */
 .rail__item .icon, .tabbar a .tab-ico { letter-spacing: 0; }
 
-/* iOS renders Apple Color Emoji with a right-biased side bearing, so an emoji that
-   is geometrically centered (verified: delta 0 in Chromium) still *looks* shoved to
-   the right of its box. Nudge the centered chrome emoji back on WebKit/iOS only —
-   other platforms' emoji fonts are centered, so scoping avoids over-correcting there.
-   `translateX` is visual-only (no layout shift) and scales with the glyph's em.
-   Interim until the SVG icon swap (#30) removes emoji from the chrome entirely. */
+/* iOS renders Apple Color Emoji with a right-biased side bearing, so a geometrically centered
+   emoji still *looks* shoved to the right of its box. The chrome is now SVG (Icon.razor) and
+   centers correctly, so only the remaining *content* emoji — the name-picker cells — still need
+   the nudge, and only on WebKit/iOS. `translateX` is visual-only (no layout shift). */
 @supports (-webkit-touch-callout: none) {
-  .rail__item .icon,
-  .tabbar a .tab-ico,
-  .boot-die,
-  .emoji-pick,                 /* emoji picker cells (scene / event editors) */
-  .quick .q-btn:not(.primary)  /* reset-lights 💡 (play/pause use text symbols) */
-    { transform: translateX(-0.08em); }
+  .emoji-pick { transform: translateX(-0.08em); }
 }
 
 @media (min-width: 768px) {

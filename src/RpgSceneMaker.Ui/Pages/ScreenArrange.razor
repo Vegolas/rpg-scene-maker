@@ -25,6 +25,10 @@ else
             <input id="screen-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty" />
         </div>
         <ArtField @bind-Image="_edit.Image" />
+        <div class="chip-row" style="margin-top:1rem">
+            <Chip On="_edit.Compact" OnClick="() => _edit.Compact = !_edit.Compact"><Icon Name="screens" /> Compact layout</Chip>
+        </div>
+        <p class="hint" style="margin-top:0.4rem">Smaller tiles, so a board with lots of shortcuts fits more on screen.</p>
     </div>
 
     <SectionHeading>Shortcuts</SectionHeading>
@@ -40,11 +44,11 @@ else
                 {
                     var v = View(tile);
                     <div class="krow arrange @(v.Missing ? "missing" : "")">
-                        <span class="krow-ico">@v.Emoji</span>
+                        <span class="krow-ico">@if (!string.IsNullOrEmpty(v.Emoji)) { @v.Emoji } else { <Icon Name="@v.Icon" /> }</span>
                         <span class="krow-title">@v.Label <small class="hint">@KindLabel(tile.Kind)</small></span>
-                        <button class="reorder" @onclick="() => Move(index, -1)" disabled="@(index == 0)" aria-label="Move up">▲</button>
-                        <button class="reorder" @onclick="() => Move(index, 1)" disabled="@(index == _edit.Tiles.Count - 1)" aria-label="Move down">▼</button>
-                        <button class="reorder danger" @onclick="() => RemoveAt(index)" aria-label="Remove shortcut">✕</button>
+                        <button class="reorder" @onclick="() => Move(index, -1)" disabled="@(index == 0)" aria-label="Move up"><Icon Name="move-up" /></button>
+                        <button class="reorder" @onclick="() => Move(index, 1)" disabled="@(index == _edit.Tiles.Count - 1)" aria-label="Move down"><Icon Name="move-down" /></button>
+                        <button class="reorder danger" @onclick="() => RemoveAt(index)" aria-label="Remove shortcut"><Icon Name="close" /></button>
                     </div>
                 }
             </div>
@@ -53,7 +57,7 @@ else
 
     <SectionHeading>Add a shortcut</SectionHeading>
     <div class="panel">
-        <Segmented TValue="string" Options="AddOptions" Value="_addKind" ValueChanged="@(k => _addKind = k)" />
+        <Segmented TValue="string" Options="AddOptions" Value="_addKind" ValueChanged="@(k => _addKind = k)" IconFor="AddKindIcon" />
 
         @if (_addKind is "scene" or "event" or "sound")
         {
@@ -68,7 +72,7 @@ else
                     @foreach (var it in items)
                     {
                         var present = HasTile(_addKind, it.Id);
-                        <KRow Icon="@(present ? "☑" : "☐")" Title="@it.Label" Selected="present"
+                        <KRow IconName="@(present ? "check-on" : "check-off")" Title="@it.Label" Selected="present"
                               OnClick="() => ToggleRef(_addKind, it.Id)" />
                     }
                 </div>
@@ -89,7 +93,7 @@ else
                 <div class="klist">
                     @foreach (var t in _results)
                     {
-                        <KRow Icon="♪" Title="@t.Name" Hint="@t.Artist"
+                        <KRow IconName="track" Title="@t.Name" Hint="@t.Artist"
                               OnClick="@(() => AddMusic(t.Uri, string.IsNullOrEmpty(t.Artist) ? t.Name : $"{t.Name} — {t.Artist}"))" />
                     }
                 </div>
@@ -105,7 +109,7 @@ else
         {
             <p class="hint" style="margin-top:1rem">Adds a tile that resets the lights to the default you set in Settings.</p>
             <div class="btn-row" style="margin-top:0.6rem">
-                <button class="btn" @onclick="AddResetLights">💡 Add reset-lights shortcut</button>
+                <button class="btn" @onclick="AddResetLights"><Icon Name="lights" /> Add reset-lights shortcut</button>
             </div>
         }
         else if (_addKind == "break")
@@ -116,7 +120,7 @@ else
             </div>
             <p class="hint" style="margin-top:0.6rem">Ends the current row so the next shortcuts start on a new line. Add a label to show it as a section heading.</p>
             <div class="btn-row" style="margin-top:0.6rem">
-                <button class="btn" @onclick="AddBreak">↵ Add line break</button>
+                <button class="btn" @onclick="AddBreak"><Icon Name="break" /> Add line break</button>
             </div>
         }
     </div>
@@ -157,8 +161,20 @@ else
     private List<SpotifyTrackDto>? _results;
     private string _breakLabel = "";
 
+    // Icon-only kind picker (labels blank; AddKindIcon renders the glyph for each).
     private static readonly (string, string)[] AddOptions =
-        [("scene", "🎲"), ("event", "⚡"), ("sound", "🔊"), ("music", "🎵"), ("lights", "💡"), ("break", "↵")];
+        [("scene", ""), ("event", ""), ("sound", ""), ("music", ""), ("lights", ""), ("break", "")];
+
+    private static string AddKindIcon(string kind) => kind switch
+    {
+        "scene" => "scenes",
+        "event" => "events",
+        "sound" => "sounds",
+        "music" => "music",
+        "lights" => "lights",
+        "break" => "break",
+        _ => "",
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -171,7 +187,7 @@ else
             Nav.NavigateTo("screens");
             return;
         }
-        _edit = new ScreenEdit { Id = dto.Id, Name = dto.Name, Tiles = [.. dto.Tiles ?? []], Image = dto.Image };
+        _edit = new ScreenEdit { Id = dto.Id, Name = dto.Name, Tiles = [.. dto.Tiles ?? []], Image = dto.Image, Compact = dto.Compact };
         (_emoji, _label) = SceneNaming.SplitName(dto.Name);
 
         // Referenced entities + the Spotify library (playlists are optional; empty/silent when not connected).
@@ -186,7 +202,8 @@ else
 
     // ---------- tile display (for the shortcut list) ----------
 
-    private record TileView(string Emoji, string Label, bool Missing);
+    // Emoji = the user's picked name emoji (content, scene/event only); Icon = the chrome fallback / kind glyph.
+    private record TileView(string Emoji, string Icon, string Label, bool Missing);
 
     private TileView View(ScreenTileDto tile)
     {
@@ -195,29 +212,29 @@ else
             case "scene":
                 var scene = _scenes?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
                 if (scene is null) return Gone(tile);
-                var (se, sl) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
-                return new TileView(se, sl, false);
+                var (se, sl) = SceneNaming.SplitName(scene.Name, "", scene.Id);
+                return new TileView(se, "scenes", sl, false);
             case "event":
                 var evt = _events?.FirstOrDefault(e => Eq(e.Id, tile.Ref));
                 if (evt is null) return Gone(tile);
-                var (ee, el) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
-                return new TileView(ee, el, false);
+                var (ee, el) = SceneNaming.SplitName(evt.Name, "", evt.Id);
+                return new TileView(ee, "events", el, false);
             case "sound":
                 var snd = _sounds?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
                 if (snd is null) return Gone(tile);
-                return new TileView(snd.Loop ? "🔁" : "🔊", snd.Name, false);
+                return new TileView("", snd.Loop ? "repeat" : "sounds", snd.Name, false);
             case "music":
-                return new TileView("🎧", Label(tile), false);
+                return new TileView("", "music", Label(tile), false);
             case "light-reset":
-                return new TileView("💡", "Reset lights", false);
+                return new TileView("", "lights", "Reset lights", false);
             case "break":
-                return new TileView("↵", string.IsNullOrWhiteSpace(tile.Label) ? "Line break" : tile.Label, false);
+                return new TileView("", "break", string.IsNullOrWhiteSpace(tile.Label) ? "Line break" : tile.Label, false);
             default:
                 return Gone(tile);
         }
     }
 
-    private static TileView Gone(ScreenTileDto tile) => new("⚠️", Label(tile), true);
+    private static TileView Gone(ScreenTileDto tile) => new("", "warn", Label(tile), true);
 
     private static string Label(ScreenTileDto tile) => string.IsNullOrWhiteSpace(tile.Label) ? tile.Ref : tile.Label;
 

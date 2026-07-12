@@ -1,0 +1,19 @@
+/* ============================================================
+   Chrome icons — inline Phosphor Fill SVG (Components/Icon.razor,
+   markup in Shared/Icons.cs). Solid, single-weight, tinted via
+   currentColor. Sized at 1em so each slot's existing font-size
+   carries the old emoji size over unchanged; a handful of slots
+   bump it. User-picked scene/sound emoji are content, not .ico.
+   ============================================================ */
+.ico {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  display: inline-block;
+  vertical-align: -0.15em;   /* sit like an emoji did in the few inline (non-flex) spots */
+}
+
+/* Beside button / chip / segmented text (label is ~13px): nudge the glyph up a touch larger. */
+.btn .ico,
+.chip .ico,
+.seg__opt .ico { width: 1.3em; height: 1.3em; }

@@ -14,7 +14,7 @@ else
         @foreach (var pl in Playlists)
         {
             var hint = $"{pl.TrackCount} tracks";
-            <KRow Icon="🎧" Title="@pl.Name" Hint="@hint"
+            <KRow IconName="playlist" Title="@pl.Name" Hint="@hint"
                   Selected="@(SelectedUri == pl.Uri)" OnClick="() => OnPick.InvokeAsync(pl)" />
         }
     </div>

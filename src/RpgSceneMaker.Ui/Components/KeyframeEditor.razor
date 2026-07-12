@@ -4,11 +4,11 @@
 
    Keyframes are laid out as markers along a time track (tap a marker to select it); only the selected
    keyframe's editor is shown below, so a long sequence stays compact instead of stacking a card per frame.
-   iPad-first: generous touch targets, ◀▶ steppers reach frames whose markers overlap, no hover-only affordances. *@
+   iPad-first: generous touch targets, prev/next steppers reach frames whose markers overlap, no hover-only affordances. *@
 
 <div class="kf-editor">
     <div class="kf-toolbar">
-        <button class="btn btn--small" @onclick="AddKeyframe">＋ Add keyframe</button>
+        <button class="btn btn--small" @onclick="AddKeyframe"><Icon Name="add" /> Add keyframe</button>
         <span class="kf-spacer"></span>
         <span class="hint" style="margin:0">@Effect.Keyframes.Count keyframe@(Effect.Keyframes.Count == 1 ? "" : "s")</span>
     </div>
@@ -47,13 +47,13 @@
         <div class="kf-card">
             <div class="kf-insp-head">
                 <div class="kf-steppers">
-                    <button class="btn btn--small" @onclick="SelectPrev" disabled="@(idx <= 0)" aria-label="Previous keyframe">◀</button>
+                    <button class="btn btn--small" @onclick="SelectPrev" disabled="@(idx <= 0)" title="Previous keyframe" aria-label="Previous keyframe"><Icon Name="step-prev" /></button>
                     <span class="kf-num">#@(idx + 1) / @count</span>
-                    <button class="btn btn--small" @onclick="SelectNext" disabled="@(idx >= count - 1)" aria-label="Next keyframe">▶</button>
+                    <button class="btn btn--small" @onclick="SelectNext" disabled="@(idx >= count - 1)" title="Next keyframe" aria-label="Next keyframe"><Icon Name="step-next" /></button>
                 </div>
                 <span class="kf-spacer"></span>
-                <button class="btn btn--small" @onclick="() => Duplicate(sel)" aria-label="Duplicate keyframe">⧉</button>
-                <button class="btn btn--small btn--danger" @onclick="() => Remove(sel)" aria-label="Delete keyframe">✕</button>
+                <button class="btn btn--small" @onclick="() => Duplicate(sel)" title="Duplicate keyframe" aria-label="Duplicate keyframe"><Icon Name="duplicate" /></button>
+                <button class="btn btn--small btn--danger" @onclick="() => Remove(sel)" title="Delete keyframe" aria-label="Delete keyframe"><Icon Name="close" /></button>
             </div>
 
             <div class="tl-insp-row">
@@ -67,12 +67,12 @@
             @if (sel.Mode == "color")
             {
                 <SwatchGrid Selected="sel.Color" OnPick="hex => sel.Color = hex" Style="margin-top:0.8rem" />
-                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="sel.Brightness" AriaLabel="Brightness" />
+                <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="sel.Brightness" AriaLabel="Brightness" />
             }
             else if (sel.Mode == "white")
             {
-                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="sel.Temperature" AriaLabel="Color temperature" />
-                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="sel.Brightness" AriaLabel="Brightness" />
+                <SliderRow LeftIcon="warm" RightIcon="cold" Min="0" Max="100" @bind-Value="sel.Temperature" AriaLabel="Color temperature" />
+                <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" @bind-Value="sel.Brightness" AriaLabel="Brightness" />
             }
             else
             {
@@ -97,20 +97,24 @@
         </div>
     }
 
-    <div class="chip-row">
-        <Chip On="Effect.Loop" OnClick="ToggleLoop">🔁 Loop</Chip>
+    @* Loop toggle + its cycle length share one row; the cycle field appears beside the chip when looping. *@
+    <div class="tl-insp-inline">
+        <Chip On="Effect.Loop" OnClick="ToggleLoop"><Icon Name="repeat" /> Loop</Chip>
+        @if (Effect.Loop)
+        {
+            <div class="tl-fld">
+                <label>Cycle</label>
+                <input type="number" min="0.1" step="0.1" value="@Sec(Effect.CycleMs ?? DefaultCycleMs)" @onchange="SetCycle" aria-label="Cycle length" />
+                <span class="tl-unit">s repeat</span>
+            </div>
+        }
     </div>
 
     @if (Effect.Loop)
     {
-        <div class="tl-insp-row" style="margin-top:0.6rem">
-            <label>Cycle</label>
-            <input type="number" min="0.1" step="0.1" value="@Sec(Effect.CycleMs ?? DefaultCycleMs)" @onchange="SetCycle" aria-label="Cycle length" />
-            <span class="tl-unit">s repeat</span>
-        </div>
         @if (CycleTooShort)
         {
-            <p class="hint" style="margin-top:0.4rem">⚠ Cycle must be at least @Sec(MinCycleMs)s (100 ms past the last keyframe).</p>
+            <p class="hint" style="margin-top:0.4rem"><Icon Name="warn" /> Cycle must be at least @Sec(MinCycleMs)s (100 ms past the last keyframe).</p>
         }
         else
         {

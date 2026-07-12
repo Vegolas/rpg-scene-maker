@@ -88,7 +88,7 @@ else
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
         @if (!_isNew && _runningId == _edit.Id)
         {
-            <button class="btn btn--danger" @onclick="Stop" disabled="@_busy">⏹ Stop</button>
+            <button class="btn btn--danger" @onclick="Stop" disabled="@_busy"><Icon Name="stop" /> Stop</button>
         }
         <button class="btn" @onclick="Cancel" disabled="@_busy">Cancel</button>
     </div>

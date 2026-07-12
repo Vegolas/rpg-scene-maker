@@ -51,7 +51,7 @@ else
     <div class="scene-grid">
         @foreach (var (screen, index) in shown.Select((s, i) => (s, i)))
         {
-            var (emoji, label) = SceneNaming.SplitName(screen.Name, "🎛️", screen.Id);
+            var (emoji, label) = SceneNaming.SplitName(screen.Name, "", screen.Id);
             var artUrl = Api.ImageUrl(screen.Image);
             var hasArt = artUrl is not null;
             <button class="scene-card @(hasArt ? "art" : "")"
@@ -61,7 +61,7 @@ else
                 {
                     <span class="scene-art"></span>
                 }
-                <span class="scene-emoji">@emoji</span>
+                <Glyph Emoji="@emoji" Fallback="screens" />
                 <span class="scene-name">@label</span>
                 <span class="screen-count">@TileCount(screen)</span>
             </button>
@@ -69,7 +69,7 @@ else
         @if (!Searching)
         {
             <button class="scene-card ghost" @onclick="NewScreen">
-                <span class="scene-emoji">＋</span>
+                <span class="scene-emoji"><Icon Name="add" /></span>
                 <span class="scene-name">New screen</span>
             </button>
         }

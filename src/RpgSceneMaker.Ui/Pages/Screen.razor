@@ -7,10 +7,10 @@
 <PageTitle>Scene Maker — @(_label is { Length: > 0 } l ? l : "Screen")</PageTitle>
 
 <div class="btn-row" style="margin-bottom:0.2rem">
-    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("screens")'>← Screens</button>
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("screens")'><Icon Name="back" /> Screens</button>
     @if (!_loading && !_notFound)
     {
-        <button class="btn btn--small" @onclick='() => Vt.NavigateAsync($"screens/{Id}/arrange")'>✎ Arrange</button>
+        <button class="btn btn--small" @onclick='() => Vt.NavigateAsync($"screens/{Id}/arrange")'><Icon Name="edit" /> Arrange</button>
     }
 </div>
 
@@ -29,11 +29,11 @@ else
 
     @if (_tiles.Count == 0)
     {
-        <p class="empty-note">This screen is empty — tap ✎ Arrange to add shortcuts.</p>
+        <p class="empty-note">This screen is empty — tap Arrange to add shortcuts.</p>
     }
     else
     {
-        <div class="scene-grid">
+        <div class="scene-grid @(_compact ? "compact" : "")">
             @foreach (var (tile, index) in _tiles.Select((t, i) => (t, i)))
             {
                 @if (tile.Kind == "break")
@@ -58,13 +58,13 @@ else
                             <span class="scene-art"></span>
                         }
                         <span class="scene-swatch"></span>
-                        <span class="scene-emoji">@v.Emoji</span>
+                        <Glyph Emoji="@v.Emoji" Fallback="@v.Icon" />
                         <span class="scene-name">@v.Label</span>
                     </button>
                 }
             }
         </div>
-        <p class="hint" style="margin-top:1rem">Tap a shortcut to fire it. ✎ Arrange to add, reorder or remove.</p>
+        <p class="hint" style="margin-top:1rem">Tap a shortcut to fire it. Arrange to add, reorder or remove.</p>
     }
 }
 
@@ -76,6 +76,7 @@ else
     private int? _busyIndex;
 
     private string _label = "";
+    private bool _compact;
     private List<ScreenTileDto> _tiles = [];
 
     // Entities referenced by tiles — resolved for display.
@@ -100,6 +101,7 @@ else
             return;
         }
         (_, _label) = SceneNaming.SplitName(dto.Name);
+        _compact = dto.Compact;
         _tiles = [.. dto.Tiles ?? []];
 
         // Referenced entities used to render each tile.
@@ -121,7 +123,9 @@ else
 
     // ---------- tile display ----------
 
-    private record TileView(string Emoji, string Label, string Color, bool Missing, bool Active, bool Playing, string? Image = null);
+    // Emoji = the user's picked name emoji (content, scene/event only); Icon = the chrome fallback / kind
+    // glyph. Glyph.razor shows the emoji when present, else the Icon.
+    private record TileView(string Emoji, string Icon, string Label, string Color, bool Missing, bool Active, bool Playing, string? Image = null);
 
     private TileView View(ScreenTileDto tile)
     {
@@ -130,29 +134,29 @@ else
             case "scene":
                 var scene = _scenes?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
                 if (scene is null) return Gone(tile);
-                var (se, sl) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
-                return new TileView(se, sl, SceneSwatch(scene), false, Eq(_activeSceneId, scene.Id), false, Api.ImageUrl(scene.Image));
+                var (se, sl) = SceneNaming.SplitName(scene.Name, "", scene.Id);
+                return new TileView(se, "scenes", sl, SceneSwatch(scene), false, Eq(_activeSceneId, scene.Id), false, Api.ImageUrl(scene.Image));
             case "event":
                 var evt = _events?.FirstOrDefault(e => Eq(e.Id, tile.Ref));
                 if (evt is null) return Gone(tile);
-                var (ee, el) = SceneNaming.SplitName(evt.Name, "⚡", evt.Id);
-                return new TileView(ee, el, evt.Flash?.Color ?? "transparent", false, false, false, Api.ImageUrl(evt.Image));
+                var (ee, el) = SceneNaming.SplitName(evt.Name, "", evt.Id);
+                return new TileView(ee, "events", el, evt.Flash?.Color ?? "transparent", false, false, false, Api.ImageUrl(evt.Image));
             case "sound":
                 var snd = _sounds?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
                 if (snd is null) return Gone(tile);
                 var playing = _playingSoundIds.Contains(snd.Id);
-                return new TileView(playing ? "⏹" : snd.Loop ? "🔁" : "🔊", snd.Name, "transparent", false, false, playing, Api.ImageUrl(snd.Image));
+                return new TileView("", playing ? "stop" : snd.Loop ? "repeat" : "sounds", snd.Name, "transparent", false, false, playing, Api.ImageUrl(snd.Image));
             case "music":
-                return new TileView("🎧", Label(tile), "transparent", false, false, false);
+                return new TileView("", "music", Label(tile), "transparent", false, false, false);
             case "light-reset":
-                return new TileView("💡", "Reset lights", "transparent", false, false, false);
+                return new TileView("", "lights", "Reset lights", "transparent", false, false, false);
             default:
                 return Gone(tile);
         }
     }
 
     // A tile whose referenced entity no longer exists.
-    private static TileView Gone(ScreenTileDto tile) => new("⚠️", Label(tile), "transparent", true, false, false);
+    private static TileView Gone(ScreenTileDto tile) => new("", "warn", Label(tile), "transparent", true, false, false);
 
     private static string Label(ScreenTileDto tile) => string.IsNullOrWhiteSpace(tile.Label) ? tile.Ref : tile.Label;
 
