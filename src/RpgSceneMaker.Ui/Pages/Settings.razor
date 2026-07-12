@@ -316,7 +316,7 @@ else
         }
         else
         {
-            <p class="status">No API key saved yet — the Assistant tab stays disabled until you add one.</p>
+            <p class="status">No API key saved yet — the Assistant tab appears in the menu once you add one.</p>
         }
 
         <div class="field" style="margin-top:1rem">
@@ -448,6 +448,7 @@ else
                 _assistant.ApiKey = ""; // the key is never echoed; blank the field after saving
                 var (assistant, _) = await Api.GetAssistantConfigAsync();
                 if (assistant is not null) _assistant = assistant;
+                Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
                 Ui.ReportOk("Assistant settings saved");
             }
         }
@@ -460,6 +461,7 @@ else
         {
             var (assistant, _) = await Api.GetAssistantConfigAsync();
             if (assistant is not null) _assistant = assistant;
+            Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
         }
     }
 

@@ -13,6 +13,9 @@ public class UiState
     /// When on, the panel surfaces the Logs tab and its diagnostics panel.</summary>
     public bool DevMode { get; private set; }
 
+    /// <summary>Whether an AI provider key is saved server-side — gates the Assistant nav tab.</summary>
+    public bool AssistantConfigured { get; private set; }
+
     /// <summary>The current header search text. Searchable pages filter their own list by this and
     /// subscribe to <see cref="SearchChanged"/> to re-render as it changes; the layout owns the input
     /// and decides (from the route) when the search bar is shown. Reset to "" on every navigation.</summary>
@@ -44,6 +47,13 @@ public class UiState
     {
         if (DevMode == on) return;
         DevMode = on;
+        Changed?.Invoke();
+    }
+
+    public void SetAssistantConfigured(bool configured)
+    {
+        if (AssistantConfigured == configured) return;
+        AssistantConfigured = configured;
         Changed?.Invoke();
     }
 

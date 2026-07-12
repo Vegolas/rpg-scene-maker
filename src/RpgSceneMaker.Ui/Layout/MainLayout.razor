@@ -83,6 +83,9 @@
         new("effects", "effects", "Effects"),
     ];
 
+    // The Assistant tab only appears once an AI provider key is configured (Settings → Assistant).
+    private static readonly Tab AssistantTab = new("assistant", "assistant", "Assistant");
+
     // The Logs tab (with its diagnostics panel) only appears when developer mode is on.
     private static readonly Tab LogsTab = new("logs", "logs", "Logs");
 
@@ -97,7 +100,17 @@
         ["events"] = "Search events…",
     };
 
-    private IEnumerable<Tab> KnownTabs => Ui.DevMode ? [.. Tabs, LogsTab] : Tabs;
+    // The built-in tabs, plus the Assistant tab when a provider key is configured and the Logs tab in dev mode.
+    private IEnumerable<Tab> KnownTabs
+    {
+        get
+        {
+            List<Tab> tabs = [.. Tabs];
+            if (Ui.AssistantConfigured) tabs.Add(AssistantTab);
+            if (Ui.DevMode) tabs.Add(LogsTab);
+            return tabs;
+        }
+    }
 
     // Tabs in the user's saved order; tabs missing from it (new build, or Logs when it wasn't ordered)
     // keep their built-in order at the end (OrderBy is stable, so equal keys don't shuffle).
@@ -129,6 +142,9 @@
         // Load the per-device flags so the nav renders correctly from the first paint.
         Ui.SetDevMode(await Api.GetDevModeAsync());
         Ui.SetTabOrder(await Api.GetTabOrderAsync());
+        // The Assistant tab is gated on a server-side provider key; load it too.
+        var (assistant, _) = await Api.GetAssistantConfigAsync();
+        Ui.SetAssistantConfigured(assistant?.Configured ?? false);
     }
 
     private void OnUiChanged() => InvokeAsync(StateHasChanged);
