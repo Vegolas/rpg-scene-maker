@@ -19,6 +19,11 @@ public class Screen
 
     /// <summary>Stored file name of an optional full-art tile background (uploaded via <c>/images</c>), or null.</summary>
     public string? Image { get; set; }
+
+    /// <summary>Display hint: when true the panel renders this board's tiles in a denser, smaller-tile layout
+    /// so a board with many shortcuts fits more on screen. Purely cosmetic — it changes nothing about what the
+    /// tiles do. Toggled from the board's Arrange page.</summary>
+    public bool Compact { get; set; }
 }
 
 /// <summary>One shortcut on a <see cref="Screen"/>.</summary>

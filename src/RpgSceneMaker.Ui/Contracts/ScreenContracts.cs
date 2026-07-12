@@ -1,7 +1,7 @@
 namespace RpgSceneMaker.Ui.Contracts;
 
 // Mirrors the API's screen shapes (contracts are duplicated per project by design — keep in sync by hand).
-public record ScreenDto(string Id, string Name, List<ScreenTileDto>? Tiles, string? Image);
+public record ScreenDto(string Id, string Name, List<ScreenTileDto>? Tiles, string? Image, bool Compact = false);
 public record ScreenTileDto(string Kind, string Ref, string Label);
 
 // Mutable form model for arranging one screen (board) in the panel; converts to the wire DTO on save.
@@ -14,5 +14,8 @@ public class ScreenEdit
     public List<ScreenTileDto> Tiles { get; set; } = [];
     public string? Image { get; set; }
 
-    public ScreenDto ToDto() => new(Id, Name, Tiles, Image);
+    // Denser tile layout for boards with many shortcuts; toggled on the Arrange page (see Screen.razor).
+    public bool Compact { get; set; }
+
+    public ScreenDto ToDto() => new(Id, Name, Tiles, Image, Compact);
 }

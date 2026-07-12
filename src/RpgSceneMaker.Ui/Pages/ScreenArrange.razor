@@ -25,6 +25,10 @@ else
             <input id="screen-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty" />
         </div>
         <ArtField @bind-Image="_edit.Image" />
+        <div class="chip-row" style="margin-top:1rem">
+            <Chip On="_edit.Compact" OnClick="() => _edit.Compact = !_edit.Compact"><Icon Name="screens" /> Compact layout</Chip>
+        </div>
+        <p class="hint" style="margin-top:0.4rem">Smaller tiles, so a board with lots of shortcuts fits more on screen.</p>
     </div>
 
     <SectionHeading>Shortcuts</SectionHeading>
@@ -183,7 +187,7 @@ else
             Nav.NavigateTo("screens");
             return;
         }
-        _edit = new ScreenEdit { Id = dto.Id, Name = dto.Name, Tiles = [.. dto.Tiles ?? []], Image = dto.Image };
+        _edit = new ScreenEdit { Id = dto.Id, Name = dto.Name, Tiles = [.. dto.Tiles ?? []], Image = dto.Image, Compact = dto.Compact };
         (_emoji, _label) = SceneNaming.SplitName(dto.Name);
 
         // Referenced entities + the Spotify library (playlists are optional; empty/silent when not connected).

@@ -33,7 +33,7 @@ else
     }
     else
     {
-        <div class="scene-grid">
+        <div class="scene-grid @(_compact ? "compact" : "")">
             @foreach (var (tile, index) in _tiles.Select((t, i) => (t, i)))
             {
                 @if (tile.Kind == "break")
@@ -76,6 +76,7 @@ else
     private int? _busyIndex;
 
     private string _label = "";
+    private bool _compact;
     private List<ScreenTileDto> _tiles = [];
 
     // Entities referenced by tiles — resolved for display.
@@ -100,6 +101,7 @@ else
             return;
         }
         (_, _label) = SceneNaming.SplitName(dto.Name);
+        _compact = dto.Compact;
         _tiles = [.. dto.Tiles ?? []];
 
         // Referenced entities used to render each tile.

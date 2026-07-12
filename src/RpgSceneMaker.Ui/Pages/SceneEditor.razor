@@ -99,6 +99,10 @@ else
                                             }
                                         </div>
 
+                                        @* "From library" belongs with the effect chooser: picking a saved FX (Type "fx")
+                                           replaces the built-in effect and hides the per-effect controls below. *@
+                                        <FxLibraryPicker Effect="row.Edit.Effect" Library="_fxLibrary" />
+
                                         @* Base colour/white — shown only for effects that build on it (static + flicker/glow/storm);
                                            drift needs just its brightness; custom/fx set colour + brightness per keyframe. *@
                                         @if (Palette.EffectUsesBaseColor(row.Edit.Effect.Type))
@@ -142,7 +146,7 @@ else
                                                         {
                                                             <span class="pal-chip">
                                                                 <span class="pal-dot" style="background:@c"></span>@c.ToUpperInvariant()
-                                                                <button class="pal-x" aria-label="Remove color" @onclick="() => RemovePaletteColor(row, c)"><Icon Name="close" /></button>
+                                                                <button class="pal-x" title="Remove color" aria-label="Remove color" @onclick="() => RemovePaletteColor(row, c)"><Icon Name="close" /></button>
                                                             </span>
                                                         }
                                                     </div>
@@ -150,8 +154,6 @@ else
                                                 <SwatchGrid Selected="null" ShowCustom="false" OnPick="@(hex => AddPaletteColor(row, hex))" Style="margin-top:0.6rem" />
                                             }
                                         }
-
-                                        <FxLibraryPicker Effect="row.Edit.Effect" Library="_fxLibrary" />
                                     }
                                     else if (row.Edit.Mode == "off")
                                     {

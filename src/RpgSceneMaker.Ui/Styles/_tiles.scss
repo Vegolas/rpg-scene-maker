@@ -203,3 +203,24 @@
   height: 1px;
   background: var(--border-subtle);
 }
+
+/* ---------- compact board (Screen.razor, per-screen "Compact layout" toggle) ----------
+   Denser tiles so a board with lots of shortcuts fits more on screen. Still well above the
+   44px touch-target minimum. Only affects screens grids that opt in via .compact. */
+.scene-grid.compact {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--s-2);
+}
+.scene-grid.compact .scene-card {
+  min-height: 74px;
+  padding: var(--s-2);
+  gap: 2px;
+  border-radius: var(--r-md);
+}
+.scene-grid.compact .scene-card .scene-emoji,
+.scene-grid.compact .scene-card .scene-glyph { font-size: 20px; }
+.scene-grid.compact .scene-card .scene-name { font: var(--text-md); }
+/* the LIVE pill shrinks a touch so it doesn't dominate a small tile */
+.scene-grid.compact .scene-card.active::after { padding: 2px 6px; }
+/* tighten the section-heading break spacing to match the denser grid */
+.scene-grid.compact .grid-break.titled { margin: var(--s-3) 0 0; }

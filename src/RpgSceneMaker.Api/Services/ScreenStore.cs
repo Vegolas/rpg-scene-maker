@@ -32,6 +32,7 @@ public class ScreenStore(IDbContextFactory<AppDbContext> dbFactory)
             existing.Name = screen.Name;
             existing.Tiles = screen.Tiles;
             existing.Image = screen.Image;
+            existing.Compact = screen.Compact;
         }
         await db.SaveChangesAsync();
     }

@@ -47,13 +47,13 @@
         <div class="kf-card">
             <div class="kf-insp-head">
                 <div class="kf-steppers">
-                    <button class="btn btn--small" @onclick="SelectPrev" disabled="@(idx <= 0)" aria-label="Previous keyframe"><Icon Name="step-prev" /></button>
+                    <button class="btn btn--small" @onclick="SelectPrev" disabled="@(idx <= 0)" title="Previous keyframe" aria-label="Previous keyframe"><Icon Name="step-prev" /></button>
                     <span class="kf-num">#@(idx + 1) / @count</span>
-                    <button class="btn btn--small" @onclick="SelectNext" disabled="@(idx >= count - 1)" aria-label="Next keyframe"><Icon Name="step-next" /></button>
+                    <button class="btn btn--small" @onclick="SelectNext" disabled="@(idx >= count - 1)" title="Next keyframe" aria-label="Next keyframe"><Icon Name="step-next" /></button>
                 </div>
                 <span class="kf-spacer"></span>
-                <button class="btn btn--small" @onclick="() => Duplicate(sel)" aria-label="Duplicate keyframe"><Icon Name="duplicate" /></button>
-                <button class="btn btn--small btn--danger" @onclick="() => Remove(sel)" aria-label="Delete keyframe"><Icon Name="close" /></button>
+                <button class="btn btn--small" @onclick="() => Duplicate(sel)" title="Duplicate keyframe" aria-label="Duplicate keyframe"><Icon Name="duplicate" /></button>
+                <button class="btn btn--small btn--danger" @onclick="() => Remove(sel)" title="Delete keyframe" aria-label="Delete keyframe"><Icon Name="close" /></button>
             </div>
 
             <div class="tl-insp-row">
@@ -97,17 +97,21 @@
         </div>
     }
 
-    <div class="chip-row">
+    @* Loop toggle + its cycle length share one row; the cycle field appears beside the chip when looping. *@
+    <div class="tl-insp-inline">
         <Chip On="Effect.Loop" OnClick="ToggleLoop"><Icon Name="repeat" /> Loop</Chip>
+        @if (Effect.Loop)
+        {
+            <div class="tl-fld">
+                <label>Cycle</label>
+                <input type="number" min="0.1" step="0.1" value="@Sec(Effect.CycleMs ?? DefaultCycleMs)" @onchange="SetCycle" aria-label="Cycle length" />
+                <span class="tl-unit">s repeat</span>
+            </div>
+        }
     </div>
 
     @if (Effect.Loop)
     {
-        <div class="tl-insp-row" style="margin-top:0.6rem">
-            <label>Cycle</label>
-            <input type="number" min="0.1" step="0.1" value="@Sec(Effect.CycleMs ?? DefaultCycleMs)" @onchange="SetCycle" aria-label="Cycle length" />
-            <span class="tl-unit">s repeat</span>
-        </div>
         @if (CycleTooShort)
         {
             <p class="hint" style="margin-top:0.4rem"><Icon Name="warn" /> Cycle must be at least @Sec(MinCycleMs)s (100 ms past the last keyframe).</p>
