@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`);
+- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
   through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
@@ -179,7 +179,9 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   come from `AssistantTools` as provider-neutral `AiToolDefinition`s (each adapter maps them to its SDK's tool
   type) → the same façade. The panel drives it over `/assistant/*` (`send`/`state`/`stop`/`clear`) by
   **polling `/assistant/state?rev=`** (the codebase's real-time idiom — no SSE). A backend failure surfaces as
-  `AiProviderException`, mapped to a `502` arm in the Program.cs error switch.
+  `AiProviderException`, mapped to a `502` arm in the Program.cs error switch. The single conversation is
+  **persisted to SQLite** (one `AssistantConversation` row via `AssistantConversationStore`, hydrated lazily on
+  first access) so it survives a server restart; `clear` wipes it permanently.
 
 ### Conventions
 
@@ -207,7 +209,8 @@ as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
 `Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
 `NOCASE`) and a
-single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`). The Spotify
+single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`) and a single-row
+`AssistantConversation` (the in-panel assistant's persisted transcript + history, each a JSON string). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 
 Sound-effect **audio files** live on disk, not in the DB, at `%LocalAppData%\RpgSceneMaker\sounds\`

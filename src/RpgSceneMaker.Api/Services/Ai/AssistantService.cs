@@ -32,6 +32,7 @@ public record AssistantState(long Rev, bool Busy, bool Configured, List<Assistan
 /// </summary>
 public sealed class AssistantService(
     AssistantStore store,
+    AssistantConversationStore conversationStore,
     AssistantTools toolExec,
     IEnumerable<IAssistantProvider> providers,
     ILogger<AssistantService> logger)
@@ -61,6 +62,7 @@ public sealed class AssistantService(
     private long _rev;
     private bool _busy;
     private int _nextSeq;
+    private bool _hydrated;
     private CancellationTokenSource? _cts;
 
     /// <summary>Queue a user message and start a run. Throws on blank text or when the key is unset; returns
@@ -75,10 +77,12 @@ public sealed class AssistantService(
         CancellationToken token;
         lock (_lock)
         {
+            EnsureHydratedLocked();
             if (_busy) return false;
             var trimmed = text.Trim();
             AppendLocked(new AssistantEntry { Kind = "user", Text = trimmed });
             _history.Add(new ChatMessage(ChatRole.User, [new TextChatBlock(trimmed)]));
+            SaveLocked();
             _busy = true;
             _cts = new CancellationTokenSource();
             token = _cts.Token;
@@ -92,6 +96,7 @@ public sealed class AssistantService(
     {
         lock (_lock)
         {
+            EnsureHydratedLocked();
             var entries = _rev != sinceRev ? _transcript.Select(Clone).ToList() : null;
             return new AssistantState(_rev, _busy, store.Current.IsConfigured, entries);
         }
@@ -113,10 +118,12 @@ public sealed class AssistantService(
     {
         lock (_lock)
         {
+            EnsureHydratedLocked();
             if (_busy) return false;
             _transcript.Clear();
             _history.Clear();
             _rev++;
+            SaveLocked();
             return true;
         }
     }
@@ -208,6 +215,7 @@ public sealed class AssistantService(
                 _cts?.Dispose();
                 _cts = null;
                 _rev++;
+                SaveLocked();
             }
         }
     }
@@ -236,6 +244,48 @@ public sealed class AssistantService(
     private List<ChatMessage> SnapshotHistory()
     {
         lock (_lock) { return [.. _history]; }
+    }
+
+    // ---- persistence (single conversation row) ----
+
+    /// <summary>Load the persisted conversation once, on the first locked access after construction. Malformed
+    /// or absent JSON never throws — it is logged and the conversation starts empty. When a non-empty transcript
+    /// is restored, the revision is bumped so a fresh client still polling at rev=0 receives the snapshot.</summary>
+    private void EnsureHydratedLocked()
+    {
+        if (_hydrated) return;
+        _hydrated = true;
+        try
+        {
+            var (transcriptJson, historyJson) = conversationStore.Load();
+            var transcript = JsonSerializer.Deserialize<List<AssistantEntry>>(transcriptJson, AiJson.Options);
+            var history = JsonSerializer.Deserialize<List<ChatMessage>>(historyJson, AiJson.Options);
+
+            if (transcript is { Count: > 0 })
+            {
+                _transcript.AddRange(transcript);
+                _nextSeq = _transcript[^1].Seq + 1;
+                _rev++; // GetState only returns entries when the rev moved, so bump it for a fresh client
+            }
+            if (history is { Count: > 0 })
+                _history.AddRange(history);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not load the persisted assistant conversation — starting empty.");
+            _transcript.Clear();
+            _history.Clear();
+            _nextSeq = 0;
+        }
+    }
+
+    /// <summary>Persist the current transcript + history to the single conversation row. Called while holding
+    /// the lock; the writes are infrequent and synchronous, mirroring <see cref="AssistantStore"/>.</summary>
+    private void SaveLocked()
+    {
+        var transcriptJson = JsonSerializer.Serialize(_transcript, AiJson.Options);
+        var historyJson = JsonSerializer.Serialize(_history, AiJson.Options);
+        conversationStore.Save(transcriptJson, historyJson);
     }
 
     private static AssistantEntry Clone(AssistantEntry e) => new()

@@ -76,6 +76,8 @@ builder.Services.AddHttpClient<SpotifyClient>(client => client.Timeout = TimeSpa
 
 // Assistant: bring-your-own-key settings for the in-panel AI assistant (provider + key + model, in SQLite).
 builder.Services.AddSingleton<AssistantStore>();
+// The single assistant conversation, persisted so a restart keeps it (hydrated lazily by AssistantService).
+builder.Services.AddSingleton<AssistantConversationStore>();
 
 // Shared AI tool layer over scenes/events/light FX (+ read-only context and live control), consumed by the
 // MCP server and the in-panel assistant (both added in later commits).

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace RpgSceneMaker.Api.Services.Ai.Providers;
 
@@ -17,7 +18,13 @@ public enum ChatRole
 /// </summary>
 public sealed record ChatMessage(ChatRole Role, IReadOnlyList<ChatBlock> Blocks);
 
-/// <summary>One content block of a <see cref="ChatMessage"/>.</summary>
+/// <summary>One content block of a <see cref="ChatMessage"/>. The System.Text.Json polymorphism attributes
+/// let the block hierarchy round-trip so the history can be persisted (see AssistantConversationStore); they
+/// are serialization-only — the discriminator rides on the type, so the provider adapters are unaffected.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(TextChatBlock), "text")]
+[JsonDerivedType(typeof(ToolUseChatBlock), "toolUse")]
+[JsonDerivedType(typeof(ToolResultChatBlock), "toolResult")]
 public abstract record ChatBlock;
 
 /// <summary>Plain assistant/user text.</summary>

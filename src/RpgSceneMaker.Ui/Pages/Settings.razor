@@ -473,6 +473,7 @@ else
                 var (assistant, _) = await Api.GetAssistantConfigAsync();
                 if (assistant is not null) _assistant = assistant;
                 Ui.ReportOk(L["settings.toast.assistantSaved"]);
+                Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
             }
         }
         finally { _busy = false; }
@@ -484,6 +485,7 @@ else
         {
             var (assistant, _) = await Api.GetAssistantConfigAsync();
             if (assistant is not null) _assistant = assistant;
+            Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
         }
     }
 
