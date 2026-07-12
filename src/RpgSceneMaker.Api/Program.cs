@@ -68,6 +68,10 @@ builder.Services.AddHttpClient<SpotifyClient>(client => client.Timeout = TimeSpa
 // Anthropic: bring-your-own-key settings for the in-panel AI assistant (key + model, stored in SQLite).
 builder.Services.AddSingleton<AnthropicStore>();
 
+// Shared AI tool layer over scenes/events/light FX (+ read-only context and live control), consumed by the
+// MCP server and the in-panel assistant (both added in later commits).
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AiToolService>();
+
 // In-memory log buffer surfaced by the panel's Logs tab. Whitelist our own logs at Information and
 // default everything else (EF SQL, HttpClient request chatter, hosting) to Warning+, so the tab stays
 // signal rather than framework noise.

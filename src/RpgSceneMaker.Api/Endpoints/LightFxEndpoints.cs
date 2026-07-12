@@ -31,7 +31,7 @@ public static class LightFxEndpoints
             // Detach on delete: replace every live "fx" reference (scene lights + event timeline clips) with an
             // embedded "custom" copy of the FX's keyframes, so nothing is left dangling and behaviour is
             // unchanged. Mirrors how deleting a sound scrubs its id from scenes/events.
-            await DetachReferencesAsync(effect, scenes, events);
+            await LightFxDetacher.DetachReferencesAsync(effect, scenes, events);
             await store.DeleteAsync(id);
             return Results.NoContent();
         });
@@ -51,31 +51,4 @@ public static class LightFxEndpoints
         fx.MapMethods("/test/stop", EndpointHelpers.GetOrPost,
             (LightFxTester tester) => new { stopped = tester.Stop() });
     }
-
-    // Replace each scene-light / timeline-light effect that references the given FX with an embedded "custom"
-    // copy, saving only the scenes/events actually touched.
-    private static async Task DetachReferencesAsync(LightFx effect, SceneStore scenes, EventStore events)
-    {
-        foreach (var scene in await scenes.GetAllAsync())
-        {
-            var dirty = false;
-            foreach (var light in scene.Lights)
-                if (IsReference(light.Effect, effect.Id)) { light.Effect = SceneLightApplier.MaterializeFx(effect); dirty = true; }
-            if (dirty)
-                await scenes.UpsertAsync(scene);
-        }
-
-        foreach (var evt in await events.GetAllAsync())
-        {
-            if (evt.Timeline is not { } timeline) continue;
-            var dirty = false;
-            foreach (var clip in timeline.Lights)
-                if (IsReference(clip.Effect, effect.Id)) { clip.Effect = SceneLightApplier.MaterializeFx(effect); dirty = true; }
-            if (dirty)
-                await events.UpsertAsync(evt);
-        }
-    }
-
-    private static bool IsReference(LightEffect? effect, string fxId) =>
-        effect is { Type: "fx" } && string.Equals(effect.FxId, fxId, StringComparison.OrdinalIgnoreCase);
 }
