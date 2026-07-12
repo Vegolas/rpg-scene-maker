@@ -141,8 +141,12 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   panel's **UI translations**. Each language is a JSON file (`<code>.json`, e.g. `en`/`pl`) in the on-disk
   locales dir (`%LocalAppData%\RpgSceneMaker\locales\`, override `Locales:Path`), read on demand so a
   community/agent edit needs no restart. `en.json`+`pl.json` also ship **embedded** in the assembly: seeded to
-  disk on first run (missing files only, never clobbering edits) and used as the ultimate fallback, so a
-  broken/deleted file can't blank the UI. `/i18n/*` ([LocaleEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/LocaleEndpoints.cs))
+  disk on first run (missing files only, never clobbering edits). For these shipped codes `Get` **merges per
+  key** — the embedded strings are the base and the on-disk file overlays them (disk wins key-by-key) — so
+  community edits are preserved while newly shipped keys always appear even when the on-disk file was seeded
+  by an older build (a stale file can't hide a new key), and a missing/broken file still can't blank the UI
+  (embedded only). Community languages with no embedded counterpart are served from disk as-is.
+  `/i18n/*` ([LocaleEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/LocaleEndpoints.cs))
   covers `list` and `{code}` (GET only); like `/screens` there is nothing at bare `/i18n`. The panel's
   `Localizer` fetches English + the active language and falls back to English per missing key. Server-side
   error/validation messages are **not** localized (still English).
