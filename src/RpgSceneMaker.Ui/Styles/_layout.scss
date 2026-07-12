@@ -1,0 +1,241 @@
+/* ============================================================
+   App shell — rail / topbar / tabbar / content
+   ============================================================ */
+.shell { min-height: 100dvh; display: flex; }
+
+.main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* ---------- left nav rail (≥ 768px) ---------- */
+.rail {
+  width: var(--rail-w);
+  flex: none;
+  display: none;                 /* hidden on narrow screens (tab bar instead) */
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-2);
+  background: var(--surface);
+  border-right: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100dvh;
+  overflow-y: auto;
+}
+.rail__item {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-decoration: none;
+  font: var(--text-tag);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.rail__item:hover { color: var(--text-muted); background: var(--card); }
+.rail__item.active { background: var(--accent-soft); color: var(--accent-text); }
+.rail__item .icon { font-size: 19px; line-height: 1; }
+.rail__item:not(.active) .icon { opacity: .5; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--topbar-h);
+  padding: calc(var(--s-3) + env(safe-area-inset-top, 0px)) var(--s-4) var(--s-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.topbar__title {
+  font: 800 15px/1 var(--font);
+  letter-spacing: .5px;
+  color: var(--text);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.topbar__spacer { flex: 1; }
+
+/* ---------- header search (only on searchable pages) ---------- */
+.searchbar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--hit-min);
+  padding: 0 var(--s-3);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.searchbar:focus-within { border-color: var(--accent); }
+.searchbar-ico { flex: 0 0 auto; color: var(--text-faint); font-size: 15px; }
+.searchbar input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: var(--text-md);
+  min-height: 40px;
+}
+.searchbar input::placeholder { color: var(--text-faint); font-weight: 600; }
+.searchbar input:focus { outline: none; }
+.searchbar input::-webkit-search-cancel-button { display: none; }
+.searchbar-clear {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.searchbar-clear:hover { color: var(--text); }
+
+/* ---------- content region ---------- */
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-4);
+}
+
+/* ---------- bottom tab bar (< 768px) ---------- */
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 30;
+  height: var(--tabbar-h);
+  padding: var(--s-1) var(--s-2) calc(var(--s-1) + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--s-1);
+  background: var(--surface);
+  border-top: 1px solid var(--border-subtle);
+}
+.tabbar a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: var(--r-md);
+  text-decoration: none;
+  color: var(--text-faint);
+  font: var(--text-tag);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.tabbar a .tab-ico { font-size: 19px; line-height: 1; opacity: .5; transition: opacity var(--t-fast); }
+.tabbar a.active { color: var(--accent-text); background: var(--accent-soft); }
+.tabbar a.active .tab-ico { opacity: 1; }
+
+@media (min-width: 768px) {
+  .rail { display: flex; }
+  .tabbar { display: none; }
+}
+@media (max-width: 767.98px) {
+  .page { padding-bottom: calc(var(--tabbar-h) + var(--s-4)); }
+}
+
+/* ---------- always-visible quick controls (top bar) ---------- */
+.quick { display: flex; align-items: center; gap: var(--s-2); flex: 0 0 auto; }
+.quick .q-btn {
+  width: var(--hit-min);
+  height: var(--hit-min);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+}
+.quick .q-btn:hover { background: var(--card-raised); border-color: var(--border-strong); }
+.quick .q-btn:active { transform: translateY(1px); }
+.quick .q-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.quick .q-btn.primary:hover { background: #3d74ff; }
+.quick .q-vol { flex: 0 0 auto; width: 96px; height: var(--hit-min); }
+/* Below this width the header is too tight for a usable slider — the Music tab keeps the full one. */
+@media (max-width: 480px) { .quick .q-vol { display: none; } }
+
+/* ---------- now-running status strip ---------- */
+.now-running {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-4);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-lg);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.now-running__emoji { font-size: 26px; line-height: 1; flex: 0 0 auto; }
+.now-running__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.now-running__label {
+  font: var(--text-label);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.now-running__name {
+  font: var(--text-xl);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--s-3));
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: min(92vw, 560px);
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--r-md);
+  padding: var(--s-3) var(--s-4);
+  font: var(--text-md);
+  animation: toastIn .2s ease-out;
+  pointer-events: none;
+}
+.toast.error { border-color: var(--danger-border); color: var(--danger); }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* On wide screens the tab bar is gone — sit the toast just above the content edge. */
+@media (min-width: 768px) {
+  .toast { bottom: var(--s-5); }
+}

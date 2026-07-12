@@ -1,0 +1,23 @@
+/* ============================================================
+   Status pieces — badges (ONLINE / OFFLINE / LIVE)
+   ============================================================ */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: var(--r-sm);
+  font: var(--text-tag); letter-spacing: 1px;
+  flex: 0 0 auto;
+}
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.badge--online { background: var(--success-soft); border: 1px solid var(--success-border); color: var(--success); }
+.badge--online .dot { background: var(--success); box-shadow: var(--glow-success); animation: dotPulse 2s ease-in-out infinite; }
+
+.badge--offline { background: var(--danger-soft); border: 1px solid var(--danger-border); color: var(--danger); }
+.badge--offline .dot { background: var(--danger); }
+
+.badge--live { background: #000; color: var(--live); }
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .35; }
+}

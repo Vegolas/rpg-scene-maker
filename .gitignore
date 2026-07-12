@@ -11,3 +11,7 @@ settings.local.json
 *.db
 *.db-shm
 *.db-wal
+
+# Compiled stylesheet — generated from Styles/*.scss by AspNetCore.SassCompiler on build
+src/RpgSceneMaker.Ui/wwwroot/css/app.css
+src/RpgSceneMaker.Ui/wwwroot/css/app.css.map

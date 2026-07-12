@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/koenvzeijl/AspNetCore.SassCompiler/master/src/AspNetCore.SassCompiler/sasscompiler.schema.json",
+  "Source": "Styles",
+  "Target": "wwwroot/css",
+  "Arguments": "--style=compressed --load-path=Styles",
+  "GenerateScopedCss": false,
+  "Compilations": []
+}

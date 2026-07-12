@@ -6,15 +6,21 @@
 
 <PageTitle>Scene Maker — Scenes</PageTitle>
 
-<RuneHeading>Scenes</RuneHeading>
+<div class="page-head">
+    <h1>Scenes</h1>
+    @if (_scenes is not null)
+    {
+        <span class="count">@_scenes.Count saved</span>
+    }
+</div>
 
 @if (_scenes is null)
 {
-    <p class="empty-note">Consulting the tome…</p>
+    <p class="empty-note">Loading scenes…</p>
 }
 else if (_scenes.Count == 0)
 {
-    <p class="empty-note">No scenes yet — tap below to conjure your first one.</p>
+    <p class="empty-note">No scenes yet — tap below to create your first one.</p>
     <div class="scene-grid">
         <button class="scene-card ghost" @onclick="NewScene">
             <span class="scene-emoji">＋</span>
@@ -26,19 +32,21 @@ else
 {
     var shown = _scenes.Where(SceneMatches).ToList();
     <div class="scene-grid">
-        @foreach (var (scene, index) in shown.Select((s, i) => (s, i)))
+        @foreach (var scene in shown)
         {
             var (emoji, label) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
             var artUrl = Api.ImageUrl(scene.Image);
             var hasArt = artUrl is not null;
-            <button class="scene-card @(scene.Id == _activeId ? "active" : "") @(_busyId == scene.Id ? "busy" : "") @(hasArt ? "art" : "")"
-                    style="animation-delay:@(index * 55)ms; --sc:@(SwatchColor(scene));@(hasArt ? $" --art:url('{artUrl}');" : "")"
+            var color = SwatchColor(scene);
+            var colored = !hasArt && color is not null;
+            var darkText = colored && IsLight(color!);
+            <button class="scene-card @(scene.Id == _activeId ? "active" : "") @(_busyId == scene.Id ? "busy" : "") @(hasArt ? "art" : "") @(colored ? "colored" : "") @(darkText ? "dark-text" : "")"
+                    style="@(hasArt ? $"--art:url('{artUrl}');" : colored ? $"background:{color};" : "")"
                     @onclick="() => Activate(scene.Id)">
                 @if (hasArt)
                 {
                     <span class="scene-art"></span>
                 }
-                <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label="Edit scene"
                       @onclick="() => Edit(scene.Id)" @onclick:stopPropagation="true">✎</span>
                 <span class="scene-emoji">@emoji</span>
@@ -114,10 +122,21 @@ else
     }
 
     // Card tint: the legacy "all lights" colour, else the first per-light entry that sets a colour.
-    private static string SwatchColor(SceneDto scene) =>
+    private static string? SwatchColor(SceneDto scene) =>
         scene.Light?.Color
-        ?? scene.Lights?.FirstOrDefault(l => l.Color is not null)?.Color
-        ?? "transparent";
+        ?? scene.Lights?.FirstOrDefault(l => l.Color is not null)?.Color;
+
+    // Pick black text for light mood colors (amber/yellow), white otherwise, via perceived luminance.
+    private static bool IsLight(string hex)
+    {
+        if (hex is not ['#', ..] || hex.Length < 7) return false;
+        if (!int.TryParse(hex.AsSpan(1, 2), System.Globalization.NumberStyles.HexNumber, null, out var r) ||
+            !int.TryParse(hex.AsSpan(3, 2), System.Globalization.NumberStyles.HexNumber, null, out var g) ||
+            !int.TryParse(hex.AsSpan(5, 2), System.Globalization.NumberStyles.HexNumber, null, out var b))
+            return false;
+        // ITU-R BT.601 luma; > 0.6 reads as a "light" fill that needs dark text.
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0 > 0.6;
+    }
 
     private Task NewScene() => Vt.NavigateAsync("editor");
 

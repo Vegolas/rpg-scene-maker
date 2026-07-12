@@ -1,0 +1,41 @@
+/* ============================================================
+   Logs tab — monospace ring-buffer view
+   ============================================================ */
+.log-list {
+  display: flex;
+  flex-direction: column;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.log-row {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+  padding: var(--s-1) var(--s-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.log-row:last-child { border-bottom: none; }
+.log-time { color: var(--text-muted); flex: 0 0 auto; }
+.log-level { flex: 0 0 64px; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
+.log-cat { color: var(--text-muted); flex: 0 0 auto; max-width: 28%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-msg { flex: 1; min-width: 0; color: var(--text); word-break: break-word; }
+.log-exc {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  background: var(--well);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.log-row.log-error, .log-row.log-critical { background: var(--danger-soft); }
+.log-row.log-warning { background: rgba(255, 210, 26, .06); }
+.log-row.log-error .log-level, .log-row.log-critical .log-level { color: var(--danger); }
+.log-row.log-warning .log-level { color: var(--warning); }
+.log-row.log-information .log-level { color: var(--success); }
+.log-row.log-debug .log-level, .log-row.log-trace .log-level { color: var(--text-muted); }

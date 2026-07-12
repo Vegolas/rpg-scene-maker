@@ -1,0 +1,201 @@
+/* ============================================================
+   Scene tiles — design .tile + legacy .scene-card (restyled)
+   Shared by Scenes, Screens, Events, Screen boards.
+   Face layout: emoji top-left · name bottom-left · corner
+   affordances top-right (LIVE / stop) and bottom-right (edit).
+   ============================================================ */
+
+/* Design primitive (future markup) */
+.tile {
+  min-height: 104px; border-radius: var(--r-xl); padding: var(--s-4);
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: var(--card); border: 2px solid var(--border); cursor: pointer;
+  transition: border-color var(--t-fast), transform var(--t-fast);
+}
+.tile:hover { border-color: var(--border-strong); }
+.tile:active { transform: scale(.985); }
+.tile__name { font: var(--text-xl); }
+.tile--colored { border-color: transparent; color: #fff; }
+
+.tile--live { position: relative; border: 2px solid var(--live); color: #fff; overflow: hidden; }
+.tile--live::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%,
+    transparent 40%, rgba(255, 77, 46, .45) 78%, var(--live) 100%);
+}
+.tile--live > * { position: relative; }
+
+/* ---------- scene grid ---------- */
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--s-3);
+}
+
+/* ---------- legacy .scene-card, restyled to the tile face ---------- */
+.scene-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--s-1);
+  min-height: 120px;
+  padding: var(--s-4);
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: var(--r-xl);
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+  overflow: hidden;
+  transition: border-color var(--t-fast), transform var(--t-fast);
+}
+.scene-card:hover { border-color: var(--border-strong); }
+.scene-card:active { transform: scale(.985); }
+.scene-card .scene-emoji { font-size: 26px; line-height: 1; margin-bottom: auto; }
+.scene-card .scene-name { font: var(--text-xl); }
+.scene-card .screen-count { font: var(--text-sm); color: var(--text-muted); }
+
+/* Thin scene-color strip along the top (kept as a subtle mood cue). */
+.scene-card .scene-swatch {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--sc, transparent);
+  z-index: 2;
+}
+
+/* Colored (mood) tile: solid scene color fill via inline background. */
+.scene-card.colored { border-color: transparent; color: #fff; }
+.scene-card.colored .scene-name,
+.scene-card.colored .screen-count { text-shadow: 0 1px 0 rgba(0, 0, 0, .25); }
+.scene-card.colored .screen-count { color: rgba(255, 255, 255, .85); }
+/* Light mood colors (amber/yellow) need black text for contrast. */
+.scene-card.colored.dark-text { color: #000; }
+.scene-card.colored.dark-text .scene-name,
+.scene-card.colored.dark-text .screen-count { text-shadow: none; }
+.scene-card.colored.dark-text .screen-count { color: rgba(0, 0, 0, .7); }
+
+/* Active / running: 2px live border + radial edge vignette + LIVE pill. */
+.scene-card.active { border-color: var(--live); }
+.scene-card.active::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%,
+    transparent 40%, rgba(255, 77, 46, .45) 78%, var(--live) 100%);
+}
+.scene-card.active::after {
+  content: "LIVE";
+  position: absolute; top: var(--s-2); right: var(--s-2); z-index: 3;
+  background: #000; color: var(--live);
+  font: var(--text-tag); letter-spacing: 1px;
+  padding: 4px 7px; border-radius: var(--r-sm);
+}
+.scene-card.active > .scene-emoji,
+.scene-card.active > .scene-name,
+.scene-card.active > .screen-count { position: relative; z-index: 2; }
+
+.scene-card.busy { opacity: .55; pointer-events: none; }
+
+/* A playing-sound / running-event shortcut pulses in accent. */
+.scene-card.playing {
+  border-color: var(--accent-border);
+  animation: soundPulse 1.8s ease-in-out infinite;
+}
+
+/* A shortcut whose target was deleted — dimmed with a danger edge. */
+.scene-card.missing { opacity: .7; border-color: var(--danger-border); }
+
+/* Dashed "add" tile (design .card--new), centered blue +. */
+.scene-card.ghost {
+  background: transparent;
+  border: 2px dashed var(--border);
+  color: var(--text-muted);
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+}
+.scene-card.ghost:hover { border-color: var(--accent); color: var(--text); }
+.scene-card.ghost .scene-emoji { color: var(--accent); margin-bottom: 0; font-size: 28px; }
+.scene-card.ghost .scene-name { font: var(--text-md); color: inherit; }
+
+/* Corner affordances: edit bottom-right, stop top-right. */
+.scene-card .card-edit {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  font-size: 15px;
+  color: var(--text-muted);
+  border-top-left-radius: var(--r-md);
+  z-index: 4;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.scene-card .card-edit:hover { color: var(--text); background: rgba(255, 255, 255, .07); }
+.scene-card .card-edit:active { transform: scale(.9); }
+
+.scene-card .card-stop {
+  position: absolute;
+  top: 0; right: 0;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  font-size: 15px;
+  color: var(--danger);
+  border-bottom-left-radius: var(--r-md);
+  z-index: 4;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.scene-card .card-stop:hover { background: var(--danger-soft); }
+.scene-card .card-stop:active { transform: scale(.9); }
+
+/* ---------- full-art tile background (optional per-entity image) ---------- */
+.scene-card .scene-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--art) center / cover no-repeat;
+}
+.scene-card.art .scene-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, .75), rgba(0, 0, 0, .15) 55%, rgba(0, 0, 0, .4));
+}
+.scene-card.art .scene-emoji { display: none; }
+.scene-card.art .scene-name,
+.scene-card.art .screen-count {
+  position: relative;
+  z-index: 2;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
+}
+.scene-card.art .scene-name { color: #fff; }
+.scene-card.art .screen-count { color: rgba(255, 255, 255, .85); }
+.scene-card.art .scene-swatch { z-index: 2; }
+.scene-card.art .card-edit { z-index: 4; }
+.scene-card.art.active::after { z-index: 4; }
+
+/* ---------- grid line-breaks / section headings inside a scene grid ---------- */
+.scene-grid .grid-break {
+  grid-column: 1 / -1;
+  height: 1px;
+  margin: var(--s-1) 0;
+  background: var(--border-subtle);
+}
+.scene-grid .grid-break.titled {
+  height: auto;
+  background: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-4) 0 var(--s-1);
+  font: var(--text-label);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.scene-grid .grid-break.titled::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}

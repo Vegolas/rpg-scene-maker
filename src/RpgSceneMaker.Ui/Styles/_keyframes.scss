@@ -1,0 +1,74 @@
+/* ============================================================
+   Keyframe editor (custom light effect)
+   ============================================================ */
+
+/* Design primitives (future markup): track row + key dot */
+.track { position: relative; height: 44px; border-radius: var(--r-sm); background: var(--input); border: 1px solid var(--border); }
+.key {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 2.5px solid #fff; background: var(--accent); cursor: grab;
+}
+.key--selected { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ---------- legacy keyframe editor ---------- */
+.kf-editor { margin-top: var(--s-2); }
+.kf-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  margin-bottom: var(--s-3);
+  background: var(--card);
+}
+.kf-num {
+  font: var(--text-lg);
+  color: var(--accent-text);
+  font-variant-numeric: tabular-nums;
+}
+.kf-spacer { flex: 1; }
+
+/* toolbar above the track: add button + keyframe count */
+.kf-toolbar { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-1); }
+
+/* time track: keyframe diamonds positioned by time */
+.kf-track { position: relative; height: 64px; margin: var(--s-1) var(--s-3) 0; }
+.kf-track-line { position: absolute; left: 0; right: 0; top: 22px; height: 2px; background: var(--border); border-radius: 1px; }
+
+.kf-marker {
+  position: absolute; top: 9px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 11px;
+  min-width: 40px; padding: 0 7px; background: none; border: 0; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+/* rotated square = diamond, threaded on the track line; fill shows the keyframe's colour */
+.kf-marker-head {
+  width: 26px; height: 26px; border-radius: 5px;
+  border: 2px solid var(--border-strong); background: var(--accent);
+  transform: rotate(45deg);
+  transition: transform .1s ease, box-shadow .1s ease, border-color .1s ease;
+}
+.kf-marker-head.mode-white { background: linear-gradient(135deg, #fff2d0, #cfe0ff); }
+.kf-marker-head.mode-off { background: var(--input); border-style: dashed; }
+.kf-marker-num {
+  font: var(--text-sm); font-weight: 700;
+  color: var(--text-muted); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.kf-marker:hover .kf-marker-head { transform: rotate(45deg) scale(1.08); }
+.kf-marker.sel .kf-marker-head {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 255, .45);
+  transform: rotate(45deg) scale(1.18);
+}
+.kf-marker.sel .kf-marker-num { color: var(--accent-text); }
+.kf-marker:focus-visible { outline: none; }
+.kf-marker:focus-visible .kf-marker-head { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 255, .45); }
+
+.kf-track-ends {
+  display: flex; justify-content: space-between; margin: 0 var(--s-3) var(--s-1);
+  color: var(--text-muted); font: var(--text-sm); font-variant-numeric: tabular-nums;
+}
+
+/* selected-keyframe inspector header: steppers + duplicate/delete */
+.kf-insp-head { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-3); }
+.kf-steppers { display: flex; align-items: center; gap: var(--s-2); }
+.kf-steppers .kf-num { min-width: 4.2em; text-align: center; }

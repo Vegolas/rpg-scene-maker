@@ -1,0 +1,80 @@
+@* Pure status read-out of the currently running scene, shown at the top of the content area on
+   every page (lives in MainLayout). Nothing here is clickable — play/pause and reset-lights live in
+   QuickControls, and the API has no stop-scene concept. Refreshes on navigation and on a poll timer,
+   so activating a scene (which happens without a page change) surfaces here within a few seconds. *@
+@implements IDisposable
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+@if (_emoji is not null || _name is not null)
+{
+    <div class="now-running" role="status" aria-live="polite">
+        @if (_emoji is not null)
+        {
+            <span class="now-running__emoji" aria-hidden="true">@_emoji</span>
+        }
+        <div class="now-running__text">
+            <span class="now-running__label">Now Running</span>
+            <span class="now-running__name">@(_name ?? _activeId)</span>
+        </div>
+    </div>
+}
+
+@code {
+    private string? _activeId;
+    private string? _emoji;
+    private string? _name;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        await RefreshAsync();
+        // Poll so a scene activated elsewhere (or on the Scenes page, without a route change) surfaces.
+        _timer = new Timer(_ => _ = InvokeAsync(RefreshAsync), null, 4000, 4000);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) =>
+        _ = InvokeAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        // A failed call returns null → the strip hides.
+        var active = await Api.GetActiveSceneAsync();
+        var id = active?.Id;
+
+        if (id is null)
+        {
+            if (_activeId is null && _name is null) return; // already hidden — nothing to redraw
+            _activeId = _emoji = _name = null;
+            StateHasChanged();
+            return;
+        }
+
+        if (id == _activeId) return; // unchanged — skip the scene fetch and re-render
+
+        _activeId = id;
+        // Resolve the display emoji + label from the scenes list.
+        var scenes = await Api.GetScenesAsync();
+        var scene = scenes.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (scene is not null)
+        {
+            var (emoji, label) = SceneNaming.SplitName(scene.Name, "🎲", scene.Id);
+            _emoji = emoji;
+            _name = label;
+        }
+        else
+        {
+            // Scene id no longer in the list (deleted?) — still announce it by id.
+            _emoji = "🎲";
+            _name = id;
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        _timer?.Dispose();
+    }
+}

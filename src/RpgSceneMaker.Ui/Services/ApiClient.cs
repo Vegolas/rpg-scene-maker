@@ -74,13 +74,6 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         return _tabOrder;
     }
 
-    public async Task SetTabOrderAsync(IReadOnlyList<string> order)
-    {
-        _tabOrder = [.. order];
-        await js.InvokeVoidAsync("localStorage.setItem", "tabOrder", JsonSerializer.Serialize(_tabOrder, Json));
-        ui.SetTabOrder(_tabOrder); // live-updates the tab bar
-    }
-
     /// <summary>Forget the custom order so the bar reverts to the built-in tab order.</summary>
     public async Task ClearTabOrderAsync()
     {

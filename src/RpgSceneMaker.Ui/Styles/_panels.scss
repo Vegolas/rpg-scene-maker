@@ -1,0 +1,64 @@
+/* ============================================================
+   Panels & cards + now-playing transport
+   ============================================================ */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: var(--s-4) var(--s-5);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+/* Selected/active panel: blue border + inset left bar */
+.panel--active {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Dashed "create new" affordance */
+.card--new {
+  background: transparent;
+  border: 2px dashed var(--border);
+  color: var(--text-muted);
+}
+.card--new:hover { border-color: var(--accent); color: var(--text); }
+
+/* ---------- now playing (Music) ---------- */
+.now-title { font: var(--text-xl); margin: 0 0 2px; }
+.now-sub { color: var(--text-muted); margin: 0 0 var(--s-4); font: var(--text-sm); }
+.progress {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--input);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  margin-bottom: var(--s-4);
+}
+.progress > div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--r-pill);
+  transition: width .9s linear;
+}
+
+.transport { display: flex; justify-content: center; align-items: center; gap: var(--s-3); }
+.transport .btn { flex: 0 0 auto; min-width: 64px; font-size: 20px; }
+.transport .btn.play { min-width: 84px; min-height: 60px; font-size: 24px; }
+
+/* ---------- diagnostics (developer mode) ---------- */
+.diag {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-1) var(--s-4);
+  margin: 0;
+  font: var(--text-sm);
+}
+.diag dt { color: var(--text-muted); }
+.diag dd { margin: 0; min-width: 0; color: var(--text); word-break: break-word; }
+.diag dd code { font-family: ui-monospace, "Cascadia Code", "Consolas", monospace; font-size: 12px; color: var(--text-muted); word-break: break-all; }

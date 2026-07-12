@@ -1,0 +1,118 @@
+/* ============================================================
+   Timeline editor (events) — video-editor style clips on lanes
+   ============================================================ */
+.tl-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin: var(--s-1) 0 var(--s-3); flex-wrap: wrap; }
+.tl-zoom { display: flex; gap: var(--s-2); }
+.tl-total { color: var(--text-muted); font: var(--text-sm); font-variant-numeric: tabular-nums; }
+
+.tl-root {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--well);
+  overflow: hidden;
+}
+/* the only horizontal scroller — the page itself must never scroll sideways */
+.tl-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.tl-inner { position: relative; min-width: 100%; padding: 0 0 var(--s-2); }
+
+/* time ruler */
+.tl-ruler { position: relative; height: 26px; border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--s-1); }
+.tl-tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-subtle); }
+.tl-tick-label { position: absolute; top: 4px; left: 4px; font: var(--text-sm); color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* section label pinned to the left edge while the track scrolls */
+.tl-group-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  font: var(--text-label);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  width: max-content;
+  background: linear-gradient(90deg, var(--well) 70%, transparent);
+}
+
+/* one clip per lane — no overlap math */
+.tl-lane { position: relative; height: 42px; margin: 0 var(--s-1) var(--s-1); }
+.tl-lane.empty { display: flex; align-items: center; }
+.tl-lane-empty { position: sticky; left: var(--s-2); color: var(--text-muted); font: var(--text-sm); }
+
+.tl-clip {
+  position: absolute;
+  top: 4px;
+  height: 34px;
+  min-width: 26px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: var(--text-sm);
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none; /* a drag never scrolls the track */
+  user-select: none;
+}
+.tl-clip.tl-dragging { cursor: grabbing; opacity: .9; z-index: 5; }
+.tl-clip.sel { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+/* sound clip = solid accent-soft with a blue-ish waveform */
+.tl-clip.sound { background: var(--accent-soft); border-color: var(--accent-border); }
+/* light clip = solid card + 4px left color bar */
+.tl-clip.light { background: var(--card); border-left: 4px solid var(--clip, var(--accent)); }
+.tl-clip-swatch { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%; background: var(--clip, var(--accent)); border: 1px solid rgba(255, 255, 255, .3); }
+.tl-clip-label { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; font: var(--text-md); }
+.tl-clip-time { flex: 0 0 auto; color: var(--text-muted); font: var(--text-sm); font-variant-numeric: tabular-nums; }
+
+/* waveform preview filling a sound clip, behind its label */
+.tl-wave { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .55; }
+.tl-wave polygon { fill: var(--accent-text); }
+.tl-clip.sound .tl-clip-label, .tl-clip.sound .tl-clip-time { position: relative; z-index: 1; }
+.tl-clip.sound.sel .tl-wave { opacity: .7; }
+
+/* right-edge resize handle */
+.tl-resize {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 16px;
+  cursor: ew-resize;
+  touch-action: none;
+  border-top-right-radius: var(--r-sm);
+  border-bottom-right-radius: var(--r-sm);
+}
+.tl-resize::after { content: ""; position: absolute; top: 50%; right: 5px; width: 2px; height: 14px; margin-top: -7px; background: var(--text-muted); border-radius: 1px; }
+
+/* inspector for the selected clip */
+.tl-inspector { margin-top: var(--s-3); }
+.tl-insp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-2); }
+.tl-insp-title { font: var(--text-lg); }
+.tl-insp-row { display: flex; align-items: center; gap: var(--s-2); margin: var(--s-2) 0; }
+.tl-insp-row label { flex: 0 0 78px; color: var(--text-muted); font: var(--text-sm); }
+.tl-insp-row input[type="number"], .tl-insp-row select {
+  width: 96px;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: var(--text-md);
+  min-height: var(--hit-min);
+  padding: 0 var(--s-2);
+}
+.tl-insp-row input[type="number"]:focus, .tl-insp-row select:focus { outline: none; border-color: var(--accent); }
+.tl-unit { color: var(--text-muted); font: var(--text-sm); }
+
+/* decorative keyframe tick marks on a "custom" light clip (never intercept drag/resize) */
+.tl-kf-tick {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(238, 242, 248, .85);
+  pointer-events: none;
+  z-index: 2;
+}
