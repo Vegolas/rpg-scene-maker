@@ -14,7 +14,15 @@
 }
 else
 {
-    <div class="page-head"><h1>@(_isNew ? "New Event" : "Edit Event")</h1></div>
+    <div class="page-head">
+        <h1>@(_isNew ? "New Event" : "Edit Event")</h1>
+        @if (Ui.AssistantConfigured)
+        {
+            <button class="btn" style="margin-left:auto; align-self:center" @onclick="AskAssistant">
+                <Icon Name="assistant" /> Ask assistant
+            </button>
+        }
+    </div>
 
     <div class="panel">
         <div class="emoji-row">
@@ -193,6 +201,16 @@ else
     }
 
     private Task Cancel() => Vt.NavigateAsync("events");
+
+    // Open the assistant with a pre-filled, editable draft naming this event (the assistant's get_event
+    // tool reads its persisted state from the id). Unsaved editor changes aren't visible to it.
+    private Task AskAssistant()
+    {
+        var draft = _isNew
+            ? "I'm creating a new event in the event editor. "
+            : $"I'm editing the event \"{_label}\" (id: {_edit.Id}) in the event editor. ";
+        return Vt.NavigateAsync($"assistant?draft={Uri.EscapeDataString(draft)}");
+    }
 
     private async Task Save(bool test)
     {

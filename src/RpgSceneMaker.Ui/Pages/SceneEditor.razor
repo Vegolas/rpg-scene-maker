@@ -16,7 +16,15 @@
 }
 else
 {
-    <div class="page-head"><h1>@(_isNew ? "New Scene" : "Edit Scene")</h1></div>
+    <div class="page-head">
+        <h1>@(_isNew ? "New Scene" : "Edit Scene")</h1>
+        @if (Ui.AssistantConfigured)
+        {
+            <button class="btn" style="margin-left:auto; align-self:center" @onclick="AskAssistant">
+                <Icon Name="assistant" /> Ask assistant
+            </button>
+        }
+    </div>
 
     <div class="panel">
         <div class="emoji-row">
@@ -422,6 +430,16 @@ else
 
     // On create the id follows the label; on edit it's fixed.
     private string CurrentId => _isNew ? SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _existingIds) : _edit.Id;
+
+    // Open the assistant with a pre-filled, editable draft naming this scene (the assistant's get_scene
+    // tool reads its persisted state from the id). Unsaved editor changes aren't visible to it.
+    private Task AskAssistant()
+    {
+        var draft = _isNew
+            ? "I'm creating a new scene in the scene editor. "
+            : $"I'm editing the scene \"{_label}\" (id: {_edit.Id}) in the scene editor. ";
+        return Vt.NavigateAsync($"assistant?draft={Uri.EscapeDataString(draft)}");
+    }
 
     private async Task Save(bool test)
     {

@@ -82,6 +82,11 @@ else
 }
 
 @code {
+    // Optional pre-filled composer draft, handed off from the Scene/Event editors' "Ask assistant"
+    // button via ?draft=… so the user doesn't have to re-describe what they're working on. It's just a
+    // starting point — fully editable, and only applied when the composer is still empty.
+    [Parameter, SupplyParameterFromQuery(Name = "draft")] public string? Draft { get; set; }
+
     private readonly List<AssistantEntryDto> _entries = [];
     private string _input = "";
     private long _rev;
@@ -92,10 +97,20 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Seed the composer from the handoff draft, but never clobber anything already typed.
+        if (!string.IsNullOrWhiteSpace(Draft) && string.IsNullOrEmpty(_input))
+            _input = Draft;
+
         await PollAsync();
         _loaded = true;
         StateHasChanged();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1000, 1000);
+
+        // Strip ?draft= from the address bar so a reload or back-nav doesn't re-seed it. Navigating to
+        // the same route reuses this component instance (OnInitialized won't run again), so the seeded
+        // _input and the poll timer are left untouched.
+        if (!string.IsNullOrWhiteSpace(Draft))
+            Nav.NavigateTo("assistant", replace: true);
     }
 
     private async Task PollAsync()
