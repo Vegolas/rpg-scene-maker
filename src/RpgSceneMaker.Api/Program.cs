@@ -72,6 +72,15 @@ builder.Services.AddSingleton<AnthropicStore>();
 // MCP server and the in-panel assistant (both added in later commits).
 builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AiToolService>();
 
+// MCP server hosted in-process at /mcp (streamable HTTP, stateless — MCP clients resend the API key on every
+// request, so there is no session to keep). The four tool-type classes are thin adapters over AiToolService.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(o => o.Stateless = true)
+    .WithTools<RpgSceneMaker.Api.Services.Ai.SceneMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.EventMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.LightFxMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.LibraryMcpTools>();
+
 // In-memory log buffer surfaced by the panel's Logs tab. Whitelist our own logs at Information and
 // default everything else (EF SQL, HttpClient request chatter, hosting) to Warning+, so the tab stays
 // signal rather than framework noise.
@@ -158,7 +167,7 @@ app.Use(async (context, next) =>
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
          path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
-         path.StartsWithSegments("/diagnostics"));
+         path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -179,6 +188,9 @@ app.MapImageEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
 app.MapDiagnosticsEndpoints();
+
+// The in-process MCP server (streamable HTTP) — point Claude Code / Claude Desktop at this.
+app.MapMcp("/mcp");
 
 // Everything that isn't an API route is the Blazor control panel.
 app.MapFallbackToFile("index.html");
