@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LightFx> LightFxs => Set<LightFx>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
+    public DbSet<AssistantConfig> AssistantConfigs => Set<AssistantConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +93,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Computed convenience flags — never stored.
             config.Ignore(c => c.IsConfigured);
             config.Ignore(c => c.IsConnected);
+        });
+
+        modelBuilder.Entity<AssistantConfig>(config =>
+        {
+            config.HasKey(c => c.Id);
+            config.Property(c => c.Id).ValueGeneratedNever();
+            // Computed convenience flag — never stored.
+            config.Ignore(c => c.IsConfigured);
         });
     }
 }

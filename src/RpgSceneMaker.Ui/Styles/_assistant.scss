@@ -1,0 +1,129 @@
+/* ============================================================
+   Assistant tab — BYOK chat transcript + composer.
+   Bubbles for user/assistant turns; compact log-row-style
+   entries for tool calls (mirrors _logs.scss in spirit).
+   ============================================================ */
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-height: 40vh;
+}
+
+/* One turn: a row that aligns its bubble left (assistant) or right (user). */
+.chat-msg {
+  display: flex;
+}
+.chat-msg--user { justify-content: flex-end; }
+.chat-msg--assistant { justify-content: flex-start; }
+
+.chat-bubble {
+  max-width: 72%;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  font: var(--text-md);
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: pre-wrap;   /* preserve the model's line breaks; no markdown rendering in v1 */
+  word-break: break-word;
+}
+.chat-bubble--user {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--text);
+}
+.chat-bubble--assistant {
+  background: var(--card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text);
+}
+
+/* Tool call / error — a single compact monospace-ish row, log-row family. */
+.chat-tool {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  background: var(--well);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chat-tool--error {
+  background: var(--danger-soft);
+  border-color: var(--danger-border);
+}
+.chat-tool-ico { flex: 0 0 auto; }
+.chat-tool-name {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: var(--accent-text);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+.chat-tool--error .chat-tool-name { color: var(--danger); }
+.chat-tool-result {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "thinking…" indicator while a run is in flight. */
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  color: var(--text-muted);
+  font: var(--text-sm);
+}
+.chat-thinking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  animation: chat-pulse 1s ease-in-out infinite;
+}
+@keyframes chat-pulse {
+  0%, 100% { opacity: .3; }
+  50% { opacity: 1; }
+}
+
+/* Composer pinned below the transcript. */
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  position: sticky;
+  bottom: var(--s-3);
+}
+.chat-input {
+  width: 100%;
+  resize: vertical;
+  min-height: var(--hit-min);
+  padding: var(--s-3);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: var(--text-md);
+  font-weight: 500;
+}
+.chat-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chat-actions {
+  display: flex;
+  gap: var(--s-3);
+}
+.chat-actions .btn { flex: 0 0 auto; }

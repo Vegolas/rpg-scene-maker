@@ -110,6 +110,26 @@ public static class SetupEndpoints
             store.Disconnect();
             return new { spotify = "disconnected" };
         });
+
+        // In-panel assistant (BYOK) config. The API key is write-only: it is stored server-side and used to
+        // talk to the chosen AI provider, but never returned — only the provider, "configured" flag and model
+        // come back.
+        setup.MapGet("/assistant/config", (AssistantStore store) =>
+            new { provider = store.Current.Provider, configured = store.Current.IsConfigured, model = store.Current.Model });
+
+        setup.MapPut("/assistant/config", (AssistantConfigInput input, AssistantStore store) =>
+        {
+            store.Save(input.Provider, input.ApiKey, input.Model);
+            var c = store.Current;
+            return Results.Ok(new { provider = c.Provider, configured = c.IsConfigured, model = c.Model });
+        });
+
+        setup.MapMethods("/assistant/disconnect", EndpointHelpers.GetOrPost, (AssistantStore store) =>
+        {
+            store.Clear();
+            var c = store.Current;
+            return new { provider = c.Provider, configured = c.IsConfigured, model = c.Model };
+        });
     }
 
     // Spotify's dashboard only accepts plain-http redirect URIs on 127.0.0.1 (not "localhost"), and the

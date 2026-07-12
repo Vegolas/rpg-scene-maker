@@ -72,3 +72,60 @@ public class SpotifyStoreTests
         Assert.True(store.Current.IsConnected);
     }
 }
+
+public class AssistantStoreTests
+{
+    [Fact]
+    public void Fresh_store_is_unconfigured_with_the_default_provider_and_model()
+    {
+        using var db = new SqliteTestDb();
+        var store = new AssistantStore(db);
+
+        Assert.False(store.Current.IsConfigured);
+        Assert.Equal("anthropic", store.Current.Provider);
+        Assert.Equal("claude-opus-4-8", store.Current.Model);
+    }
+
+    [Fact]
+    public void Save_persists_provider_key_and_model_for_a_fresh_store()
+    {
+        using var db = new SqliteTestDb();
+        new AssistantStore(db).Save("openai", "sk-secret", "gpt-4o");
+
+        // A second store instance loads the same row from SQLite.
+        var reloaded = new AssistantStore(db);
+        Assert.True(reloaded.Current.IsConfigured);
+        Assert.Equal("openai", reloaded.Current.Provider);
+        Assert.Equal("sk-secret", reloaded.Current.ApiKey);
+        Assert.Equal("gpt-4o", reloaded.Current.Model);
+    }
+
+    [Fact]
+    public void Saving_an_empty_key_keeps_the_stored_key_while_switching_provider_and_model()
+    {
+        using var db = new SqliteTestDb();
+        var store = new AssistantStore(db);
+        store.Save("anthropic", "sk-ant-secret", "claude-opus-4-8");
+
+        store.Save("gemini", "", "gemini-2.0-flash");   // switch provider/model, no re-paste
+
+        Assert.Equal("gemini", store.Current.Provider);
+        Assert.Equal("sk-ant-secret", store.Current.ApiKey);
+        Assert.Equal("gemini-2.0-flash", store.Current.Model);
+    }
+
+    [Fact]
+    public void Clear_empties_the_key_but_keeps_provider_and_model()
+    {
+        using var db = new SqliteTestDb();
+        var store = new AssistantStore(db);
+        store.Save("openai", "sk-secret", "gpt-4o");
+
+        store.Clear();
+
+        Assert.False(store.Current.IsConfigured);
+        Assert.Equal("", store.Current.ApiKey);
+        Assert.Equal("openai", store.Current.Provider);
+        Assert.Equal("gpt-4o", store.Current.Model);
+    }
+}

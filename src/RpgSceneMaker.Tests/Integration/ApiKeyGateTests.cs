@@ -56,6 +56,30 @@ public class ApiKeyGateTests
     }
 
     [Fact]
+    public async Task Assistant_state_without_key_is_401()
+    {
+        using var factory = new ApiFactory(apiKey: Key);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/assistant/state");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Mcp_without_key_is_401()
+    {
+        using var factory = new ApiFactory(apiKey: Key);
+        var client = factory.CreateClient();
+
+        // The API-key gate runs before the MCP transport, so a keyless request is rejected outright —
+        // regardless of what the streamable-HTTP transport would otherwise make of a bare GET.
+        var response = await client.GetAsync("/mcp");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Spotify_callback_is_exempt_from_the_key_gate()
     {
         using var factory = new ApiFactory(apiKey: Key);

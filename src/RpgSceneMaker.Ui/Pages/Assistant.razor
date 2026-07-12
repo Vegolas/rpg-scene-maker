@@ -1,0 +1,176 @@
+@page "/assistant"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Scene Maker — Assistant</PageTitle>
+
+<div class="page-head"><h1>Assistant</h1></div>
+
+@if (!_loaded)
+{
+    <p class="empty-note">Waking the familiar…</p>
+}
+else if (!_configured)
+{
+    <div class="panel">
+        <p class="hint" style="margin-top:0">Pick an AI provider and add its API key on the Settings page to enable the assistant.</p>
+        <div class="btn-row">
+            <button class="btn btn--primary" @onclick='() => Nav.NavigateTo("settings")'>Open Settings</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="chat">
+        <div class="chat-log">
+            @if (_entries.Count == 0)
+            {
+                <p class="empty-note">Ask me to build a scene, wire up an event, or design a light effect.</p>
+            }
+            @foreach (var e in _entries)
+            {
+                @switch (e.Kind)
+                {
+                    case "user":
+                        <div class="chat-msg chat-msg--user"><div class="chat-bubble chat-bubble--user">@e.Text</div></div>
+                        break;
+                    case "assistant":
+                        <div class="chat-msg chat-msg--assistant"><div class="chat-bubble chat-bubble--assistant">@e.Text</div></div>
+                        break;
+                    case "tool":
+                        <div class="chat-tool @(e.ToolIsError == true ? "chat-tool--error" : "")">
+                            <span class="chat-tool-ico">⚙</span>
+                            <span class="chat-tool-name">@e.ToolName</span>
+                            <span class="chat-tool-result">@Truncate(string.IsNullOrEmpty(e.Text) ? e.ToolResult : e.Text)</span>
+                        </div>
+                        break;
+                    default: // "error"
+                        <div class="chat-tool chat-tool--error">
+                            <span class="chat-tool-ico">⚠️</span>
+                            <span class="chat-tool-result">@e.Text</span>
+                        </div>
+                        break;
+                }
+            }
+            @if (_busy)
+            {
+                <div class="chat-thinking"><span class="chat-thinking-dot"></span>thinking…</div>
+            }
+        </div>
+
+        <div class="chat-composer">
+            <textarea class="chat-input" rows="2" placeholder="Message the assistant…"
+                      @bind="_input" @bind:event="oninput" @onkeydown="OnKeyDown"
+                      disabled="@_busy"></textarea>
+            <div class="chat-actions">
+                @if (_busy)
+                {
+                    <button class="btn btn--danger" @onclick="StopAsync">Stop</button>
+                }
+                else
+                {
+                    <button class="btn btn--primary" @onclick="SendAsync"
+                            disabled="@string.IsNullOrWhiteSpace(_input)">Send</button>
+                }
+                <button class="btn" @onclick="ClearAsync" disabled="@_busy">Clear</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<AssistantEntryDto> _entries = [];
+    private string _input = "";
+    private long _rev;
+    private bool _busy;
+    private bool _configured;
+    private bool _loaded;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await PollAsync();
+        _loaded = true;
+        StateHasChanged();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1000, 1000);
+    }
+
+    private async Task PollAsync()
+    {
+        var state = await Api.GetAssistantStateAsync(_rev);
+        if (state is null) return; // transport hiccup — the poll just flipped the connection dot
+
+        var changed = state.Busy != _busy || state.Configured != _configured;
+        _busy = state.Busy;
+        _configured = state.Configured;
+
+        var grew = false;
+        if (state.Entries is not null)
+        {
+            _entries.Clear();
+            _entries.AddRange(state.Entries);
+            _rev = state.Rev;
+            changed = true;
+            grew = true;
+        }
+
+        if (changed) StateHasChanged();
+        if (grew) await ScrollToBottomAsync();
+    }
+
+    private async Task SendAsync()
+    {
+        var text = _input.Trim();
+        if (_busy || text.Length == 0) return;
+        _input = "";
+        var (ok, error) = await Api.SendAssistantMessageAsync(text);
+        if (!ok)
+        {
+            Ui.ReportError(error ?? "Could not send the message.");
+            return;
+        }
+        await PollAsync(); // reflect the queued message + busy state without waiting for the next tick
+    }
+
+    // Enter sends; Shift+Enter inserts a newline. The bound value is cleared on send, so any stray newline
+    // the keypress leaves behind is discarded on the next render.
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await SendAsync();
+    }
+
+    private async Task StopAsync()
+    {
+        await Api.StopAssistantAsync();
+        await PollAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        if (await Api.ClearAssistantAsync())
+        {
+            _rev = 0; // force the next poll to return the (now empty) full snapshot
+            await PollAsync();
+        }
+    }
+
+    private static string Truncate(string? s, int max = 160)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        s = s.Replace('\n', ' ').Replace('\r', ' ');
+        return s.Length <= max ? s : s[..max] + "…";
+    }
+
+    // Scroll the window to the bottom so the newest message is visible. Uses the browser's built-in
+    // window.scrollTo (no interop file needed); best-effort, so a failure never breaks the poll.
+    private async Task ScrollToBottomAsync()
+    {
+        try { await JS.InvokeVoidAsync("scrollTo", 0, 1_000_000); } catch { /* best effort */ }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

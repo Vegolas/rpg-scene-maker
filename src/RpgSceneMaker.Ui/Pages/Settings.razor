@@ -282,6 +282,50 @@ else
             </div>
         }
     </div>
+    <SectionHeading>AI Assistant</SectionHeading>
+    <div class="panel">
+        <div class="field">
+            <label for="assistant-provider">Provider</label>
+            <select id="assistant-provider" @bind="_assistant.Provider">
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="gemini">Google Gemini</option>
+            </select>
+            <p class="hint">Which AI backend the in-panel assistant talks to — one active at a time.</p>
+        </div>
+        <div class="field">
+            <label for="assistant-key">API key</label>
+            <input id="assistant-key" type="password" @bind="_assistant.ApiKey" placeholder="@ProviderKeyPlaceholder" />
+            <p class="hint">Stored on the server. Leave blank to keep the current key.</p>
+        </div>
+        <div class="field">
+            <label for="assistant-model">Model</label>
+            <input id="assistant-model" type="text" @bind="_assistant.Model" placeholder="@ProviderModelPlaceholder" />
+            <p class="hint">@ProviderModelHint</p>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn--primary" @onclick="SaveAssistant" disabled="@_busy">Save assistant settings</button>
+        </div>
+
+        @if (_assistant.Configured)
+        {
+            <p class="status ok">✓ Assistant configured</p>
+            <div class="btn-row">
+                <button class="btn btn--danger" @onclick="DisconnectAssistant" disabled="@_busy">Disconnect</button>
+            </div>
+        }
+        else
+        {
+            <p class="status">No API key saved yet — the Assistant tab stays disabled until you add one.</p>
+        }
+
+        <div class="field" style="margin-top:1rem">
+            <label for="mcp-endpoint">MCP endpoint</label>
+            <input id="mcp-endpoint" type="text" readonly value="@McpEndpoint" />
+            <p class="hint">Point Claude Code or Claude Desktop here. Send the panel API key as an <code>X-Api-Key</code> header if one is set.</p>
+        </div>
+    </div>
+
     <SectionHeading>Menu</SectionHeading>
     <div class="panel">
         <p class="hint" style="margin-top:0">Long-press a tab in the bottom bar and drag it sideways to reorder the menu. The order is saved on this device.</p>
@@ -322,6 +366,32 @@ else
     private bool _showHueAdd;
     private SpotifyConfigDto _spotify = new();
     private List<SpotifyDeviceDto>? _spotifyDevices;
+    private AssistantConfigDto _assistant = new();
+
+    // The MCP server is hosted at /mcp on the panel's own origin.
+    private string McpEndpoint => $"{Nav.BaseUri}mcp";
+
+    // Provider-specific hints for the AI Assistant key/model fields.
+    private string ProviderKeyPlaceholder => _assistant.Provider switch
+    {
+        "openai" => "sk-…",
+        "gemini" => "AIza…",
+        _ => "sk-ant-…",
+    };
+
+    private string ProviderModelPlaceholder => _assistant.Provider switch
+    {
+        "openai" => "gpt-4o",
+        "gemini" => "gemini-2.0-flash",
+        _ => "claude-opus-4-8",
+    };
+
+    private string ProviderModelHint => _assistant.Provider switch
+    {
+        "openai" => "Model id from platform.openai.com, e.g. gpt-4o.",
+        "gemini" => "Model id from ai.google.dev, e.g. gemini-2.0-flash.",
+        _ => "Model id from console.anthropic.com, e.g. claude-opus-4-8.",
+    };
 
     private bool IsHue => _config?.Provider.Equals("hue", StringComparison.OrdinalIgnoreCase) == true;
     private bool HueIsPaired => !string.IsNullOrWhiteSpace(_config?.Hue.AppKey);
@@ -343,6 +413,9 @@ else
         if (spotify is not null) _spotify = spotify;
         if (_spotify.Connected) await RefreshSpotifyDevices();
 
+        var (assistant, _) = await Api.GetAssistantConfigAsync();
+        if (assistant is not null) _assistant = assistant;
+
         // Show the result of a just-completed connect attempt (from the OAuth callback redirect).
         switch (QueryValue("spotify"))
         {
@@ -362,6 +435,31 @@ else
             Ui.ReportOk("Spotify Client ID saved");
             var (spotify, _) = await Api.GetSpotifyConfigAsync();
             if (spotify is not null) _spotify = spotify;
+        }
+    }
+
+    private async Task SaveAssistant()
+    {
+        _busy = true;
+        try
+        {
+            if (await Api.SaveAssistantConfigAsync(_assistant))
+            {
+                _assistant.ApiKey = ""; // the key is never echoed; blank the field after saving
+                var (assistant, _) = await Api.GetAssistantConfigAsync();
+                if (assistant is not null) _assistant = assistant;
+                Ui.ReportOk("Assistant settings saved");
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DisconnectAssistant()
+    {
+        if (await Api.DisconnectAssistantAsync())
+        {
+            var (assistant, _) = await Api.GetAssistantConfigAsync();
+            if (assistant is not null) _assistant = assistant;
         }
     }
 

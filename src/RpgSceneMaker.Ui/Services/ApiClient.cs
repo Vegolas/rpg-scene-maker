@@ -259,6 +259,43 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             : path;
     }
 
+    // ---------- assistant (BYOK multi-provider chat) ----------
+
+    /// <summary>Poll the assistant transcript/state; silent on failure like the other pollers. Pass the
+    /// last seen rev — Entries comes back null (no-op) when nothing changed since then.</summary>
+    public Task<AssistantStateDto?> GetAssistantStateAsync(long rev) =>
+        GetAsync<AssistantStateDto>($"assistant/state?rev={rev}");
+
+    /// <summary>Queue a chat message and start a run. Returns the error text on 409 (busy) / 503 (no key)
+    /// so the page can surface it inline rather than swallowing it like a poller.</summary>
+    public async Task<(bool Ok, string? Error)> SendAssistantMessageAsync(string text)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Post, "assistant/send", new { text });
+        return (error is null, error);
+    }
+
+    public Task<bool> StopAssistantAsync() => CommandAsync("assistant/stop");
+
+    public Task<bool> ClearAssistantAsync() => CommandAsync("assistant/clear");
+
+    public Task<(AssistantConfigDto? Result, string? Error)> GetAssistantConfigAsync() =>
+        FetchAsync<AssistantConfigDto>(HttpMethod.Get, "setup/assistant/config");
+
+    public async Task<bool> SaveAssistantConfigAsync(AssistantConfigDto config)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Put, "setup/assistant/config",
+            new { provider = config.Provider, apiKey = config.ApiKey, model = config.Model });
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<bool> DisconnectAssistantAsync() =>
+        CommandAsync("setup/assistant/disconnect", "Assistant disconnected");
+
     // ---------- logs ----------
 
     /// <summary>Recent server log entries (newest first) for the Logs tab; silent on failure like other pollers.</summary>

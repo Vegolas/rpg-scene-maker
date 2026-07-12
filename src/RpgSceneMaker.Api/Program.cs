@@ -65,6 +65,34 @@ builder.Services.AddSingleton<SpotifyTokenCache>();
 builder.Services.AddSingleton<SpotifyAuthState>();
 builder.Services.AddHttpClient<SpotifyClient>(client => client.Timeout = TimeSpan.FromSeconds(10));
 
+// Assistant: bring-your-own-key settings for the in-panel AI assistant (provider + key + model, in SQLite).
+builder.Services.AddSingleton<AssistantStore>();
+
+// Shared AI tool layer over scenes/events/light FX (+ read-only context and live control), consumed by the
+// MCP server and the in-panel assistant (both added in later commits).
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AiToolService>();
+
+// The in-panel assistant: the tool executor (provider-neutral tool schemas over the façade), the pluggable
+// backends (one IAssistantProvider each for Anthropic / OpenAI / Gemini), and the singleton service that
+// runs the agentic loop, selects the configured provider per run, and holds the polled transcript.
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AssistantTools>();
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.Providers.IAssistantProvider,
+    RpgSceneMaker.Api.Services.Ai.Providers.AnthropicProvider>();
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.Providers.IAssistantProvider,
+    RpgSceneMaker.Api.Services.Ai.Providers.OpenAiProvider>();
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.Providers.IAssistantProvider,
+    RpgSceneMaker.Api.Services.Ai.Providers.GeminiProvider>();
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AssistantService>();
+
+// MCP server hosted in-process at /mcp (streamable HTTP, stateless — MCP clients resend the API key on every
+// request, so there is no session to keep). The four tool-type classes are thin adapters over AiToolService.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(o => o.Stateless = true)
+    .WithTools<RpgSceneMaker.Api.Services.Ai.SceneMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.EventMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.LightFxMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.LibraryMcpTools>();
+
 // In-memory log buffer surfaced by the panel's Logs tab. Whitelist our own logs at Information and
 // default everything else (EF SQL, HttpClient request chatter, hosting) to Warning+, so the tab stays
 // signal rather than framework noise.
@@ -106,6 +134,7 @@ app.Use(async (context, next) =>
             HueException => (StatusCodes.Status502BadGateway, "Philips Hue error"),
             SpotifyException => (StatusCodes.Status502BadGateway, "Spotify error"),
             SoundboardException => (StatusCodes.Status503ServiceUnavailable, "Soundboard error"),
+            RpgSceneMaker.Api.Services.Ai.AiProviderException => (StatusCodes.Status502BadGateway, "AI provider error"),
             HttpRequestException or TaskCanceledException =>
                 (StatusCodes.Status502BadGateway, "Spotify unreachable — check the internet connection"),
             SocketException or IOException or TimeoutException =>
@@ -151,7 +180,8 @@ app.Use(async (context, next) =>
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
          path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
-         path.StartsWithSegments("/diagnostics"));
+         path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp") ||
+         path.StartsWithSegments("/assistant"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -172,6 +202,10 @@ app.MapImageEndpoints();
 app.MapSetupEndpoints();
 app.MapLogEndpoints();
 app.MapDiagnosticsEndpoints();
+app.MapAssistantEndpoints();
+
+// The in-process MCP server (streamable HTTP) — point Claude Code / Claude Desktop at this.
+app.MapMcp("/mcp");
 
 // Everything that isn't an API route is the Blazor control panel.
 app.MapFallbackToFile("index.html");

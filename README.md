@@ -114,6 +114,46 @@ Use the built-in **System → Website** action (untick "Open in browser" / GET i
 | Play a sound | `http://localhost:5252/sounds/thunder/play` |
 | Stop all sounds | `http://localhost:5252/sounds/stop` |
 
+### 4. AI assistant (optional)
+
+Scene Maker can hand its scenes, events and light effects to an AI — either as a chat panel built into the app, or as an **MCP server** you point Claude Code / Claude Desktop at. Both are **bring-your-own-key**: you use your own provider API key, and all model usage is billed to *your* account. The in-panel chat works with **Anthropic (Claude), OpenAI (GPT) or Google Gemini** — one active at a time; the MCP server targets Claude clients.
+
+**In-panel chat (BYOK)**
+
+1. Get an API key for the provider you want: [console.anthropic.com](https://console.anthropic.com) (Anthropic), [platform.openai.com](https://platform.openai.com) (OpenAI), or [ai.google.dev](https://ai.google.dev) (Gemini). Usage runs on your own account — set a spend limit there if you like.
+2. Open the panel's **⚙ Settings → AI Assistant**, pick the **Provider**, paste that provider's key, set a **Model** (e.g. `claude-opus-4-8`, `gpt-4o`, `gemini-2.0-flash`), and tap **Save assistant settings**. The key is stored on the server and never shown again; leave the field blank on later saves to keep it while changing the provider/model.
+3. Chat from the **🤖 Assistant** tab: e.g. *"create a spooky crypt scene with dim purple lights and ambient music"* or *"add a thunder event with a white flash and my thunderclap sound"*. The assistant can list, create, edit, delete, activate and trigger scenes/events/light effects, and read your lights, sounds and Spotify playlists for context — the same tools the MCP server exposes.
+
+**MCP server (Claude Code / Claude Desktop)**
+
+The app hosts an MCP endpoint at **`/mcp`** with the same ~23 tools. Point a client at it:
+
+```
+claude mcp add --transport http rpg-scene-maker http://localhost:5252/mcp
+```
+
+If you've set a panel API key (`Security:ApiKey`), send it as a header:
+
+```
+claude mcp add --transport http rpg-scene-maker http://localhost:5252/mcp --header "X-Api-Key: your-key"
+```
+
+For **Claude Desktop**, add it to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "rpg-scene-maker": {
+      "type": "http",
+      "url": "http://localhost:5252/mcp",
+      "headers": { "X-Api-Key": "your-key" }
+    }
+  }
+}
+```
+
+(Drop the `headers` block when no panel API key is configured.) The tools cover full CRUD plus live control — activate a scene, trigger an event, test a light effect — so you can build and drive your table's mood straight from a Claude conversation.
+
 ## Scenes
 
 Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
@@ -173,6 +213,9 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
 | Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |
 | Setup (config) | `GET /setup/config`, `PUT /setup/config` — read/update provider + Hue/Tuya settings at runtime (persisted to the database) |
+| Setup (assistant) | `GET/PUT /setup/assistant/config` (BYOK provider + key + model; the key is never echoed back), `GET\|POST /setup/assistant/disconnect` |
+| Assistant (chat) | `POST /assistant/send`, `GET /assistant/state?rev=…`, `GET\|POST /assistant/stop`, `GET\|POST /assistant/clear` |
+| MCP | `/mcp` — Model Context Protocol server (~23 tools over scenes/events/light FX) for Claude Code / Claude Desktop |
 
 All command endpoints accept GET or POST; parameters go in the query string.
 
