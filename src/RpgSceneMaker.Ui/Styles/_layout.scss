@@ -168,7 +168,10 @@
 @supports (-webkit-touch-callout: none) {
   .rail__item .icon,
   .tabbar a .tab-ico,
-  .boot-die { transform: translateX(-0.08em); }
+  .boot-die,
+  .emoji-pick,                 /* emoji picker cells (scene / event editors) */
+  .quick .q-btn:not(.primary)  /* reset-lights 💡 (play/pause use text symbols) */
+    { transform: translateX(-0.08em); }
 }
 
 @media (min-width: 768px) {
