@@ -1,36 +1,78 @@
 @* Editor for a "custom" light effect: a sequence of keyframes (each a light state at a time offset with an
    optional Hue transition) plus loop/cycle controls. Shared by the scene editor's per-light effect section and
-   the event timeline's light-clip inspector. iPad-first: generous touch targets, no hover-only affordances. *@
+   the event timeline's light-clip inspector, and the Light FX library editor.
+
+   Keyframes are laid out as markers along a time track (tap a marker to select it); only the selected
+   keyframe's editor is shown below, so a long sequence stays compact instead of stacking a card per frame.
+   iPad-first: generous touch targets, ◀▶ steppers reach frames whose markers overlap, no hover-only affordances. *@
 
 <div class="kf-editor">
+    <div class="kf-toolbar">
+        <button class="btn small" @onclick="AddKeyframe">＋ Add keyframe</button>
+        <span class="kf-spacer"></span>
+        <span class="hint" style="margin:0">@Effect.Keyframes.Count keyframe@(Effect.Keyframes.Count == 1 ? "" : "s")</span>
+    </div>
+
     @if (Effect.Keyframes.Count == 0)
     {
         <p class="hint" style="margin:0.4rem 0">No keyframes yet — add one to build the sequence.</p>
     }
-
-    @foreach (var (kf, i) in Effect.Keyframes.Select((k, idx) => (k, idx)))
+    else
     {
-        <div class="kf-card" @key="kf.Uid">
-            <div class="kf-head">
-                <span class="kf-num">#@(i + 1)</span>
-                <input class="kf-at" type="number" min="0" step="0.1" value="@Sec(kf.AtMs)" @onchange="e => SetAt(kf, e)" aria-label="Keyframe time" />
-                <span class="tl-unit">s</span>
+        <div class="kf-track">
+            <div class="kf-track-line"></div>
+            @foreach (var (kf, i) in Effect.Keyframes.Select((k, idx) => (k, idx)))
+            {
+                <button type="button" class="kf-marker @(kf.Uid == _selUid ? "sel" : "")" @key="kf.Uid"
+                        style="left:@(Pct(kf))%" @onclick="() => Select(kf)"
+                        title="Keyframe #@(i + 1) · @Sec(kf.AtMs)s" aria-label="Select keyframe @(i + 1)">
+                    <span class="kf-marker-head mode-@kf.Mode" style="@HeadStyle(kf)"></span>
+                    <span class="kf-marker-num">@(i + 1)</span>
+                </button>
+            }
+        </div>
+        <div class="kf-track-ends">
+            <span>0s</span>
+            @if (LastAt > 0)
+            {
+                <span>@Sec(LastAt)s</span>
+            }
+        </div>
+    }
+
+    @if (Selected is { } sel)
+    {
+        var idx = Effect.Keyframes.IndexOf(sel);
+        var count = Effect.Keyframes.Count;
+        <div class="kf-card">
+            <div class="kf-insp-head">
+                <div class="kf-steppers">
+                    <button class="btn small" @onclick="SelectPrev" disabled="@(idx <= 0)" aria-label="Previous keyframe">◀</button>
+                    <span class="kf-num">#@(idx + 1) / @count</span>
+                    <button class="btn small" @onclick="SelectNext" disabled="@(idx >= count - 1)" aria-label="Next keyframe">▶</button>
+                </div>
                 <span class="kf-spacer"></span>
-                <button class="btn small" @onclick="() => Duplicate(kf)" aria-label="Duplicate keyframe">⧉</button>
-                <button class="btn small danger" @onclick="() => Remove(kf)" aria-label="Delete keyframe">✕</button>
+                <button class="btn small" @onclick="() => Duplicate(sel)" aria-label="Duplicate keyframe">⧉</button>
+                <button class="btn small danger" @onclick="() => Remove(sel)" aria-label="Delete keyframe">✕</button>
             </div>
 
-            <Segmented TValue="string" Options="ModeOptions" Value="kf.Mode" ValueChanged="m => kf.Mode = m" />
+            <div class="tl-insp-row">
+                <label>Time</label>
+                <input type="number" min="0" step="0.1" value="@Sec(sel.AtMs)" @onchange="e => SetAt(sel, e)" aria-label="Keyframe time" />
+                <span class="tl-unit">s</span>
+            </div>
 
-            @if (kf.Mode == "color")
+            <Segmented TValue="string" Options="ModeOptions" Value="sel.Mode" ValueChanged="m => sel.Mode = m" />
+
+            @if (sel.Mode == "color")
             {
-                <SwatchGrid Selected="kf.Color" OnPick="hex => kf.Color = hex" Style="margin-top:0.8rem" />
-                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="kf.Brightness" AriaLabel="Brightness" />
+                <SwatchGrid Selected="sel.Color" OnPick="hex => sel.Color = hex" Style="margin-top:0.8rem" />
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="sel.Brightness" AriaLabel="Brightness" />
             }
-            else if (kf.Mode == "white")
+            else if (sel.Mode == "white")
             {
-                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="kf.Temperature" AriaLabel="Color temperature" />
-                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="kf.Brightness" AriaLabel="Brightness" />
+                <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" @bind-Value="sel.Temperature" AriaLabel="Color temperature" />
+                <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" @bind-Value="sel.Brightness" AriaLabel="Brightness" />
             }
             else
             {
@@ -39,13 +81,13 @@
 
             <div class="tl-insp-row" style="margin-top:0.6rem">
                 <label>Fade</label>
-                <select value="@(kf.TransitionMs?.ToString() ?? "")" @onchange="e => SetTransition(kf, e)">
+                <select value="@(sel.TransitionMs?.ToString() ?? "")" @onchange="e => SetTransition(sel, e)">
                     <option value="">Default</option>
                     <option value="0">Instant</option>
                     <option value="100">100 ms</option>
                     <option value="400">400 ms</option>
                     <option value="1000">1000 ms</option>
-                    @if (kf.TransitionMs is { } t && t is not (0 or 100 or 400 or 1000))
+                    @if (sel.TransitionMs is { } t && t is not (0 or 100 or 400 or 1000))
                     {
                         <option value="@t">@t ms</option>
                     }
@@ -54,10 +96,6 @@
             </div>
         </div>
     }
-
-    <div class="btn-row" style="margin-top:0.8rem">
-        <button class="btn small" @onclick="AddKeyframe">＋ Add keyframe</button>
-    </div>
 
     <div class="chip-row">
         <Chip On="Effect.Loop" OnClick="ToggleLoop">🔁 Loop</Chip>
@@ -92,10 +130,44 @@
 
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
+    // Uid of the keyframe whose editor is shown. Stable across Sort() (Uid, not index), so re-timing a keyframe
+    // just slides its marker without losing the selection.
+    private string? _selUid;
+
+    private KeyframeEdit? Selected => _selUid is null ? null : Effect.Keyframes.FirstOrDefault(k => k.Uid == _selUid);
+
     private int LastAt => Effect.Keyframes.Count == 0 ? 0 : Effect.Keyframes.Max(k => k.AtMs);
     private int MinCycleMs => LastAt + 100;
     private int DefaultCycleMs => Math.Max(MinCycleMs, LastAt + 500);
     private bool CycleTooShort => Effect.Loop && (Effect.CycleMs ?? 0) < MinCycleMs;
+
+    // Track span: last keyframe time (min 1 ms so a lone/at-zero keyframe still positions cleanly at the left).
+    private int Span => LastAt <= 0 ? 1 : LastAt;
+
+    // Keep a valid selection as the bound Effect changes (different light row, reload, type toggle).
+    protected override void OnParametersSet()
+    {
+        if (Selected is null)
+            _selUid = Effect.Keyframes.Count > 0 ? Effect.Keyframes[0].Uid : null;
+    }
+
+    private string Pct(KeyframeEdit kf) => Math.Clamp(kf.AtMs / (double)Span * 100, 0, 100).ToString("0.###", Inv);
+
+    private static string HeadStyle(KeyframeEdit kf) => kf.Mode == "color" ? $"background:{kf.Color}" : "";
+
+    private void Select(KeyframeEdit kf) => _selUid = kf.Uid;
+
+    private void SelectPrev()
+    {
+        var i = Selected is { } s ? Effect.Keyframes.IndexOf(s) : -1;
+        if (i > 0) _selUid = Effect.Keyframes[i - 1].Uid;
+    }
+
+    private void SelectNext()
+    {
+        var i = Selected is { } s ? Effect.Keyframes.IndexOf(s) : -1;
+        if (i >= 0 && i < Effect.Keyframes.Count - 1) _selUid = Effect.Keyframes[i + 1].Uid;
+    }
 
     private void AddKeyframe()
     {
@@ -106,6 +178,7 @@
         if (last is not null) kf.AtMs = last.AtMs + 500; // default: 500 ms after the previous keyframe
         Effect.Keyframes.Add(kf);
         Sort();
+        _selUid = kf.Uid; // edit the frame you just added
     }
 
     private void Duplicate(KeyframeEdit kf)
@@ -114,9 +187,18 @@
         copy.AtMs = kf.AtMs + 500;
         Effect.Keyframes.Add(copy);
         Sort();
+        _selUid = copy.Uid;
     }
 
-    private void Remove(KeyframeEdit kf) => Effect.Keyframes.Remove(kf);
+    private void Remove(KeyframeEdit kf)
+    {
+        var i = Effect.Keyframes.IndexOf(kf);
+        Effect.Keyframes.Remove(kf);
+        if (_selUid == kf.Uid)
+            _selUid = Effect.Keyframes.Count == 0
+                ? null
+                : Effect.Keyframes[Math.Clamp(i, 0, Effect.Keyframes.Count - 1)].Uid; // fall to the neighbour
+    }
 
     private void SetAt(KeyframeEdit kf, ChangeEventArgs e)
     {
@@ -139,8 +221,8 @@
 
     private void SetCycle(ChangeEventArgs e) => Effect.CycleMs = Math.Max(1, ParseMs(e));
 
-    // Keep the list ordered by time so numbering and the timeline ticks match. OrderBy is stable, so two
-    // keyframes momentarily sharing a time keep their relative order until the user nudges them apart.
+    // Keep the list ordered by time so numbering and the track match. OrderBy is stable, so two keyframes
+    // momentarily sharing a time keep their relative order until the user nudges them apart.
     private void Sort()
     {
         var ordered = Effect.Keyframes.OrderBy(k => k.AtMs).ToList();
