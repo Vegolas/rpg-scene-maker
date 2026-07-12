@@ -6,9 +6,9 @@
 
 <div class="tl-toolbar">
     <div class="tl-zoom">
-        <button class="btn small" @onclick="ZoomOut" disabled="@(_pps <= MinPps)" aria-label="Zoom out">➖</button>
-        <button class="btn small" @onclick="ZoomIn" disabled="@(_pps >= MaxPps)" aria-label="Zoom in">➕</button>
-        <button class="btn small" @onclick="FitAsync">Fit</button>
+        <button class="btn btn--small" @onclick="ZoomOut" disabled="@(_pps <= MinPps)" aria-label="Zoom out">➖</button>
+        <button class="btn btn--small" @onclick="ZoomIn" disabled="@(_pps >= MaxPps)" aria-label="Zoom in">➕</button>
+        <button class="btn btn--small" @onclick="FitAsync">Fit</button>
     </div>
     <span class="tl-total">@FormatSeconds(Model.EndMs) total@(OverLimit ? " ⚠ over 10 min" : "")</span>
 </div>
@@ -89,8 +89,8 @@
 </div>
 
 <div class="btn-row" style="margin-top:0.8rem">
-    <button class="btn small" @onclick="ToggleSoundPicker">＋ Add sound</button>
-    <button class="btn small" @onclick="AddLight">＋ Add light</button>
+    <button class="btn btn--small" @onclick="ToggleSoundPicker">＋ Add sound</button>
+    <button class="btn btn--small" @onclick="AddLight">＋ Add light</button>
 </div>
 
 @if (_soundPickerOpen)
@@ -104,7 +104,7 @@
         {
             @foreach (var group in Sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
             {
-                <p class="kgroup-title">@group.Key</p>
+                <p class="section-h">@group.Key</p>
                 <div class="klist">
                     @foreach (var sound in group)
                     {
@@ -124,7 +124,7 @@
     <div class="panel tl-inspector">
         <div class="tl-insp-head">
             <span class="tl-insp-title">🔊 @SoundName(sc.SoundId)</span>
-            <button class="btn small danger" @onclick="() => DeleteSound(sc)">Delete clip</button>
+            <button class="btn btn--small btn--danger" @onclick="() => DeleteSound(sc)">Delete clip</button>
         </div>
 
         @{
@@ -184,7 +184,7 @@ else if (SelectedLight is { } lc)
     <div class="panel tl-inspector">
         <div class="tl-insp-head">
             <span class="tl-insp-title">💡 @LightName(lc.LightKey)</span>
-            <button class="btn small danger" @onclick="() => DeleteLight(lc)">Delete clip</button>
+            <button class="btn btn--small btn--danger" @onclick="() => DeleteLight(lc)">Delete clip</button>
         </div>
 
         <div class="field" style="margin-bottom:0.8rem">
@@ -206,7 +206,7 @@ else if (SelectedLight is { } lc)
 
         @if (lc.Mode is "color" or "white")
         {
-            <p class="kgroup-title">Effect</p>
+            <p class="section-h">Effect</p>
             <div class="chip-row">
                 @foreach (var (type, label) in Palette.Effects)
                 {

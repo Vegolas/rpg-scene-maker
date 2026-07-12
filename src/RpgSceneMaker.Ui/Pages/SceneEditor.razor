@@ -16,7 +16,7 @@
 }
 else
 {
-    <RuneHeading>@(_isNew ? "New Scene" : "Edit Scene")</RuneHeading>
+    <div class="page-head"><h1>@(_isNew ? "New Scene" : "Edit Scene")</h1></div>
 
     <div class="panel">
         <div class="emoji-row">
@@ -42,7 +42,7 @@ else
         <ArtField @bind-Image="_edit.Image" />
     </div>
 
-    <RuneHeading>Lights</RuneHeading>
+    <SectionHeading>Lights</SectionHeading>
     <div class="panel">
         <Segmented TValue="LightScope" Options="ScopeOptions" Value="_scope" ValueChanged="SetScope" />
 
@@ -91,7 +91,7 @@ else
 
                                     @if (row.Edit.Mode is "color" or "white")
                                     {
-                                        <p class="kgroup-title">Effect</p>
+                                        <p class="section-h">Effect</p>
                                         <div class="chip-row">
                                             @foreach (var (type, label) in Palette.Effects)
                                             {
@@ -163,7 +163,7 @@ else
                                     }
 
                                     <div class="btn-row" style="margin-top:1rem">
-                                        <button class="btn small" @onclick="() => CopyToAll(row)">Copy to all lights</button>
+                                        <button class="btn btn--small" @onclick="() => CopyToAll(row)">Copy to all lights</button>
                                     </div>
                                 </div>
                             }
@@ -174,7 +174,7 @@ else
         }
     </div>
 
-    <RuneHeading>Music</RuneHeading>
+    <SectionHeading>Music</SectionHeading>
     <div class="panel">
         <Segmented TValue="MusicChoice" Options="MusicOptions" Value="_music" ValueChanged="@(m => _music = m)" />
 
@@ -206,7 +206,7 @@ else
         }
     </div>
 
-    <RuneHeading>Sound Effects</RuneHeading>
+    <SectionHeading>Sound Effects</SectionHeading>
     <div class="panel">
         @if (_sounds is null || _sounds.Count == 0)
         {
@@ -219,7 +219,7 @@ else
             <p class="hint" style="margin-top:0">Activating the scene stops current playback, then fires the picked sounds (each with its own volume/loop).</p>
             @foreach (var group in _sounds.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
             {
-                <p class="kgroup-title">@group.Key</p>
+                <p class="section-h">@group.Key</p>
                 <div class="klist">
                     @foreach (var sound in group)
                     {
@@ -239,7 +239,7 @@ else
         }
         @if (unknownSoundIds.Count > 0)
         {
-            <p class="kgroup-title">Unknown — no longer in your library</p>
+            <p class="section-h">Unknown — no longer in your library</p>
             <div class="klist">
                 @foreach (var sid in unknownSoundIds)
                 {
@@ -249,15 +249,15 @@ else
         }
     </div>
 
-    <RuneHeading>Save</RuneHeading>
+    <SectionHeading>Save</SectionHeading>
     <div class="btn-row">
-        <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
+        <button class="btn btn--primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
     </div>
     @if (!_isNew)
     {
         <div class="btn-row" style="margin-top:0.7rem">
-            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+            <button class="btn btn--danger" @onclick="DeleteTapped" disabled="@_busy">
                 @(_confirmDelete ? "Really delete?" : "Delete scene")
             </button>
         </div>

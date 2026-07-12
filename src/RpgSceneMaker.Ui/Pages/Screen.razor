@@ -7,10 +7,10 @@
 <PageTitle>Scene Maker — @(_label is { Length: > 0 } l ? l : "Screen")</PageTitle>
 
 <div class="btn-row" style="margin-bottom:0.2rem">
-    <button class="btn small" @onclick='() => Vt.NavigateAsync("screens")'>← Screens</button>
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("screens")'>← Screens</button>
     @if (!_loading && !_notFound)
     {
-        <button class="btn small" @onclick='() => Vt.NavigateAsync($"screens/{Id}/arrange")'>✎ Arrange</button>
+        <button class="btn btn--small" @onclick='() => Vt.NavigateAsync($"screens/{Id}/arrange")'>✎ Arrange</button>
     }
 </div>
 
@@ -20,12 +20,12 @@
 }
 else if (_notFound)
 {
-    <RuneHeading>Screen not found</RuneHeading>
+    <div class="page-head"><h1>Screen not found</h1></div>
     <p class="empty-note">No screen with id “@Id”. It may have been deleted — head back to <a href="screens">Screens</a>.</p>
 }
 else
 {
-    <RuneHeading>@(_label is { Length: > 0 } ? _label : "Screen")</RuneHeading>
+    <div class="page-head"><h1>@(_label is { Length: > 0 } ? _label : "Screen")</h1></div>
 
     @if (_tiles.Count == 0)
     {

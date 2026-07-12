@@ -5,14 +5,15 @@
 
 <PageTitle>Scene Maker — Music</PageTitle>
 
+<div class="page-head"><h1>Music</h1></div>
+
 @if (_connected == false)
 {
-    <RuneHeading>Music</RuneHeading>
     <p class="empty-note">Spotify isn't connected yet — open <a href="settings">Settings</a> to connect it.</p>
 }
 else
 {
-    <RuneHeading>Now Playing</RuneHeading>
+    <SectionHeading>Now Playing</SectionHeading>
 
     <div class="panel">
         <p class="now-title">@(_state?.TrackName ?? "Nothing playing")</p>
@@ -40,11 +41,11 @@ else
             <button class="btn" @onclick="@(() => Send("music/previous"))" aria-label="Previous">⏮</button>
             @if (_state?.IsPlaying == true)
             {
-                <button class="btn primary play" @onclick="@(() => Send("music/pause"))" aria-label="Pause">⏸</button>
+                <button class="btn btn--primary play" @onclick="@(() => Send("music/pause"))" aria-label="Pause">⏸</button>
             }
             else
             {
-                <button class="btn primary play" @onclick="@(() => Send("music/resume"))" aria-label="Play">▶</button>
+                <button class="btn btn--primary play" @onclick="@(() => Send("music/resume"))" aria-label="Play">▶</button>
             }
             <button class="btn" @onclick="@(() => Send("music/next"))" aria-label="Next">⏭</button>
         </div>
@@ -58,7 +59,7 @@ else
         </div>
     </div>
 
-    <RuneHeading>Search</RuneHeading>
+    <SectionHeading>Search</SectionHeading>
     <div class="panel">
         <div class="field">
             <label for="spotify-search">Search tracks</label>
@@ -80,7 +81,7 @@ else
         }
     </div>
 
-    <RuneHeading>Playlists</RuneHeading>
+    <SectionHeading>Playlists</SectionHeading>
     <PlaylistPicker Playlists="FilteredPlaylists" OnPick="pl => Play(pl.Uri, pl.Name)">
         <EmptyContent>
             @if (Searching)

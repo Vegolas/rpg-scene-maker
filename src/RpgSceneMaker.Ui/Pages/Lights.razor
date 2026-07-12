@@ -4,9 +4,11 @@
 
 <PageTitle>Scene Maker — Lights</PageTitle>
 
+<div class="page-head"><h1>Lights</h1></div>
+
 @if (_registry.Count > 0)
 {
-    <RuneHeading>Target</RuneHeading>
+    <SectionHeading>Target</SectionHeading>
     <div class="chip-row">
         <Chip On="_target is null" OnClick="() => _target = null">All</Chip>
         @foreach (var light in _registry)
@@ -16,31 +18,31 @@
     </div>
 }
 
-<RuneHeading>Power</RuneHeading>
+<SectionHeading>Power</SectionHeading>
 <div class="btn-row">
-    <button class="btn big primary" @onclick="@(() => Send(Path("on"), "Light on"))">On</button>
+    <button class="btn btn--big btn--primary" @onclick="@(() => Send(Path("on"), "Light on"))">On</button>
     @if (_target is null)
     {
-        <button class="btn big" @onclick="@(() => Send("lights/toggle"))">Toggle</button>
+        <button class="btn btn--big" @onclick="@(() => Send("lights/toggle"))">Toggle</button>
     }
-    <button class="btn big danger" @onclick="@(() => Send(Path("off"), "Light off"))">Off</button>
+    <button class="btn btn--big btn--danger" @onclick="@(() => Send(Path("off"), "Light off"))">Off</button>
 </div>
 
-<RuneHeading>Mood Colors</RuneHeading>
+<SectionHeading>Mood Colors</SectionHeading>
 <SwatchGrid Selected="_pickedHex" OnPick="OnColorPicked" />
 
-<RuneHeading>Brightness</RuneHeading>
+<SectionHeading>Brightness</SectionHeading>
 <div class="panel">
     <SliderRow LeftIcon="🔅" Min="1" Max="100" Suffix="%" Value="_brightness"
                ValueChanged="OnBrightnessChanged" AriaLabel="Brightness" />
 </div>
 
-<RuneHeading>White Light</RuneHeading>
+<SectionHeading>White Light</SectionHeading>
 <div class="panel">
     <SliderRow LeftIcon="🕯️" RightIcon="❄️" Min="0" Max="100" Value="_temperature"
                ValueChanged="OnTemperatureChanged" AriaLabel="Color temperature" />
     <div class="btn-row">
-        <button class="btn primary" @onclick="ApplyWhite">Set white (@_brightness%, @TempLabel)</button>
+        <button class="btn btn--primary" @onclick="ApplyWhite">Set white (@_brightness%, @TempLabel)</button>
     </div>
 </div>
 

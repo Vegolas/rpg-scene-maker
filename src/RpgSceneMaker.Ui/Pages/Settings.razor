@@ -11,7 +11,9 @@
 }
 else
 {
-    <RuneHeading>Light System</RuneHeading>
+    <div class="page-head"><h1>Settings</h1></div>
+
+    <SectionHeading>Light System</SectionHeading>
     <div class="chip-row">
         <Chip On="@(!IsHue)" OnClick="@(() => SetProvider("tuya"))">Tuya bulb</Chip>
         <Chip On="@(IsHue)" OnClick="@(() => SetProvider("hue"))">Philips Hue</Chip>
@@ -20,7 +22,7 @@ else
 
     @if (IsHue)
     {
-    <RuneHeading>Philips Hue</RuneHeading>
+    <SectionHeading>Philips Hue</SectionHeading>
     <div class="panel">
         <div class="field">
             <label for="bridge-ip">Bridge IP</label>
@@ -36,7 +38,7 @@ else
             <div class="btn-row">
                 <button class="btn" @onclick="LoadHueLights" disabled="@_busy">Refresh lights</button>
                 <button class="btn" @onclick="TestLight" disabled="@_busy">Test (toggle)</button>
-                <button class="btn danger" @onclick="ForgetHue" disabled="@_busy">Forget pairing</button>
+                <button class="btn btn--danger" @onclick="ForgetHue" disabled="@_busy">Forget pairing</button>
             </div>
 
             @if (_hueLights is not null)
@@ -65,7 +67,7 @@ else
                 <li>Tap <em>Pair</em> below within 30 seconds.</li>
             </ol>
             <div class="btn-row">
-                <button class="btn primary big" @onclick="Pair" disabled="@(_busy || string.IsNullOrWhiteSpace(_config.Hue.BridgeIp))">Pair with bridge</button>
+                <button class="btn btn--primary btn--big" @onclick="Pair" disabled="@(_busy || string.IsNullOrWhiteSpace(_config.Hue.BridgeIp))">Pair with bridge</button>
             </div>
         }
 
@@ -75,13 +77,13 @@ else
         }
 
         <div class="btn-row" style="margin-top:1rem">
-            <button class="btn primary" @onclick="SaveConfig" disabled="@_busy">Save Hue settings</button>
+            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">Save Hue settings</button>
         </div>
     </div>
     }
     else
     {
-    <RuneHeading>Tuya Bulb</RuneHeading>
+    <SectionHeading>Tuya Bulb</SectionHeading>
     <div class="panel">
         <div class="field">
             <label for="tuya-ip">Bulb IP</label>
@@ -119,13 +121,13 @@ else
             <p class="status">@_tuyaStatus</p>
         }
         <div class="btn-row">
-            <button class="btn primary" @onclick="SaveConfig" disabled="@_busy">Save Tuya settings</button>
+            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">Save Tuya settings</button>
         </div>
         <p class="hint">The local key still comes from the Tuya IoT portal — see the README walkthrough.</p>
     </div>
     }
 
-    <RuneHeading>Light Registry</RuneHeading>
+    <SectionHeading>Light Registry</SectionHeading>
     <div class="panel">
         <p class="hint">Individually addressable lights that scenes and the Lights tab can target one by one.</p>
 
@@ -176,7 +178,7 @@ else
                         <div class="reg-row">
                             <span class="krow-ico">@(hl.Reachable ? "💡" : "⚠️")</span>
                             <span class="reg-name-static">@hl.Name</span>
-                            <button class="btn small" disabled="@added" @onclick="() => AddHue(hl)">@(added ? "Added" : "Add")</button>
+                            <button class="btn btn--small" disabled="@added" @onclick="() => AddHue(hl)">@(added ? "Added" : "Add")</button>
                         </div>
                     }
                 </div>
@@ -184,11 +186,11 @@ else
         }
 
         <div class="btn-row" style="margin-top:1rem">
-            <button class="btn primary" @onclick="SaveConfig" disabled="@_busy">Save lights</button>
+            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">Save lights</button>
         </div>
     </div>
 
-    <RuneHeading>Default Lighting</RuneHeading>
+    <SectionHeading>Default Lighting</SectionHeading>
     <div class="panel">
         <p class="hint">The state the top-bar 💡 reset button restores — e.g. bright white “house lights up” for a break.</p>
 
@@ -219,19 +221,19 @@ else
         }
 
         <div class="btn-row" style="margin-top:1rem">
-            <button class="btn primary" @onclick="SaveConfig" disabled="@_busy">Save default</button>
+            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">Save default</button>
             <button class="btn" @onclick="TestDefault" disabled="@(_busy || _config.DefaultLight is null)">Test</button>
         </div>
     </div>
 
-    <RuneHeading>Spotify</RuneHeading>
+    <SectionHeading>Spotify</SectionHeading>
     <div class="panel">
         <div class="field">
             <label for="spotify-client-id">Client ID</label>
             <input id="spotify-client-id" type="text" @bind="_spotify.ClientId" placeholder="from developer.spotify.com" />
         </div>
         <div class="btn-row">
-            <button class="btn primary" @onclick="SaveSpotify" disabled="@_busy">Save Client ID</button>
+            <button class="btn btn--primary" @onclick="SaveSpotify" disabled="@_busy">Save Client ID</button>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(_spotify.RedirectUri))
@@ -268,19 +270,19 @@ else
                 </div>
             </div>
             <div class="btn-row">
-                <button class="btn danger" @onclick="DisconnectSpotify" disabled="@_busy">Disconnect Spotify</button>
+                <button class="btn btn--danger" @onclick="DisconnectSpotify" disabled="@_busy">Disconnect Spotify</button>
             </div>
         }
         else
         {
             <p class="status">Not connected yet.</p>
             <div class="btn-row">
-                <button class="btn primary big" @onclick="ConnectSpotify"
+                <button class="btn btn--primary btn--big" @onclick="ConnectSpotify"
                         disabled="@(_busy || string.IsNullOrWhiteSpace(_spotify.ClientId))">Connect Spotify</button>
             </div>
         }
     </div>
-    <RuneHeading>Menu</RuneHeading>
+    <SectionHeading>Menu</SectionHeading>
     <div class="panel">
         <p class="hint" style="margin-top:0">Long-press a tab in the bottom bar and drag it sideways to reorder the menu. The order is saved on this device.</p>
         <div class="btn-row" style="margin-top:0.6rem">
@@ -288,18 +290,18 @@ else
         </div>
     </div>
 
-    <RuneHeading>This Device</RuneHeading>
+    <SectionHeading>This Device</SectionHeading>
     <div class="panel">
         <div class="field">
             <label for="apikey">API key (only if the server has one configured)</label>
             <input id="apikey" type="password" @bind="_apiKeyInput" placeholder="leave empty when not used" />
         </div>
         <div class="btn-row">
-            <button class="btn primary" @onclick="SaveApiKey">Save key on this device</button>
+            <button class="btn btn--primary" @onclick="SaveApiKey">Save key on this device</button>
         </div>
     </div>
 
-    <RuneHeading>Developer</RuneHeading>
+    <SectionHeading>Developer</SectionHeading>
     <div class="panel">
         <div class="chip-row" style="margin-top:0">
             <Chip On="@Ui.DevMode" OnClick="ToggleDevMode">Developer mode</Chip>

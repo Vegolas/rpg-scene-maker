@@ -5,7 +5,9 @@
 
 <PageTitle>Scene Maker — Logs</PageTitle>
 
-<RuneHeading>Diagnostics</RuneHeading>
+<div class="page-head"><h1>Logs</h1></div>
+
+<SectionHeading>Diagnostics</SectionHeading>
 <div class="panel">
     @if (_diag is not null)
     {
@@ -33,17 +35,17 @@
         <p class="empty-note" style="margin:0.4rem 0">Gathering diagnostics…</p>
     }
     <div class="btn-row" style="margin-top:0.8rem">
-        <button class="btn small" @onclick="RefreshDiagnosticsAsync">Refresh</button>
+        <button class="btn btn--small" @onclick="RefreshDiagnosticsAsync">Refresh</button>
     </div>
 </div>
 
-<RuneHeading>Logs</RuneHeading>
+<SectionHeading>Recent</SectionHeading>
 
 <div class="chip-row">
     <Chip On="@(_filter == LogFilter.All)" OnClick="@(() => _filter = LogFilter.All)">All</Chip>
     <Chip On="@(_filter == LogFilter.Warnings)" OnClick="@(() => _filter = LogFilter.Warnings)">Warnings</Chip>
     <Chip On="@(_filter == LogFilter.Errors)" OnClick="@(() => _filter = LogFilter.Errors)">Errors</Chip>
-    <button class="btn small" @onclick="ClearAsync">Clear</button>
+    <button class="btn btn--small" @onclick="ClearAsync">Clear</button>
 </div>
 
 @if (_logs is null)

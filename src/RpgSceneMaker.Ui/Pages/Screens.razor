@@ -6,7 +6,13 @@
 
 <PageTitle>Scene Maker — Screens</PageTitle>
 
-<RuneHeading>Screens</RuneHeading>
+<div class="page-head">
+    <h1>Screens</h1>
+    @if (_screens is not null)
+    {
+        <span class="count">@_screens.Count saved</span>
+    }
+</div>
 
 @if (_creating)
 {
@@ -25,7 +31,7 @@
         <p class="hint" style="margin-top:0.6rem">A screen just groups shortcuts — you'll pick which scenes, events, sounds and playlists go on it next.</p>
         <ArtField @bind-Image="_image" />
         <div class="btn-row" style="margin-top:0.6rem">
-            <button class="btn primary" @onclick="Create" disabled="@_busy">Create</button>
+            <button class="btn btn--primary" @onclick="Create" disabled="@_busy">Create</button>
             <button class="btn" @onclick="() => _creating = false" disabled="@_busy">Cancel</button>
         </div>
     </div>

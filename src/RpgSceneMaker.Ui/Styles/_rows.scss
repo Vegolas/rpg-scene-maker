@@ -17,13 +17,6 @@
 
 /* ---------- legacy .krow list rows (restyled to the .row look) ---------- */
 .klist { display: flex; flex-direction: column; gap: var(--s-2); }
-.kgroup-title {
-  font: var(--text-label);
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin: var(--s-5) 0 var(--s-2);
-}
 .krow {
   display: flex;
   align-items: center;

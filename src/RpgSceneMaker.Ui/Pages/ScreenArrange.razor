@@ -12,7 +12,7 @@
 }
 else
 {
-    <RuneHeading>Arrange</RuneHeading>
+    <div class="page-head"><h1>Arrange</h1></div>
     <div class="panel">
         <div class="emoji-row">
             @foreach (var e in Palette.Emojis)
@@ -27,7 +27,7 @@ else
         <ArtField @bind-Image="_edit.Image" />
     </div>
 
-    <RuneHeading>Shortcuts</RuneHeading>
+    <SectionHeading>Shortcuts</SectionHeading>
     <div class="panel">
         @if (_edit.Tiles.Count == 0)
         {
@@ -51,7 +51,7 @@ else
         }
     </div>
 
-    <RuneHeading>Add a shortcut</RuneHeading>
+    <SectionHeading>Add a shortcut</SectionHeading>
     <div class="panel">
         <Segmented TValue="string" Options="AddOptions" Value="_addKind" ValueChanged="@(k => _addKind = k)" />
 
@@ -94,7 +94,7 @@ else
                     }
                 </div>
             }
-            <p class="kgroup-title">Playlists</p>
+            <p class="section-h">Playlists</p>
             <PlaylistPicker Playlists="_playlists" OnPick="pl => AddMusic(pl.Uri, pl.Name)">
                 <EmptyContent>
                     <p class="hint" style="margin:0">Connect Spotify in <a href="settings">Settings</a> to pick playlists, or search for a track above.</p>
@@ -121,13 +121,13 @@ else
         }
     </div>
 
-    <RuneHeading>Save</RuneHeading>
+    <SectionHeading>Save</SectionHeading>
     <div class="btn-row">
-        <button class="btn primary" @onclick="Save" disabled="@_busy">Save</button>
+        <button class="btn btn--primary" @onclick="Save" disabled="@_busy">Save</button>
         <button class="btn" @onclick="Cancel" disabled="@_busy">Cancel</button>
     </div>
     <div class="btn-row" style="margin-top:0.7rem">
-        <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+        <button class="btn btn--danger" @onclick="DeleteTapped" disabled="@_busy">
             @(_confirmDelete ? "Really delete?" : "Delete screen")
         </button>
     </div>

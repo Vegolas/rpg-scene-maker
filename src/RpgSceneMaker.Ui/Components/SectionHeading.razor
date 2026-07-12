@@ -1,0 +1,14 @@
+@* An in-page section label: the design system's uppercase, tracked `.section-h` treatment.
+   Optionally carries a right-aligned muted count via the Count parameter. *@
+<div class="section-h">
+    <span>@ChildContent</span>
+    @if (!string.IsNullOrEmpty(Count))
+    {
+        <span class="count">@Count</span>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Count { get; set; }
+}

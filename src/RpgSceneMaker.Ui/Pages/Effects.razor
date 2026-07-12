@@ -4,7 +4,13 @@
 
 <PageTitle>Scene Maker — Effects</PageTitle>
 
-<RuneHeading>Light FX Library</RuneHeading>
+<div class="page-head">
+    <h1>Light FX Library</h1>
+    @if (_fx is not null)
+    {
+        <span class="count">@_fx.Count saved</span>
+    }
+</div>
 
 @if (_fx is null)
 {
@@ -32,7 +38,7 @@ else
     }
 
     <div class="btn-row" style="margin-top:1rem">
-        <button class="btn primary" @onclick="NewFx">＋ New effect</button>
+        <button class="btn btn--primary" @onclick="NewFx">＋ New effect</button>
     </div>
 }
 

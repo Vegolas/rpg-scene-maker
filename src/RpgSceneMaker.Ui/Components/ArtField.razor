@@ -18,12 +18,12 @@
         }
     </div>
     <div class="btn-row" style="margin-top:0.6rem">
-        <button class="btn small" @onclick="Upload" disabled="@_busy">
+        <button class="btn btn--small" @onclick="Upload" disabled="@_busy">
             @(_busy ? "Uploading…" : HasImage ? "Replace art" : "Upload art")
         </button>
         @if (HasImage)
         {
-            <button class="btn small danger" @onclick="Remove" disabled="@_busy">Remove</button>
+            <button class="btn btn--small btn--danger" @onclick="Remove" disabled="@_busy">Remove</button>
         }
     </div>
 </div>

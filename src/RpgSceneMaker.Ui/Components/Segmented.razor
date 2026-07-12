@@ -1,10 +1,11 @@
-@* A segmented control: one button per option, the one equal to Value is highlighted. *@
+@* A segmented control: one button per option, the one equal to Value is highlighted.
+   Renders the design-system `.seg` primitive; `.seg--block` stretches the options full-width. *@
 @typeparam TValue
 
-<div class="segmented" style="@Style">
+<div class="seg seg--block" style="@Style">
     @foreach (var opt in Options)
     {
-        <button class="seg @(Equals(opt.Value, Value) ? "on" : "")"
+        <button type="button" class="seg__opt @(Equals(opt.Value, Value) ? "seg__opt--active" : "")"
                 @onclick="() => ValueChanged.InvokeAsync(opt.Value)">@opt.Label</button>
     }
 </div>

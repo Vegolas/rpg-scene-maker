@@ -14,7 +14,7 @@
 }
 else
 {
-    <RuneHeading>@(_isNew ? "New Event" : "Edit Event")</RuneHeading>
+    <div class="page-head"><h1>@(_isNew ? "New Event" : "Edit Event")</h1></div>
 
     <div class="panel">
         <div class="emoji-row">
@@ -41,7 +41,7 @@ else
         <ArtField @bind-Image="_edit.Image" />
     </div>
 
-    <RuneHeading>Timeline</RuneHeading>
+    <SectionHeading>Timeline</SectionHeading>
     <div class="panel">
         <p class="hint" style="margin-top:0">
             Lay sound and light clips along the time axis. Drag a clip to move it, drag its right edge to resize,
@@ -50,7 +50,7 @@ else
         <TimelineEditor Model="_edit.Timeline" Sounds="_sounds" Lights="_lights" Fx="_fxLibrary" />
     </div>
 
-    <RuneHeading>When it ends</RuneHeading>
+    <SectionHeading>When it ends</SectionHeading>
     <div class="panel">
         <Segmented TValue="string" Options="AfterOptions" Value="_edit.After.Mode" ValueChanged="m => _edit.After.Mode = m" />
         @if (_edit.After.Mode == "scene")
@@ -82,20 +82,20 @@ else
         }
     </div>
 
-    <RuneHeading>Save</RuneHeading>
+    <SectionHeading>Save</SectionHeading>
     <div class="btn-row">
-        <button class="btn primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
+        <button class="btn btn--primary" @onclick="() => Save(test: false)" disabled="@_busy">Save</button>
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">Save &amp; Test</button>
         @if (!_isNew && _runningId == _edit.Id)
         {
-            <button class="btn danger" @onclick="Stop" disabled="@_busy">⏹ Stop</button>
+            <button class="btn btn--danger" @onclick="Stop" disabled="@_busy">⏹ Stop</button>
         }
         <button class="btn" @onclick="Cancel" disabled="@_busy">Cancel</button>
     </div>
     @if (!_isNew)
     {
         <div class="btn-row" style="margin-top:0.7rem">
-            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+            <button class="btn btn--danger" @onclick="DeleteTapped" disabled="@_busy">
                 @(_confirmDelete ? "Really delete?" : "Delete event")
             </button>
         </div>

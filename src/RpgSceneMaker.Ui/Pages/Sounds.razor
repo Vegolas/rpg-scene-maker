@@ -6,7 +6,13 @@
 
 <PageTitle>Scene Maker — Sounds</PageTitle>
 
-<RuneHeading>Soundboard</RuneHeading>
+<div class="page-head">
+    <h1>Soundboard</h1>
+    @if (_sounds is not null)
+    {
+        <span class="count">@_sounds.Count sound@(_sounds.Count == 1 ? "" : "s")</span>
+    }
+</div>
 
 <div class="panel">
     <div class="field" style="margin-bottom:0">
@@ -51,7 +57,7 @@ else
     {
         @foreach (var group in shown.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
         {
-            <p class="kgroup-title">@group.Key</p>
+            <p class="section-h">@group.Key</p>
             <div class="sound-grid">
                 @foreach (var sound in group)
                 {

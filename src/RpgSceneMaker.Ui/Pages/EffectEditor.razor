@@ -15,7 +15,7 @@
 }
 else
 {
-    <RuneHeading>@(_isNew ? "New Light FX" : "Edit Light FX")</RuneHeading>
+    <div class="page-head"><h1>@(_isNew ? "New Light FX" : "Edit Light FX")</h1></div>
 
     <div class="panel">
         <div class="field" style="margin-bottom:0">
@@ -35,12 +35,12 @@ else
         </p>
     </div>
 
-    <RuneHeading>Keyframes</RuneHeading>
+    <SectionHeading>Keyframes</SectionHeading>
     <div class="panel">
         <KeyframeEditor Effect="_edit.Fx" />
     </div>
 
-    <RuneHeading>Test</RuneHeading>
+    <SectionHeading>Test</SectionHeading>
     <div class="panel">
         <div class="field">
             <label for="fx-test-light">On light</label>
@@ -64,15 +64,15 @@ else
         <p class="hint" style="margin-top:0.6rem">Save first — the test runs the saved effect on the server's lights.</p>
     </div>
 
-    <RuneHeading>Save</RuneHeading>
+    <SectionHeading>Save</SectionHeading>
     <div class="btn-row">
-        <button class="btn primary" @onclick="Save" disabled="@_busy">Save</button>
+        <button class="btn btn--primary" @onclick="Save" disabled="@_busy">Save</button>
         <button class="btn" @onclick="Cancel" disabled="@_busy">Cancel</button>
     </div>
     @if (!_isNew)
     {
         <div class="btn-row" style="margin-top:0.7rem">
-            <button class="btn danger" @onclick="DeleteTapped" disabled="@_busy">
+            <button class="btn btn--danger" @onclick="DeleteTapped" disabled="@_busy">
                 @(_confirmDelete ? "Really delete?" : "Delete effect")
             </button>
         </div>

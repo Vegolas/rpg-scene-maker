@@ -34,9 +34,10 @@ a:hover { color: var(--text); }
 }
 
 /* ---------- shared page bits ---------- */
-h2.rune, .section-h {
+.section-h {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--s-3);
   font: var(--text-label);
   letter-spacing: 1.5px;
@@ -44,7 +45,6 @@ h2.rune, .section-h {
   color: var(--text-muted);
   margin: var(--s-6) 0 var(--s-3);
 }
-.section-h { justify-content: space-between; }
 .section-h .count,
 .page-head .count {
   font: var(--text-sm);

@@ -6,7 +6,13 @@
 
 <PageTitle>Scene Maker — Events</PageTitle>
 
-<RuneHeading>Events</RuneHeading>
+<div class="page-head">
+    <h1>Events</h1>
+    @if (_events is not null)
+    {
+        <span class="count">@_events.Count saved</span>
+    }
+</div>
 
 @if (_events is null)
 {

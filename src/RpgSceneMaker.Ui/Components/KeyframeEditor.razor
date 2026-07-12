@@ -8,7 +8,7 @@
 
 <div class="kf-editor">
     <div class="kf-toolbar">
-        <button class="btn small" @onclick="AddKeyframe">＋ Add keyframe</button>
+        <button class="btn btn--small" @onclick="AddKeyframe">＋ Add keyframe</button>
         <span class="kf-spacer"></span>
         <span class="hint" style="margin:0">@Effect.Keyframes.Count keyframe@(Effect.Keyframes.Count == 1 ? "" : "s")</span>
     </div>
@@ -47,13 +47,13 @@
         <div class="kf-card">
             <div class="kf-insp-head">
                 <div class="kf-steppers">
-                    <button class="btn small" @onclick="SelectPrev" disabled="@(idx <= 0)" aria-label="Previous keyframe">◀</button>
+                    <button class="btn btn--small" @onclick="SelectPrev" disabled="@(idx <= 0)" aria-label="Previous keyframe">◀</button>
                     <span class="kf-num">#@(idx + 1) / @count</span>
-                    <button class="btn small" @onclick="SelectNext" disabled="@(idx >= count - 1)" aria-label="Next keyframe">▶</button>
+                    <button class="btn btn--small" @onclick="SelectNext" disabled="@(idx >= count - 1)" aria-label="Next keyframe">▶</button>
                 </div>
                 <span class="kf-spacer"></span>
-                <button class="btn small" @onclick="() => Duplicate(sel)" aria-label="Duplicate keyframe">⧉</button>
-                <button class="btn small danger" @onclick="() => Remove(sel)" aria-label="Delete keyframe">✕</button>
+                <button class="btn btn--small" @onclick="() => Duplicate(sel)" aria-label="Duplicate keyframe">⧉</button>
+                <button class="btn btn--small btn--danger" @onclick="() => Remove(sel)" aria-label="Delete keyframe">✕</button>
             </div>
 
             <div class="tl-insp-row">
