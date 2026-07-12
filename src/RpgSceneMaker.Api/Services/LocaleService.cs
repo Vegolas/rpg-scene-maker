@@ -11,10 +11,16 @@ namespace RpgSceneMaker.Api.Services;
 /// or edit a translation by dropping/editing a file, no rebuild. Files are read on demand (they are small
 /// and this is a LAN app), so an edit shows up on the next language switch or reload.
 ///
-/// English is also shipped <b>embedded in this assembly</b> as the canonical key set and the ultimate
-/// fallback: a missing, deleted or broken on-disk file can never blank the UI. On startup <see cref="Seed"/>
-/// copies the shipped files into the on-disk directory, but only the ones that are missing — it never
-/// overwrites a community edit.
+/// English (and Polish) are also shipped <b>embedded in this assembly</b> as the canonical key set. On
+/// startup <see cref="Seed"/> copies the shipped files into the on-disk directory, but only the ones that
+/// are missing — it never overwrites a community edit.
+///
+/// For a code that ships embedded, <see cref="Get"/> <b>merges</b> the two: the embedded strings are the
+/// base and the on-disk strings are overlaid per key (disk wins key-by-key). This keeps community/manual
+/// edits while guaranteeing newly shipped keys always appear even when the on-disk file was seeded by an
+/// older build — so a stale file can never hide a new key (nor blank the UI if it is missing/broken). The
+/// document's name metadata likewise prefers the on-disk values, falling back to embedded. Codes with no
+/// embedded counterpart (community languages) are served from disk as-is.
 /// </summary>
 public partial class LocaleService(string directory, ILogger<LocaleService> logger)
 {
@@ -78,22 +84,46 @@ public partial class LocaleService(string directory, ILogger<LocaleService> logg
             .ThenBy(i => i.EnglishName, StringComparer.OrdinalIgnoreCase)];
     }
 
-    /// <summary>One language's document, or null if the code is unknown. On-disk wins; shipped is the fallback.</summary>
+    /// <summary>
+    /// One language's document, or null if the code is unknown. For codes that ship embedded, the embedded
+    /// strings are the base and the on-disk strings are overlaid per key (disk wins) so newly shipped keys
+    /// always appear and community edits are preserved; a missing/broken on-disk file leaves embedded only.
+    /// Codes with no embedded counterpart are served from disk as-is.
+    /// </summary>
     public LocaleDocument? Get(string code)
     {
         if (!CodePattern().IsMatch(code)) return null;
 
         var path = Path.Combine(directory, code + ".json");
-        var file = File.Exists(path) ? ReadFile(path) : null;
+        var disk = File.Exists(path) ? ReadFile(path) : null;
 
-        // Fall back to the embedded shipped copy (this is what makes a deleted/broken en.json harmless).
-        file ??= EmbeddedResources().FirstOrDefault(r =>
+        var embedded = EmbeddedResources().FirstOrDefault(r =>
             r.Code.Equals(code, StringComparison.OrdinalIgnoreCase)) is { Resource: { } res }
             ? ReadEmbedded(res)
             : null;
 
-        return file is null ? null : ToDocument(code, file);
+        // Community language (no embedded counterpart): serve the on-disk file as-is.
+        if (embedded is null) return disk is null ? null : ToDocument(code, disk);
+
+        // Shipped language: embedded is the base, on-disk overlays per key. This is what keeps a stale
+        // on-disk file (seeded by an older build) from hiding keys shipped later, while preserving edits.
+        var strings = new Dictionary<string, string>(embedded.Strings ?? [], StringComparer.Ordinal);
+        if (disk?.Strings is { } overlay)
+            foreach (var (key, value) in overlay)
+                strings[key] = value;
+
+        return new LocaleDocument(
+            code,
+            Pick(disk?.Name, embedded.Name, code),
+            Pick(disk?.EnglishName, embedded.EnglishName, code),
+            strings);
     }
+
+    // Prefer the on-disk value, else the embedded value, else the code.
+    private static string Pick(string? disk, string? embedded, string code) =>
+        !string.IsNullOrWhiteSpace(disk) ? disk
+        : !string.IsNullOrWhiteSpace(embedded) ? embedded
+        : code;
 
     private LocaleFile? ReadFile(string path)
     {
