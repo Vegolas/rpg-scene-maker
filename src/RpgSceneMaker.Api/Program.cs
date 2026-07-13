@@ -1,8 +1,8 @@
-using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api;
 using RpgSceneMaker.Api.Data;
 using RpgSceneMaker.Api.Endpoints;
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Logging;
 using RpgSceneMaker.Api.Services;
 
@@ -133,7 +133,11 @@ var app = builder.Build();
 // so a community edit is never clobbered). English also stays embedded as the ultimate fallback.
 app.Services.GetRequiredService<LocaleService>().Seed();
 
-// Map integration failures to useful status codes so a failing Stream Deck button tells you why.
+// Map integration/validation failures to useful status codes so a failing Stream Deck button tells you why.
+// The title/detail are localized into the panel's language (sent as the X-Ui-Lang header) against the same
+// locale files the panel uses, and a stable machine-readable code (+ args) is emitted in the ProblemDetails
+// extensions for Stream Deck / MCP / test consumers. Server logs stay English.
+var locales = app.Services.GetRequiredService<LocaleService>();
 app.Use(async (context, next) =>
 {
     try
@@ -142,27 +146,29 @@ app.Use(async (context, next) =>
     }
     catch (Exception ex) when (!context.Response.HasStarted)
     {
-        var (status, title) = ex switch
-        {
-            ArgumentException => (StatusCodes.Status400BadRequest, "Invalid request"),
-            InvalidOperationException => (StatusCodes.Status503ServiceUnavailable, "Not configured"),
-            HueException => (StatusCodes.Status502BadGateway, "Philips Hue error"),
-            SpotifyException => (StatusCodes.Status502BadGateway, "Spotify error"),
-            SoundboardException => (StatusCodes.Status503ServiceUnavailable, "Soundboard error"),
-            RpgSceneMaker.Api.Services.Ai.AiProviderException => (StatusCodes.Status502BadGateway, "AI provider error"),
-            HttpRequestException or TaskCanceledException =>
-                (StatusCodes.Status502BadGateway, "Spotify unreachable — check the internet connection"),
-            SocketException or IOException or TimeoutException =>
-                (StatusCodes.Status504GatewayTimeout, "Bulb unreachable — check Tuya:Ip and that the bulb is powered"),
-            _ => (StatusCodes.Status500InternalServerError, "Unexpected error"),
-        };
+        var (status, titleKey) = ErrorClassifier.Classify(ex);
+        var coded = ex as IErrorCode;
+        var lang = context.Request.Headers["X-Ui-Lang"].FirstOrDefault();
+
         // Real faults (bulb/Spotify unreachable, unexpected) are errors with a stack; "not configured"
-        // (503) and bad requests (4xx) are expected states — warn, and skip the noisy stack trace.
+        // (503) and bad requests (4xx) are expected states — warn, and skip the noisy stack trace. Logs
+        // stay English: the exception's own Message plus the title key, never the localized copy.
         var isFault = status is >= 500 and not 503;
         app.Logger.Log(isFault ? LogLevel.Error : LogLevel.Warning, isFault ? ex : null,
-            "{Method} {Path} → {Status} {Title}: {Detail}",
-            context.Request.Method, context.Request.Path, status, title, ex.Message);
-        await Results.Problem(title: title, detail: ex.Message, statusCode: status).ExecuteAsync(context);
+            "{Method} {Path} → {Status} {TitleKey}: {Detail}",
+            context.Request.Method, context.Request.Path, status, titleKey, ex.Message);
+
+        var extensions = new Dictionary<string, object?> { ["code"] = coded?.Code ?? titleKey };
+        if (coded is not null) extensions["args"] = WireArgs(coded.Args);
+        await Results.Problem(
+            title: locales.Localize(lang, titleKey),
+            detail: coded is not null ? locales.Localize(lang, coded.Code, coded.Args) : ex.Message,
+            statusCode: status,
+            extensions: extensions).ExecuteAsync(context);
+
+        // Flatten error args for the wire: primitives pass through, a CtxRef becomes { code, args }.
+        static object?[] WireArgs(IReadOnlyList<object?> args) =>
+            [.. args.Select(a => a is CtxRef c ? (object?)new { code = c.Code, args = c.Args } : a)];
     }
 });
 
@@ -178,9 +184,12 @@ app.Use(async (context, next) =>
                        ?? context.Request.Query["apiKey"].FirstOrDefault();
         if (provided != requiredKey)
         {
-            await Results.Problem(title: "Unauthorized",
-                detail: "Missing or wrong API key. Send it as an X-Api-Key header or ?apiKey= query parameter.",
-                statusCode: StatusCodes.Status401Unauthorized).ExecuteAsync(context);
+            var lang = context.Request.Headers["X-Ui-Lang"].FirstOrDefault();
+            await Results.Problem(
+                title: locales.Localize(lang, "error.title.unauthorized"),
+                detail: locales.Localize(lang, "error.unauthorized.detail"),
+                statusCode: StatusCodes.Status401Unauthorized,
+                extensions: new Dictionary<string, object?> { ["code"] = "error.title.unauthorized" }).ExecuteAsync(context);
             return;
         }
     }

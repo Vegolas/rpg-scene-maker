@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 using RpgSceneMaker.Api.Services;
 
@@ -20,23 +21,23 @@ public static class EventValidation
     public static void Validate(GameEvent evt)
     {
         if (string.IsNullOrWhiteSpace(evt.Id))
-            throw new ArgumentException("Event id is required.");
+            throw new ValidationException("error.common.idRequired");
         if (!LightValidation.IsSlug(evt.Id))
-            throw new ArgumentException("Event id may only contain letters, digits, '-' and '_'.");
+            throw new ValidationException("error.common.idSlug");
         if (ReservedIds.Contains(evt.Id, StringComparer.OrdinalIgnoreCase))
-            throw new ArgumentException("Event id 'list', 'stop' and 'state' are reserved (they'd shadow the /events/list, /events/stop and /events/state routes).");
+            throw new ValidationException("error.event.reservedId");
         if (string.IsNullOrWhiteSpace(evt.Name))
-            throw new ArgumentException("Event name is required.");
+            throw new ValidationException("error.common.nameRequired");
         if (evt.Image is not null && !ImageFileStorage.IsValidName(evt.Image))
-            throw new ArgumentException("Invalid image reference.");
+            throw new ValidationException("error.common.invalidImage");
 
         if (evt.Flash is { } flash)
         {
             flash.Color = LightValidation.NormalizeHex(flash.Color);
             if (flash.Brightness is < 0 or > 100)
-                throw new ArgumentException("Flash brightness must be between 0 and 100.");
+                throw new ValidationException("error.event.flashBrightnessRange");
             if (flash.DurationMs is < 1 or > MaxFlashDurationMs)
-                throw new ArgumentException($"Flash duration must be between 1 and {MaxFlashDurationMs} ms.");
+                throw new ValidationException("error.event.flashDurationRange", MaxFlashDurationMs);
         }
 
         // JSON "soundEffects": null overwrites the C# default.
@@ -49,7 +50,7 @@ public static class EventValidation
             // be saved (they'd silently do nothing on trigger).
             if ((timeline.Sounds.Count > 0 || timeline.Lights.Count > 0)
                 && (evt.Flash is not null || evt.SoundEffects.Count > 0))
-                throw new ArgumentException("An event with timeline clips can't also set a flash or sound effects — the timeline replaces them.");
+                throw new ValidationException("error.event.timelineExclusive");
         }
 
         if (evt.After is { } after)
@@ -57,13 +58,13 @@ public static class EventValidation
             after.Mode = (after.Mode ?? "").Trim().ToLowerInvariant();
             if (after.Mode.Length == 0) after.Mode = "previous";
             if (after.Mode is not ("previous" or "scene" or "default"))
-                throw new ArgumentException("Event 'after' mode must be 'previous', 'scene' or 'default'.");
+                throw new ValidationException("error.event.afterMode");
             if (after.Mode == "scene")
             {
                 // The scene needn't still exist (a deleted target falls back to restoring at trigger time,
                 // like a dangling sound id) — just require an id was chosen.
                 if (string.IsNullOrWhiteSpace(after.SceneId))
-                    throw new ArgumentException("Event 'after' set to a scene needs a scene id.");
+                    throw new ValidationException("error.event.afterSceneId");
             }
             else
             {
@@ -79,22 +80,22 @@ public static class EventValidation
         timeline.Lights ??= [];
 
         if (timeline.Sounds.Count == 0 && timeline.Lights.Count == 0)
-            throw new ArgumentException("A timeline needs at least one sound or light clip.");
+            throw new ValidationException("error.event.timelineEmpty");
 
         var endMs = 0;
 
         foreach (var clip in timeline.Sounds)
         {
             if (string.IsNullOrWhiteSpace(clip.SoundId))
-                throw new ArgumentException("Each timeline sound clip needs a soundId.");
+                throw new ValidationException("error.event.soundClipId");
             // Bound StartMs even for duration-less clips: an unbounded start would park the runner for days
             // and StartMs + DurationMs could overflow int.
             if (clip.StartMs is < 0 or > MaxTimelineMs)
-                throw new ArgumentException($"Timeline sound clip '{clip.SoundId}' start must be between 0 and {MaxTimelineMs} ms.");
+                throw new ValidationException("error.event.soundClipStart", clip.SoundId, MaxTimelineMs);
             if (clip.DurationMs is { } sd && sd is < MinClipDurationMs or > MaxTimelineMs)
-                throw new ArgumentException($"Timeline sound clip '{clip.SoundId}' duration must be between {MinClipDurationMs} and {MaxTimelineMs} ms.");
+                throw new ValidationException("error.event.soundClipDuration", clip.SoundId, MinClipDurationMs, MaxTimelineMs);
             if (clip.Volume is { } vol && vol is < 0.0 or > 1.0)
-                throw new ArgumentException($"Timeline sound clip '{clip.SoundId}' volume must be between 0.0 and 1.0.");
+                throw new ValidationException("error.event.soundClipVolume", clip.SoundId);
             // A duration-less clip plays to its natural end; only bound the clips whose end we know.
             if (clip.DurationMs is { } dur)
                 endMs = Math.Max(endMs, clip.StartMs + dur);
@@ -102,23 +103,26 @@ public static class EventValidation
 
         foreach (var clip in timeline.Lights)
         {
-            var name = string.IsNullOrWhiteSpace(clip.LightKey) ? "all lights" : $"light '{clip.LightKey}'";
+            // The context fragment names which light: "all lights" or "light 'key'". The timeline-prefixed
+            // variant is used when delegating to ValidateEffect (its messages read "on timeline …").
+            var all = string.IsNullOrWhiteSpace(clip.LightKey);
+            var ctx = all ? CtxRef.AllLights() : CtxRef.Light(clip.LightKey!);
             if (clip.StartMs is < 0 or > MaxTimelineMs)
-                throw new ArgumentException($"Timeline light clip ({name}) start must be between 0 and {MaxTimelineMs} ms.");
+                throw new ValidationException("error.event.lightClipStart", ctx, MaxTimelineMs);
             if (clip.DurationMs is < MinClipDurationMs or > MaxTimelineMs)
-                throw new ArgumentException($"Timeline light clip ({name}) duration must be between {MinClipDurationMs} and {MaxTimelineMs} ms.");
+                throw new ValidationException("error.event.lightClipDuration", ctx, MinClipDurationMs, MaxTimelineMs);
             if (clip.Brightness is < 0 or > 100)
-                throw new ArgumentException($"Timeline light clip ({name}) brightness must be between 0 and 100.");
+                throw new ValidationException("error.event.lightClipBrightness", ctx);
             if (clip.Temperature is < 0 or > 100)
-                throw new ArgumentException($"Timeline light clip ({name}) temperature must be between 0 and 100.");
+                throw new ValidationException("error.event.lightClipTemperature", ctx);
             if (clip.Color is not null)
                 clip.Color = LightValidation.NormalizeHex(clip.Color);
             if (clip.Effect is { } fx)
-                LightValidation.ValidateEffect(fx, $"timeline {name}");
+                LightValidation.ValidateEffect(fx, all ? CtxRef.TimelineAllLights() : CtxRef.TimelineLight(clip.LightKey!));
             endMs = Math.Max(endMs, clip.StartMs + clip.DurationMs);
         }
 
         if (endMs > MaxTimelineMs)
-            throw new ArgumentException($"The timeline must end within {MaxTimelineMs} ms (10 minutes).");
+            throw new ValidationException("error.event.timelineTooLong", MaxTimelineMs);
     }
 }

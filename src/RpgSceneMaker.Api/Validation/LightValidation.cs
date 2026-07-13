@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Validation;
@@ -9,18 +10,18 @@ public static class LightValidation
 
     /// <summary>Validate a light effect and normalize its colors in place. Shared by scene per-light
     /// effects and event timeline light clips. <paramref name="context"/> names the owner in messages.</summary>
-    public static void ValidateEffect(LightEffect fx, string context)
+    public static void ValidateEffect(LightEffect fx, CtxRef context)
     {
         fx.Colors ??= [];
         fx.Keyframes ??= [];
         if (fx.Type is not ("flicker" or "glow" or "storm" or "drift" or "custom" or "fx"))
-            throw new ArgumentException($"Unknown effect type '{fx.Type}' on {context}. Use flicker, glow, storm, drift, custom or fx.");
+            throw new ValidationException("error.effect.unknownType", fx.Type, context);
         if (fx.Type == "fx")
         {
             // A live reference to a library Light FX: needs a valid slug id; the embedded keyframe fields are
             // ignored (resolved from the library at apply time), so clear them for a clean stored shape.
             if (string.IsNullOrWhiteSpace(fx.FxId) || !IsSlug(fx.FxId))
-                throw new ArgumentException($"The 'fx' effect on {context} needs a library FX id (slug [a-z0-9-_]).");
+                throw new ValidationException("error.effect.fxIdRequired", context);
             fx.Keyframes = [];
             fx.Loop = false;
             fx.CycleMs = null;
@@ -35,19 +36,19 @@ public static class LightValidation
         }
 
         if (fx.Speed is < 1 or > 10)
-            throw new ArgumentException($"Effect speed on {context} must be between 1 and 10.");
+            throw new ValidationException("error.effect.speedRange", context);
         if (fx.Intensity is < 1 or > 10)
-            throw new ArgumentException($"Effect intensity on {context} must be between 1 and 10.");
+            throw new ValidationException("error.effect.intensityRange", context);
         for (var i = 0; i < fx.Colors.Count; i++)
             fx.Colors[i] = NormalizeHex(fx.Colors[i]);
         if (fx.Type == "drift" && fx.Colors.Count < 2)
-            throw new ArgumentException($"The 'drift' effect on {context} needs at least 2 colors.");
+            throw new ValidationException("error.effect.driftColors", context);
     }
 
     private const int MaxCycleMs = 600_000; // 10 minutes, matching the timeline cap.
 
     // "custom" keyframe sequence: normalize the effect's keyframes/loop/cycle in place.
-    private static void ValidateCustom(LightEffect fx, string context) =>
+    private static void ValidateCustom(LightEffect fx, CtxRef context) =>
         fx.CycleMs = ValidateKeyframes(fx.Keyframes, fx.Loop, fx.CycleMs, context);
 
     /// <summary>Validate a hand-authored keyframe sequence (shared by "custom" scene/timeline effects and the
@@ -55,36 +56,36 @@ public static class LightValidation
     /// least one property; colours are normalized in place. Returns the cycle length to persist — the given
     /// value (validated ≥100 ms past the last keyframe) when looping, else null (cycle is meaningless without
     /// looping, so a stale value is dropped).</summary>
-    public static int? ValidateKeyframes(List<LightKeyframe> kfs, bool loop, int? cycleMs, string context)
+    public static int? ValidateKeyframes(List<LightKeyframe> kfs, bool loop, int? cycleMs, CtxRef context)
     {
         if (kfs.Count is < 1 or > 50)
-            throw new ArgumentException($"The 'custom' effect on {context} needs between 1 and 50 keyframes.");
+            throw new ValidationException("error.keyframe.count", context);
 
         var prev = int.MinValue;
         for (var i = 0; i < kfs.Count; i++)
         {
             var kf = kfs[i];
             if (kf.AtMs is < 0 or > MaxCycleMs)
-                throw new ArgumentException($"Keyframe {i + 1} on {context} must start between 0 and {MaxCycleMs} ms.");
+                throw new ValidationException("error.keyframe.startRange", i + 1, context, MaxCycleMs);
             if (i > 0)
             {
                 if (kf.AtMs <= prev)
-                    throw new ArgumentException($"Keyframes on {context} must be in ascending time order.");
+                    throw new ValidationException("error.keyframe.ascending", context);
                 if (kf.AtMs - prev < 100)
-                    throw new ArgumentException($"Keyframes on {context} must be at least 100 ms apart.");
+                    throw new ValidationException("error.keyframe.spacing", context);
             }
             prev = kf.AtMs;
 
             if (kf.Brightness is < 0 or > 100)
-                throw new ArgumentException($"Keyframe {i + 1} on {context} brightness must be between 0 and 100.");
+                throw new ValidationException("error.keyframe.brightnessRange", i + 1, context);
             if (kf.Temperature is < 0 or > 100)
-                throw new ArgumentException($"Keyframe {i + 1} on {context} temperature must be between 0 and 100.");
+                throw new ValidationException("error.keyframe.temperatureRange", i + 1, context);
             if (kf.Color is not null)
                 kf.Color = NormalizeHex(kf.Color);
             if (kf.TransitionMs is { } t && t is < 0 or > 60_000)
-                throw new ArgumentException($"Keyframe {i + 1} on {context} transition must be between 0 and 60000 ms.");
+                throw new ValidationException("error.keyframe.transitionRange", i + 1, context);
             if (kf.Power is null && kf.Color is null && kf.Brightness is null && kf.Temperature is null)
-                throw new ArgumentException($"Keyframe {i + 1} on {context} must set power, color, brightness or temperature.");
+                throw new ValidationException("error.keyframe.empty", i + 1, context);
         }
 
         var lastAt = kfs[^1].AtMs;
@@ -92,11 +93,11 @@ public static class LightValidation
             return null; // meaningless without looping — don't persist a stale value.
 
         if (cycleMs is not { } cycle)
-            throw new ArgumentException($"The looping 'custom' effect on {context} needs a cycle length.");
+            throw new ValidationException("error.keyframe.cycleRequired", context);
         if (cycle < lastAt + 100)
-            throw new ArgumentException($"The cycle length on {context} must be at least {lastAt + 100} ms (100 ms past the last keyframe).");
+            throw new ValidationException("error.keyframe.cycleTooShort", context, lastAt + 100);
         if (cycle > MaxCycleMs)
-            throw new ArgumentException($"The cycle length on {context} must be at most {MaxCycleMs} ms.");
+            throw new ValidationException("error.keyframe.cycleTooLong", context, MaxCycleMs);
         return cycle;
     }
 
@@ -107,7 +108,7 @@ public static class LightValidation
         if (s.Length == 3 && s.All(Uri.IsHexDigit))
             s = string.Concat(s.Select(c => $"{c}{c}"));
         if (s.Length != 6 || !s.All(Uri.IsHexDigit))
-            throw new ArgumentException($"'{raw}' is not a valid hex color. Use #RGB or #RRGGBB, e.g. #FF8C2A.");
+            throw new ValidationException("error.common.hexColor", raw);
         return "#" + s.ToUpperInvariant();
     }
 }

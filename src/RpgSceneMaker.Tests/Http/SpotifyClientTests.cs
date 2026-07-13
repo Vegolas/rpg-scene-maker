@@ -31,7 +31,7 @@ public class SpotifyClientTests
         using var db = new SqliteTestDb();
         var (client, handler) = Build(new SpotifyStore(db));   // never connected
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.PlayAsync("spotify:track:abc"));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => client.PlayAsync("spotify:track:abc"));
         Assert.Empty(handler.Requests);
     }
 

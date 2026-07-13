@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 using RpgSceneMaker.Api.Services;
 
@@ -17,24 +18,23 @@ public static class ScreenValidation
     public static void Validate(Screen screen)
     {
         if (string.IsNullOrWhiteSpace(screen.Id))
-            throw new ArgumentException("Screen id is required.");
+            throw new ValidationException("error.common.idRequired");
         if (!LightValidation.IsSlug(screen.Id))
-            throw new ArgumentException("Screen id may only contain letters, digits, '-' and '_'.");
+            throw new ValidationException("error.common.idSlug");
         if (string.IsNullOrWhiteSpace(screen.Name))
-            throw new ArgumentException("Screen name is required.");
+            throw new ValidationException("error.common.nameRequired");
         if (screen.Image is not null && !ImageFileStorage.IsValidName(screen.Image))
-            throw new ArgumentException("Invalid image reference.");
+            throw new ValidationException("error.common.invalidImage");
 
         // JSON "tiles": null overwrites the C# default.
         screen.Tiles ??= [];
         if (screen.Tiles.Count > MaxTiles)
-            throw new ArgumentException($"A screen can hold at most {MaxTiles} shortcuts.");
+            throw new ValidationException("error.screen.tooManyTiles", MaxTiles);
 
         foreach (var tile in screen.Tiles)
         {
             if (!Kinds.Contains(tile.Kind))
-                throw new ArgumentException(
-                    $"Unknown tile kind '{tile.Kind}'. Expected one of: {string.Join(", ", Kinds)}.");
+                throw new ValidationException("error.screen.unknownKind", tile.Kind, string.Join(", ", Kinds));
 
             switch (tile.Kind)
             {
@@ -45,14 +45,13 @@ public static class ScreenValidation
                     break;
                 case "music":
                     if (string.IsNullOrWhiteSpace(tile.Ref) || !SpotifyClient.IsSpotifyUri(tile.Ref))
-                        throw new ArgumentException(
-                            $"Music tile needs a Spotify URI/link, got '{tile.Ref}'.");
+                        throw new ValidationException("error.screen.musicTileUri", tile.Ref);
                     if (string.IsNullOrWhiteSpace(tile.Label))
-                        throw new ArgumentException("Music tile needs a label (the playlist/track name).");
+                        throw new ValidationException("error.screen.musicTileLabel");
                     break;
                 default: // scene / event / sound — a reference to an existing entity by id.
                     if (string.IsNullOrWhiteSpace(tile.Ref))
-                        throw new ArgumentException($"A '{tile.Kind}' tile needs the id of the {tile.Kind} it points at.");
+                        throw new ValidationException("error.screen.tileRefRequired", tile.Kind);
                     break;
             }
 

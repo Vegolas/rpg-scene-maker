@@ -41,5 +41,5 @@ public class SpotifyUriTests
 
     [Fact]
     public void NormalizeUri_throws_on_unrecognised() =>
-        Assert.Throws<ArgumentException>(() => SpotifyClient.NormalizeUri("not a uri"));
+        Assert.ThrowsAny<ArgumentException>(() => SpotifyClient.NormalizeUri("not a uri"));
 }

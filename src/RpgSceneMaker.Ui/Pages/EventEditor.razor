@@ -297,7 +297,7 @@ else
                 if (result.FullySucceeded)
                     Ui.ReportOk(L.Format("eventEditor.toast.savedFired", id));
                 else
-                    Ui.ReportError(L.Format("eventEditor.toast.savedPartial", result.ProblemSummary()));
+                    Ui.ReportError(L.Format("eventEditor.toast.savedPartial", result.ProblemSummary(k => L[k])));
                 await PollAsync();
                 // On create, keep editing the freshly-made event rather than re-creating it.
                 if (_isNew)

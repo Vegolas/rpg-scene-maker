@@ -73,22 +73,27 @@ public class UiExtensionsTests
     private static ActivationDto Result(string light, string music, string sound) =>
         new("scene", light, music, sound, FullySucceeded: false);
 
+    // Identity translator: returns the key verbatim, so assertions can see the part-label keys and the
+    // extracted error-code tail (both of which the real Localizer would translate).
+    private static string Tr(string key) => key;
+
     [Fact]
-    public void ProblemSummary_joins_only_errored_parts_stripping_the_prefix()
+    public void ProblemSummary_joins_only_errored_parts_translating_label_and_code()
     {
-        var summary = Result("ok", "error: no active device", "error: missing file").ProblemSummary();
-        Assert.Equal("music: no active device | sound: missing file", summary);
+        var summary = Result("ok", "error:error.title.spotify", "error:error.title.soundboard").ProblemSummary(Tr);
+        Assert.Equal("error.part.music: error.title.spotify | error.part.sound: error.title.soundboard", summary);
     }
 
     [Fact]
     public void ProblemSummary_reports_the_light_part()
     {
-        Assert.Equal("light: bulb unreachable", Result("error: bulb unreachable", "ok", "skipped").ProblemSummary());
+        Assert.Equal("error.part.light: error.title.bulbUnreachable",
+            Result("error:error.title.bulbUnreachable", "ok", "skipped").ProblemSummary(Tr));
     }
 
     [Fact]
     public void ProblemSummary_is_empty_when_nothing_errored()
     {
-        Assert.Equal("", Result("ok", "skipped", "ok").ProblemSummary());
+        Assert.Equal("", Result("ok", "skipped", "ok").ProblemSummary(Tr));
     }
 }

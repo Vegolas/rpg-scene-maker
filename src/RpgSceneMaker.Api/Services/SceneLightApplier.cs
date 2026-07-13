@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
@@ -51,9 +52,8 @@ public class SceneLightApplier(
             if (!jobs.IsEmpty)
                 await effects.StartAsync([.. jobs]);
 
-            return errors.IsEmpty
-                ? "ok"
-                : "error: " + string.Join("; ", errors.Select(e => $"{e.Key}: {e.Message}"));
+            // A single displayable code for the toast — the per-light detail is in the warnings logged above.
+            return errors.IsEmpty ? "ok" : "error:error.activation.lights";
         }
 
         if (scene.Light is not null)
@@ -67,7 +67,7 @@ public class SceneLightApplier(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Scene activation: light failed");
-                return $"error: {ex.Message}";
+                return "error:" + ErrorClassifier.DisplayCodeFor(ex);
             }
         }
 

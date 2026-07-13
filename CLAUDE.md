@@ -148,8 +148,24 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   (embedded only). Community languages with no embedded counterpart are served from disk as-is.
   `/i18n/*` ([LocaleEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/LocaleEndpoints.cs))
   covers `list` and `{code}` (GET only); like `/screens` there is nothing at bare `/i18n`. The panel's
-  `Localizer` fetches English + the active language and falls back to English per missing key. Server-side
-  error/validation messages are **not** localized (still English).
+  `Localizer` fetches English + the active language and falls back to English per missing key. **Server-side
+  error/validation messages are localized too** (via the `Errors/` layer below), against the same locale
+  files under an `error.*` key namespace — keyed by the panel's language, which the client sends as the
+  **`X-Ui-Lang`** header (`LocaleService.Localize`). Only dynamic integration-error text (raw Hue/Spotify/
+  device messages) stays English.
+- **Error localization (`Errors/`)** — user-facing failures carry a stable, machine-readable code so the
+  message can be localized and consumers (Stream Deck/MCP/tests) can branch on it. Validation and endpoints
+  throw a code-carrying `ValidationException` (400) / `NotConfiguredException` (503)
+  ([AppExceptions.cs](src/RpgSceneMaker.Api/Errors/AppExceptions.cs), both implementing `IErrorCode` with a
+  dotted `error.*` `Code` + interpolation `Args`; a `CtxRef` arg is itself a localizable "which light/effect"
+  fragment). [`ErrorClassifier`](src/RpgSceneMaker.Api/Errors/ErrorClassifier.cs) maps every exception →
+  (HTTP status, title key), shared by the error middleware and the activators. The middleware localizes the
+  ProblemDetails `title`/`detail` via `LocaleService.Localize` and emits `code`/`args` extensions; server logs
+  stay English (`Exception.Message` renders English from the embedded `en.json` via `ErrorMessages`, guarded
+  so it never throws). Partial-activation statuses fold to `error:<code>` and the panel renders them
+  (`UiExtensions.ProblemSummary`). **When adding a failure:** throw a `ValidationException`/`NotConfiguredException`
+  with a new `error.*` code and add that key to `en.json` **and** `pl.json`; for a brand-new exception *type*,
+  add a `switch` arm to `ErrorClassifier` (not the middleware).
 - **`SceneStore` / `SettingsStore`** — persistence (see below).
 - **`AiToolService`** ([AiToolService.cs](src/RpgSceneMaker.Api/Services/Ai/AiToolService.cs)) — the shared
   AI **tool façade** (a singleton) behind both AI surfaces (MCP + the assistant): full CRUD + live control
@@ -191,11 +207,14 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 
 - **Every command endpoint accepts both GET and POST** (`EndpointHelpers.GetOrPost`) so the Stream Deck
   *System → Website* action works without a plugin. Keep this when adding command routes.
-- **Errors → status codes**: integration failures are thrown as typed exceptions
-  (`SpotifyException`, `HueException`, `ArgumentException`, socket/timeout, etc.) and mapped to HTTP
-  status + Problem responses by the first middleware in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
-  When adding a new failure mode, throw a meaningful exception and add a `switch` arm there rather than
-  returning ad-hoc error bodies.
+- **Errors → status codes**: failures are thrown as typed exceptions (`SpotifyException`, `HueException`,
+  `ValidationException`/`NotConfiguredException`, socket/timeout, etc.), classified to an HTTP status + title
+  key by [`ErrorClassifier`](src/RpgSceneMaker.Api/Errors/ErrorClassifier.cs), and rendered as localized
+  Problem responses (+ a `code`/`args` extension) by the first middleware in
+  [Program.cs](src/RpgSceneMaker.Api/Program.cs). When adding a new failure mode, throw a code-carrying
+  `ValidationException`/`NotConfiguredException` (with an `error.*` key added to `en.json`+`pl.json`) rather
+  than returning ad-hoc error bodies; for a new exception *type*, add a `switch` arm to `ErrorClassifier`. See
+  the error-localization notes under `LocaleService` above.
 - **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /sounds /events /screens
   /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` require it (`X-Api-Key` header or `?apiKey=`;
   the Spotify OAuth callback is exempt). The panel stores it in browser localStorage. Keep new protected

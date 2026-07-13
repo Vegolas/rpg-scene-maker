@@ -32,7 +32,7 @@ public class LightValidationTests
     [InlineData("#GGG")]     // non-hex triple
     [InlineData("nothex")]
     public void NormalizeHex_throws_on_invalid(string raw) =>
-        Assert.Throws<ArgumentException>(() => LightValidation.NormalizeHex(raw));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.NormalizeHex(raw));
 }
 
 public class LightConfigValidationTests
@@ -48,22 +48,22 @@ public class LightConfigValidationTests
 
     [Fact]
     public void Rejects_non_slug_key() =>
-        Assert.Throws<ArgumentException>(() => LightConfigValidation.Validate([Tuya("bad key")]));
+        Assert.ThrowsAny<ArgumentException>(() => LightConfigValidation.Validate([Tuya("bad key")]));
 
     [Fact]
     public void Rejects_case_insensitive_duplicate_keys() =>
-        Assert.Throws<ArgumentException>(() => LightConfigValidation.Validate([Tuya("Lamp"), Tuya("lamp")]));
+        Assert.ThrowsAny<ArgumentException>(() => LightConfigValidation.Validate([Tuya("Lamp"), Tuya("lamp")]));
 
     [Theory]
     [InlineData("zigbee")]
     [InlineData("")]
     public void Rejects_provider_outside_whitelist(string provider) =>
-        Assert.Throws<ArgumentException>(() =>
+        Assert.ThrowsAny<ArgumentException>(() =>
             LightConfigValidation.Validate([new RegisteredLightDto("k", "k", provider, null)]));
 
     [Fact]
     public void Hue_light_requires_a_hue_id() =>
-        Assert.Throws<ArgumentException>(() =>
+        Assert.ThrowsAny<ArgumentException>(() =>
             LightConfigValidation.Validate([new RegisteredLightDto("k", "k", "hue", null)]));
 
     [Fact]
@@ -80,7 +80,7 @@ public class LightConfigValidationTests
     [InlineData(0, -1)]
     [InlineData(0, 101)]
     public void ValidateDefault_rejects_out_of_range(int brightness, int temperature) =>
-        Assert.Throws<ArgumentException>(() =>
+        Assert.ThrowsAny<ArgumentException>(() =>
             LightConfigValidation.ValidateDefault(new DefaultLightDto(true, null, brightness, temperature)));
 
     [Fact]

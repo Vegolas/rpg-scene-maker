@@ -230,8 +230,7 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         try
         {
             var request = new HttpRequestMessage(method, path);
-            if (await GetApiKeyAsync() is { } key)
-                request.Headers.Add("X-Api-Key", key);
+            await AddHeadersAsync(request);
             if (body is not null)
                 request.Content = JsonContent.Create(body, options: Json);
 
@@ -360,7 +359,7 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             if (!string.IsNullOrWhiteSpace(category)) content.Add(new StringContent(category), "category");
 
             var request = new HttpRequestMessage(HttpMethod.Post, "sounds/import") { Content = content };
-            if (await GetApiKeyAsync() is { } key) request.Headers.Add("X-Api-Key", key);
+            await AddHeadersAsync(request);
 
             using var response = await http.SendAsync(request);
             ui.SetConnected(true);
@@ -406,7 +405,7 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             content.Add(part, "file", fileName);
 
             var request = new HttpRequestMessage(HttpMethod.Post, "images/upload") { Content = content };
-            if (await GetApiKeyAsync() is { } key) request.Headers.Add("X-Api-Key", key);
+            await AddHeadersAsync(request);
 
             using var response = await http.SendAsync(request);
             ui.SetConnected(true);
@@ -569,9 +568,18 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path)
     {
         var request = new HttpRequestMessage(method, path);
+        await AddHeadersAsync(request);
+        return await http.SendAsync(request);
+    }
+
+    /// <summary>Attach the per-device API key (when set) and the chosen UI language (as X-Ui-Lang) to a
+    /// request, so the server localizes its error/validation messages to match the panel's language.</summary>
+    private async Task AddHeadersAsync(HttpRequestMessage request)
+    {
         if (await GetApiKeyAsync() is { } key)
             request.Headers.Add("X-Api-Key", key);
-        return await http.SendAsync(request);
+        if (await GetLanguageAsync() is { } lang)
+            request.Headers.Add("X-Ui-Lang", lang);
     }
 
     /// <summary>GET with silent failure — pollers use this so a hiccup only flips the connection dot.</summary>

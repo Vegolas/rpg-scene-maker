@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using RpgSceneMaker.Api.Contracts;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -26,6 +28,10 @@ public partial class LocaleService(string directory, ILogger<LocaleService> logg
 {
     public const string DefaultCode = "en";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    // The embedded (shipped-in-assembly) string tables, loaded once per code. Backs ShippedStrings.
+    private static readonly ConcurrentDictionary<string, IReadOnlyDictionary<string, string>> ShippedCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     // A BCP-47-ish code: a bare file name, so Path.Combine can never be talked into traversing directories.
     [GeneratedRegex(@"^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$")]
@@ -118,6 +124,40 @@ public partial class LocaleService(string directory, ILogger<LocaleService> logg
             Pick(disk?.EnglishName, embedded.EnglishName, code),
             strings);
     }
+
+    /// <summary>
+    /// Localize a server-side error <paramref name="code"/> into <paramref name="lang"/>, falling back per
+    /// key to English (the same merged embedded+disk table the panel gets) and finally to the code itself,
+    /// and filling its <c>{0}</c>/<c>{1}</c>… placeholders from <paramref name="args"/> (a <see cref="CtxRef"/>
+    /// arg is localized one level first). Used by the error middleware to render ProblemDetails title/detail.
+    /// </summary>
+    public string Localize(string? lang, string code, IReadOnlyList<object?>? args = null)
+    {
+        var target = string.IsNullOrWhiteSpace(lang) || lang.Equals(DefaultCode, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : Get(lang);
+        var english = Get(DefaultCode);
+        string? Lookup(string key) =>
+            target is not null && target.Strings.TryGetValue(key, out var t) ? t
+            : english is not null && english.Strings.TryGetValue(key, out var e) ? e
+            : null;
+        return ErrorRender.Format(Lookup, code, args);
+    }
+
+    /// <summary>The embedded (shipped-in-assembly) string table for a language code, or empty if none ships.
+    /// Cached. Used as the English template source for <see cref="ErrorMessages"/> (Exception.Message), which
+    /// must not depend on the on-disk locales dir.</summary>
+    public static IReadOnlyDictionary<string, string> ShippedStrings(string code) =>
+        ShippedCache.GetOrAdd(code, static c =>
+        {
+            var resource = EmbeddedResources()
+                .FirstOrDefault(r => r.Code.Equals(c, StringComparison.OrdinalIgnoreCase)).Resource;
+            if (resource is null) return new Dictionary<string, string>();
+            using var stream = typeof(LocaleService).Assembly.GetManifestResourceStream(resource);
+            if (stream is null) return new Dictionary<string, string>();
+            return JsonSerializer.Deserialize<LocaleFile>(stream, Json)?.Strings
+                   ?? new Dictionary<string, string>();
+        });
 
     // Prefer the on-disk value, else the embedded value, else the code.
     private static string Pick(string? disk, string? embedded, string code) =>

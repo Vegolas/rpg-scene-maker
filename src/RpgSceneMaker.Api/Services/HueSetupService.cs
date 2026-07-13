@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -73,7 +74,7 @@ public class HueSetupService(HttpClient http, SettingsStore settings)
         var ip = bridgeIp ?? settings.Current.Hue.BridgeIp;
         var key = appKey ?? settings.Current.Hue.AppKey;
         if (string.IsNullOrWhiteSpace(ip) || string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Pass ?bridgeIp=...&appKey=... or save the bridge IP and app key on the Settings page first.");
+            throw new ValidationException("error.setup.hueParams");
 
         var body = await WrapNetworkErrors(
             () => http.GetStringAsync($"http://{ip}/api/{key}/lights"),

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using RpgSceneMaker.Api.Data;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -71,9 +72,7 @@ public class HueLightService(HttpClient http, SettingsStore settings) : ILightSe
     private void EnsureConfigured()
     {
         if (string.IsNullOrWhiteSpace(Opts.BridgeIp) || string.IsNullOrWhiteSpace(Opts.AppKey))
-            throw new InvalidOperationException(
-                "Philips Hue is not configured. Set the bridge IP and app key on the Settings page (or PUT /setup/config). " +
-                "Use GET /setup/hue/discover to find the bridge and GET /setup/hue/register to create an app key (see README).");
+            throw new NotConfiguredException("error.notConfigured.hue");
     }
 
     private string BaseUrl => $"http://{Opts.BridgeIp}/api/{Opts.AppKey}";

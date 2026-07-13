@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Validation;
@@ -12,16 +13,16 @@ public static class LightFxValidation
     public static void Validate(LightFx fx)
     {
         if (string.IsNullOrWhiteSpace(fx.Id))
-            throw new ArgumentException("Light FX id is required.");
+            throw new ValidationException("error.common.idRequired");
         if (!LightValidation.IsSlug(fx.Id))
-            throw new ArgumentException("Light FX id may only contain letters, digits, '-' and '_'.");
+            throw new ValidationException("error.common.idSlug");
         if (ReservedIds.Contains(fx.Id, StringComparer.OrdinalIgnoreCase))
-            throw new ArgumentException("Light FX id 'list', 'test' and 'stop' are reserved (they'd shadow the /lightfx routes).");
+            throw new ValidationException("error.lightfx.reservedId");
         if (string.IsNullOrWhiteSpace(fx.Name))
-            throw new ArgumentException("Light FX name is required.");
+            throw new ValidationException("error.common.nameRequired");
 
         fx.Keyframes ??= [];
         // Reuse the shared "custom"-effect keyframe rules; returns the cycle to persist (null when not looping).
-        fx.CycleMs = LightValidation.ValidateKeyframes(fx.Keyframes, fx.Loop, fx.CycleMs, $"Light FX '{fx.Id}'");
+        fx.CycleMs = LightValidation.ValidateKeyframes(fx.Keyframes, fx.Loop, fx.CycleMs, CtxRef.LightFx(fx.Id));
     }
 }

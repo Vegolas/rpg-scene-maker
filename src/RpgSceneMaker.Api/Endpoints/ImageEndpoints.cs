@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.Features;
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Services;
 
 namespace RpgSceneMaker.Api.Endpoints;
@@ -21,17 +22,17 @@ public static class ImageEndpoints
                 cap.MaxRequestBodySize = MaxUploadBytes;
 
             if (!request.HasFormContentType)
-                throw new ArgumentException("Upload must be multipart/form-data with a 'file' field.");
+                throw new ValidationException("error.upload.multipartRequired");
 
             var form = await request.ReadFormAsync();
             var file = form.Files["file"] ?? form.Files.FirstOrDefault();
             if (file is null || file.Length == 0)
-                throw new ArgumentException("No file uploaded (expected a 'file' field).");
+                throw new ValidationException("error.upload.noFile");
 
             var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!ImageFileStorage.AllowedExtensions.Contains(ext))
-                throw new ArgumentException(
-                    $"Unsupported file type '{ext}'. Allowed: {string.Join(", ", ImageFileStorage.AllowedExtensions)}.");
+                throw new ValidationException("error.upload.unsupportedType",
+                    ext, string.Join(", ", ImageFileStorage.AllowedExtensions));
 
             // A short random lowercase-hex token (matches the [a-z0-9-] stored-name guard); no name to slugify.
             var id = Guid.NewGuid().ToString("N")[..12];

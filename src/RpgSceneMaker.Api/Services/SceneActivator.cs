@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
@@ -45,8 +46,7 @@ public class SceneActivator(
         if (!string.IsNullOrWhiteSpace(music.PlayId))
         {
             if (!SpotifyClient.IsSpotifyUri(music.PlayId))
-                throw new ArgumentException(
-                    $"Music id is not a Spotify link/URI: '{music.PlayId}' — Kenku support was removed; use a spotify: URI or open.spotify.com link.");
+                throw new ValidationException("error.music.notSpotifyUri", music.PlayId);
 
             // Play first: it wakes the preferred device, while volume on an idle device can 404.
             await spotify.PlayAsync(music.PlayId);
@@ -96,7 +96,8 @@ public class SceneActivator(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Scene activation: {Part} failed", part);
-            return $"error: {ex.Message}";
+            // Fold into a stable, displayable code; the panel renders it in its language (see UiExtensions).
+            return "error:" + ErrorClassifier.DisplayCodeFor(ex);
         }
     }
 }

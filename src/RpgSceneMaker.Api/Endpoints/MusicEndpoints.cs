@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Services;
 
 namespace RpgSceneMaker.Api.Endpoints;
@@ -12,8 +13,7 @@ public static class MusicEndpoints
         music.MapMethods("/play", EndpointHelpers.GetOrPost, async (string id, SpotifyClient spotify) =>
         {
             if (!SpotifyClient.IsSpotifyUri(id))
-                throw new ArgumentException(
-                    $"Music id is not a Spotify link/URI: '{id}' — Kenku support was removed; use a spotify: URI or open.spotify.com link.");
+                throw new ValidationException("error.music.notSpotifyUri", id);
             await spotify.PlayAsync(id);
             return new { playing = id };
         });
@@ -45,7 +45,7 @@ public static class MusicEndpoints
         music.MapMethods("/repeat", EndpointHelpers.GetOrPost, async (string mode, SpotifyClient spotify) =>
         {
             if (mode is not ("off" or "track" or "playlist"))
-                throw new ArgumentException("mode must be one of: off, track, playlist");
+                throw new ValidationException("error.music.repeatMode");
             await spotify.SetRepeatAsync(mode);
             return new { repeat = mode };
         });
@@ -55,7 +55,7 @@ public static class MusicEndpoints
         music.MapGet("/search", (string q, SpotifyClient spotify) =>
         {
             if (string.IsNullOrWhiteSpace(q))
-                throw new ArgumentException("Provide a search term with ?q=");
+                throw new ValidationException("error.music.searchTerm");
             return spotify.SearchTracksAsync(q);
         });
         music.MapGet("/state", (SpotifyClient spotify) => spotify.GetStateAsync());

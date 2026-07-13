@@ -47,4 +47,52 @@ public class MiddlewareTests
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Validation_problem_carries_a_stable_machine_error_code()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.PutAsJsonAsync("/scenes/bad", new { name = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        // The client / Stream Deck / MCP can branch on this code regardless of the message language.
+        Assert.Equal("error.common.nameRequired", problem.GetProperty("code").GetString());
+        // No header -> English title/detail (unchanged from before this feature).
+        Assert.Equal("Invalid request", problem.GetProperty("title").GetString());
+        Assert.Equal("Name is required.", problem.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task X_Ui_Lang_localizes_the_title_and_detail()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Ui-Lang", "pl");
+
+        var response = await client.PutAsJsonAsync("/scenes/bad", new { name = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        // Same stable code, but the human-facing strings are now Polish.
+        Assert.Equal("error.common.nameRequired", problem.GetProperty("code").GetString());
+        Assert.Equal("Nieprawidłowe żądanie", problem.GetProperty("title").GetString());
+        Assert.Equal("Nazwa jest wymagana.", problem.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task Unknown_X_Ui_Lang_falls_back_to_english()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Ui-Lang", "xx");
+
+        var response = await client.PutAsJsonAsync("/scenes/bad", new { name = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Name is required.", problem.GetProperty("detail").GetString());
+    }
 }

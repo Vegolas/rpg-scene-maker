@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using RpgSceneMaker.Api.Contracts;
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Services;
 using RpgSceneMaker.Api.Validation;
 
@@ -25,9 +26,9 @@ public static class SetupEndpoints
         setup.MapPut("/config", (LightingConfigDto config, SettingsStore store) =>
         {
             if (config.Hue is null || config.Tuya is null || config.Provider is null)
-                throw new ArgumentException("Provider, Hue and Tuya sections are all required.");
+                throw new ValidationException("error.setup.sectionsRequired");
             if (config.Provider.ToLowerInvariant() is not ("tuya" or "hue"))
-                throw new ArgumentException("Provider must be 'tuya' or 'hue'.");
+                throw new ValidationException("error.setup.provider");
             LightConfigValidation.Validate(config.Lights);
             // Persist the default light with its colour normalised to canonical #RRGGBB.
             config = config with { DefaultLight = LightConfigValidation.ValidateDefault(config.DefaultLight) };
@@ -56,7 +57,7 @@ public static class SetupEndpoints
         setup.MapPut("/spotify/config", (SpotifyConfigInput config, SpotifyStore store) =>
         {
             if (string.IsNullOrWhiteSpace(config.ClientId))
-                throw new ArgumentException("A Spotify Client ID is required.");
+                throw new ValidationException("error.setup.clientIdRequired");
             store.SaveConfig(config.ClientId.Trim());
             if (config.PreferredDeviceId is not null || config.PreferredDeviceName is not null)
                 store.SaveDevice(config.PreferredDeviceId ?? "", config.PreferredDeviceName ?? "");
@@ -68,7 +69,7 @@ public static class SetupEndpoints
         {
             var config = store.Current;
             if (!config.IsConfigured)
-                throw new InvalidOperationException("Set your Spotify Client ID in Settings before connecting.");
+                throw new NotConfiguredException("error.notConfigured.spotifyClientId");
 
             // PKCE: random verifier, S256 challenge, random state.
             var verifier = Base64Url(RandomNumberGenerator.GetBytes(64));
@@ -95,9 +96,9 @@ public static class SetupEndpoints
             if (!string.IsNullOrEmpty(error))
                 return Results.Redirect($"/settings?spotify=error:{Uri.EscapeDataString(error)}");
             if (string.IsNullOrEmpty(state) || auth.Take(state) is not { } entry)
-                throw new ArgumentException("Login expired or invalid — try connecting again.");
+                throw new ValidationException("error.setup.loginExpired");
             if (string.IsNullOrEmpty(code))
-                throw new ArgumentException("Spotify did not return an authorization code.");
+                throw new ValidationException("error.setup.noAuthCode");
 
             await spotify.ExchangeCodeAsync(code, entry.RedirectUri, entry.Verifier);
             return Results.Redirect("/settings?spotify=connected");

@@ -1,6 +1,7 @@
 using System.Globalization;
 using com.clusterrr.TuyaNet;
 using RpgSceneMaker.Api.Data;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -101,9 +102,7 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
     private TuyaDevice CreateDevice()
     {
         if (!Opts.IsConfigured)
-            throw new InvalidOperationException(
-                "Tuya bulb is not configured. Set the IP, device id and local key on the Settings page (or PUT /setup/config). " +
-                "Use GET /setup/scan to find the IP and GET /setup/local-keys to get the local key (see README).");
+            throw new NotConfiguredException("error.notConfigured.tuya");
 
         var version = Opts.ProtocolVersion.Trim() == "3.1" ? TuyaProtocolVersion.V31 : TuyaProtocolVersion.V33;
         return new TuyaDevice(ip: Opts.Ip, localKey: Opts.LocalKey, deviceId: Opts.DeviceId, protocolVersion: version);

@@ -535,7 +535,7 @@ else
                 }
                 else
                 {
-                    Ui.ReportError(L.Format("sceneEditor.toast.savedPartial", result.ProblemSummary()));
+                    Ui.ReportError(L.Format("sceneEditor.toast.savedPartial", result.ProblemSummary(k => L[k])));
                 }
                 // On create, keep editing the freshly-made scene rather than re-creating it.
                 if (_isNew)

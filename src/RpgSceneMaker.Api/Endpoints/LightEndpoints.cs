@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Services;
 
 namespace RpgSceneMaker.Api.Endpoints;
@@ -58,7 +59,7 @@ public static class LightEndpoints
         lights.MapMethods("/default", EndpointHelpers.GetOrPost, async (ILightService bulb, EffectEngine effects, SettingsStore settings) =>
         {
             var def = settings.Current.DefaultLight
-                ?? throw new ArgumentException("No default lighting is set — configure it on the Settings page first.");
+                ?? throw new ValidationException("error.light.noDefault");
             effects.StopAll();
             await bulb.ApplyAsync(def);
             return new { light = "default" };

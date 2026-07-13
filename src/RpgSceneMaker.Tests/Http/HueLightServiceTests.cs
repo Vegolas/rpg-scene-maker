@@ -133,6 +133,6 @@ public class HueLightServiceTests
         var settings = new SettingsStore(db);   // nothing saved -> empty Hue config
         var (svc, _) = Build(settings);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SetColorAsync("#00FF00"));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => svc.SetColorAsync("#00FF00"));
     }
 }

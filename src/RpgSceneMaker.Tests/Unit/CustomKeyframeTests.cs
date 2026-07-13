@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 using RpgSceneMaker.Api.Services;
 using RpgSceneMaker.Api.Validation;
@@ -103,7 +104,7 @@ public class CustomKeyframeTests
     public void Strobe_validates_and_normalizes_colors()
     {
         var fx = Custom(loop: true, cycleMs: 400, White(0), Off(100));
-        LightValidation.ValidateEffect(fx, "test");
+        LightValidation.ValidateEffect(fx, CtxRef.Light("test"));
         Assert.Equal("#FFFFFF", fx.Keyframes[0].Color);
     }
 
@@ -111,39 +112,39 @@ public class CustomKeyframeTests
     public void NonLoop_drops_a_stale_cycle_length()
     {
         var fx = Custom(loop: false, cycleMs: 1234, White(0), Off(100));
-        LightValidation.ValidateEffect(fx, "test");
+        LightValidation.ValidateEffect(fx, CtxRef.Light("test"));
         Assert.Null(fx.CycleMs);
     }
 
     [Fact]
     public void Rejects_empty_descending_and_too_close_keyframes()
     {
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(Custom(), "test"));
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(Custom(kfs: [White(200), Off(100)]), "test"));
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(Custom(kfs: [White(0), Off(50)]), "test"));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(Custom(), CtxRef.Light("test")));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(Custom(kfs: [White(200), Off(100)]), CtxRef.Light("test")));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(Custom(kfs: [White(0), Off(50)]), CtxRef.Light("test")));
     }
 
     [Fact]
     public void Rejects_a_keyframe_that_sets_nothing()
     {
         var fx = Custom(kfs: [new LightKeyframe { AtMs = 0 }]);
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(fx, "test"));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(fx, CtxRef.Light("test")));
     }
 
     [Fact]
     public void Rejects_a_keyframe_past_the_ten_minute_cap()
     {
         var fx = Custom(kfs: [White(600_001)]);
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(fx, "test"));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(fx, CtxRef.Light("test")));
     }
 
     [Fact]
     public void Loop_needs_a_cycle_at_least_100ms_past_the_last_keyframe()
     {
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(
-            Custom(loop: true, cycleMs: null, White(0), Off(100)), "test"));
-        Assert.Throws<ArgumentException>(() => LightValidation.ValidateEffect(
-            Custom(loop: true, cycleMs: 199, White(0), Off(100)), "test"));
-        LightValidation.ValidateEffect(Custom(loop: true, cycleMs: 200, White(0), Off(100)), "test");
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(
+            Custom(loop: true, cycleMs: null, White(0), Off(100)), CtxRef.Light("test")));
+        Assert.ThrowsAny<ArgumentException>(() => LightValidation.ValidateEffect(
+            Custom(loop: true, cycleMs: 199, White(0), Off(100)), CtxRef.Light("test")));
+        LightValidation.ValidateEffect(Custom(loop: true, cycleMs: 200, White(0), Off(100)), CtxRef.Light("test"));
     }
 }

@@ -20,7 +20,7 @@ public class EventValidationTests
     {
         var evt = Valid();
         evt.Id = id;
-        Assert.Throws<ArgumentException>(() => EventValidation.Validate(evt));
+        Assert.ThrowsAny<ArgumentException>(() => EventValidation.Validate(evt));
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public class EventValidationTests
     {
         var evt = Valid();
         evt.Name = "  ";
-        Assert.Throws<ArgumentException>(() => EventValidation.Validate(evt));
+        Assert.ThrowsAny<ArgumentException>(() => EventValidation.Validate(evt));
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class EventValidationTests
     {
         var evt = Valid();
         evt.Flash = new EventFlash { Color = "not-a-colour", Brightness = 100, DurationMs = 200 };
-        Assert.Throws<ArgumentException>(() => EventValidation.Validate(evt));
+        Assert.ThrowsAny<ArgumentException>(() => EventValidation.Validate(evt));
     }
 
     [Theory]
@@ -55,7 +55,7 @@ public class EventValidationTests
     {
         var evt = Valid();
         evt.Flash = new EventFlash { Color = "#FFFFFF", Brightness = brightness, DurationMs = 200 };
-        Assert.Throws<ArgumentException>(() => EventValidation.Validate(evt));
+        Assert.ThrowsAny<ArgumentException>(() => EventValidation.Validate(evt));
     }
 
     [Theory]
@@ -65,7 +65,7 @@ public class EventValidationTests
     {
         var evt = Valid();
         evt.Flash = new EventFlash { Color = "#FFFFFF", Brightness = 100, DurationMs = durationMs };
-        Assert.Throws<ArgumentException>(() => EventValidation.Validate(evt));
+        Assert.ThrowsAny<ArgumentException>(() => EventValidation.Validate(evt));
     }
 
     [Fact]

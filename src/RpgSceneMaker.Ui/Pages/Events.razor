@@ -132,7 +132,7 @@ else
             if (result.FullySucceeded)
                 Ui.ReportOk(L.Format("events.toast.fired", id));
             else
-                Ui.ReportError(L.Format("events.toast.partial", result.ProblemSummary()));
+                Ui.ReportError(L.Format("events.toast.partial", result.ProblemSummary(k => L[k])));
             await PollAsync();
         }
         finally

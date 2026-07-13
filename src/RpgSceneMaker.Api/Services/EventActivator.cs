@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
@@ -97,7 +98,8 @@ public class EventActivator(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Event trigger: {Part} failed", part);
-            return $"error: {ex.Message}";
+            // Fold into a stable, displayable code; the panel renders it in its language (see UiExtensions).
+            return "error:" + ErrorClassifier.DisplayCodeFor(ex);
         }
     }
 }

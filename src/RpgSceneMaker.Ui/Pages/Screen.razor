@@ -189,14 +189,14 @@ else
                     if (ar is null) return;
                     _activeSceneId = tile.Ref;
                     if (ar.FullySucceeded) Ui.ReportOk(L.Format("screen.toast.sceneLive", tile.Ref));
-                    else Ui.ReportError(L.Format("screen.toast.partialApplied", ar.ProblemSummary()));
+                    else Ui.ReportError(L.Format("screen.toast.partialApplied", ar.ProblemSummary(k => L[k])));
                     break;
                 case "event":
                     if (_events?.Any(e => Eq(e.Id, tile.Ref)) != true) { WarnGone(tile.Kind); return; }
                     var er = await Api.TriggerEventAsync(tile.Ref);
                     if (er is null) return;
                     if (er.FullySucceeded) Ui.ReportOk(L.Format("screen.toast.eventFired", tile.Ref));
-                    else Ui.ReportError(L.Format("screen.toast.partialFired", er.ProblemSummary()));
+                    else Ui.ReportError(L.Format("screen.toast.partialFired", er.ProblemSummary(k => L[k])));
                     break;
                 case "sound":
                     var snd = _sounds?.FirstOrDefault(s => Eq(s.Id, tile.Ref));

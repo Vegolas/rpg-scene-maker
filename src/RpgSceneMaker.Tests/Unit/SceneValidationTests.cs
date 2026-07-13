@@ -21,7 +21,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Id = id;
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Theory]
@@ -40,7 +40,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Name = "  ";
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Theory]
@@ -50,7 +50,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Light = new LightSettings { Brightness = brightness };
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Theory]
@@ -60,7 +60,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Light = new LightSettings { Temperature = temperature };
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Lights = [new SceneLight { LightKey = "not a slug" }];
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Lights = [new SceneLight { LightKey = "lamp", Effect = new LightEffect { Type = "sparkle" } }];
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Theory]
@@ -117,7 +117,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Lights = [new SceneLight { LightKey = "lamp", Effect = new LightEffect { Type = "glow", Speed = speed, Intensity = 5 } }];
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Theory]
@@ -127,7 +127,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Lights = [new SceneLight { LightKey = "lamp", Effect = new LightEffect { Type = "glow", Speed = 5, Intensity = intensity } }];
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class SceneValidationTests
             LightKey = "lamp",
             Effect = new LightEffect { Type = "drift", Speed = 5, Intensity = 5, Colors = ["#ff0000"] },
         }];
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Music = new MusicSettings { Volume = volume };
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class SceneValidationTests
     {
         var scene = Valid();
         scene.Music = new MusicSettings { PlayId = "http://kenku/soundboard" };
-        Assert.Throws<ArgumentException>(() => SceneValidation.Validate(scene));
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
     }
 
     [Fact]

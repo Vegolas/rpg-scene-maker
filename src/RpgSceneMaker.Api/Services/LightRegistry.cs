@@ -1,4 +1,5 @@
 using RpgSceneMaker.Api.Data;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -17,7 +18,7 @@ public class LightRegistry(IServiceProvider services, SettingsStore settings)
     public ResolvedLight Resolve(string key)
     {
         var light = settings.Current.Lights.FirstOrDefault(l => l.Key.Equals(key, StringComparison.OrdinalIgnoreCase))
-            ?? throw new ArgumentException($"Unknown light '{key}'. See GET /lights/list.");
+            ?? throw new ValidationException("error.light.unknown", key);
 
         return light.Provider.Equals("hue", StringComparison.OrdinalIgnoreCase)
             ? new ResolvedLight(services.GetRequiredService<HueLightService>(), light.HueId, IsHue: true)

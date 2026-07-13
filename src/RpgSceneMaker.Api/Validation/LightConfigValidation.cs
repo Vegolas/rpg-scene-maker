@@ -1,4 +1,5 @@
 using RpgSceneMaker.Api.Contracts;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Validation;
 
@@ -12,13 +13,13 @@ public static class LightConfigValidation
         foreach (var l in lights)
         {
             if (string.IsNullOrWhiteSpace(l.Key) || !LightValidation.IsSlug(l.Key))
-                throw new ArgumentException($"Light key '{l.Key}' must be a non-empty slug ([a-z0-9-_]).");
+                throw new ValidationException("error.lightConfig.keySlug", l.Key);
             if (!seen.Add(l.Key))
-                throw new ArgumentException($"Duplicate light key '{l.Key}'. Keys must be unique (case-insensitive).");
+                throw new ValidationException("error.lightConfig.duplicateKey", l.Key);
             if (l.Provider?.ToLowerInvariant() is not ("tuya" or "hue"))
-                throw new ArgumentException($"Light '{l.Key}' provider must be 'tuya' or 'hue'.");
+                throw new ValidationException("error.lightConfig.provider", l.Key);
             if (l.Provider.Equals("hue", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(l.HueId))
-                throw new ArgumentException($"Hue light '{l.Key}' needs a HueId.");
+                throw new ValidationException("error.lightConfig.hueId", l.Key);
         }
     }
 
@@ -27,9 +28,9 @@ public static class LightConfigValidation
     {
         if (d is null) return null;
         if (d.Brightness is < 0 or > 100)
-            throw new ArgumentException("Default light brightness must be between 0 and 100.");
+            throw new ValidationException("error.lightConfig.defaultBrightness");
         if (d.Temperature is < 0 or > 100)
-            throw new ArgumentException("Default light temperature must be between 0 and 100.");
+            throw new ValidationException("error.lightConfig.defaultTemperature");
         return d.Color is null ? d : d with { Color = LightValidation.NormalizeHex(d.Color) };
     }
 }

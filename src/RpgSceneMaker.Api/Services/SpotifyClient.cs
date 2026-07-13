@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -38,7 +39,7 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
     {
         var config = store.Current;
         if (!config.IsConnected)
-            throw new InvalidOperationException("Spotify is not connected — open Settings and connect Spotify first.");
+            throw new NotConfiguredException("error.notConfigured.spotifyConnect");
 
         if (IsFresh()) return cache.AccessToken!;
 
@@ -68,7 +69,7 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
     {
         var config = store.Current;
         if (!config.IsConfigured)
-            throw new InvalidOperationException("Spotify Client ID is not set — open Settings and enter it first.");
+            throw new NotConfiguredException("error.notConfigured.spotifyClientIdSet");
 
         using var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -114,7 +115,7 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
     public async Task PlayAsync(string uri)
     {
         if (!TryParseUri(uri, out var type, out var id))
-            throw new ArgumentException($"Not a recognized Spotify track/playlist/album/artist URI or link: {uri}");
+            throw new ValidationException("error.music.badUri", uri);
         var canonical = $"spotify:{type}:{id}";
 
         object body = type == "track"
@@ -315,7 +316,7 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
     {
         if (TryParseUri(id, out var type, out var spotifyId))
             return $"spotify:{type}:{spotifyId}";
-        throw new ArgumentException($"Not a recognized Spotify track/playlist/album/artist URI or link: {id}");
+        throw new ValidationException("error.music.badUri", id);
     }
 
     /// <summary>True for both <c>spotify:{type}:{id}</c> and <c>https://open.spotify.com/{type}/{id}</c>.</summary>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Services;
 using RpgSceneMaker.Api.Services.Ai.Providers;
 
@@ -70,9 +71,9 @@ public sealed class AssistantService(
     public bool TrySend(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Message text is required.");
+            throw new ValidationException("error.assistant.messageRequired");
         if (!store.Current.IsConfigured)
-            throw new InvalidOperationException("AI provider API key is not set — add it on the Settings page.");
+            throw new NotConfiguredException("error.notConfigured.assistantKey");
 
         CancellationToken token;
         lock (_lock)

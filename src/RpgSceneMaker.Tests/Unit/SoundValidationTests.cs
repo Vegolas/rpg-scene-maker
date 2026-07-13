@@ -18,7 +18,7 @@ public class SoundValidationTests
     {
         var s = Valid();
         s.Name = name;
-        Assert.Throws<ArgumentException>(() => SoundValidation.Validate(s));
+        Assert.ThrowsAny<ArgumentException>(() => SoundValidation.Validate(s));
     }
 
     [Fact]
@@ -26,7 +26,7 @@ public class SoundValidationTests
     {
         var s = Valid();
         s.Name = new string('x', 81);
-        Assert.Throws<ArgumentException>(() => SoundValidation.Validate(s));
+        Assert.ThrowsAny<ArgumentException>(() => SoundValidation.Validate(s));
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class SoundValidationTests
     {
         var s = Valid();
         s.Category = new string('x', 41);
-        Assert.Throws<ArgumentException>(() => SoundValidation.Validate(s));
+        Assert.ThrowsAny<ArgumentException>(() => SoundValidation.Validate(s));
     }
 
     [Theory]
@@ -52,6 +52,6 @@ public class SoundValidationTests
     {
         var s = Valid();
         s.Volume = volume;
-        Assert.Throws<ArgumentException>(() => SoundValidation.Validate(s));
+        Assert.ThrowsAny<ArgumentException>(() => SoundValidation.Validate(s));
     }
 }

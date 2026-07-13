@@ -165,7 +165,7 @@ else
             }
             else
             {
-                Ui.ReportError(L.Format("scenes.toast.partial", result.ProblemSummary()));
+                Ui.ReportError(L.Format("scenes.toast.partial", result.ProblemSummary(k => L[k])));
             }
         }
         finally

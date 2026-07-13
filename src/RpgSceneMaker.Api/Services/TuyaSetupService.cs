@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using com.clusterrr.TuyaNet;
+using RpgSceneMaker.Api.Errors;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -48,6 +49,6 @@ public class TuyaSetupService
         "us-e" or "easternamerica" => TuyaApi.Region.EasternAmerica,
         "cn" or "china" => TuyaApi.Region.China,
         "in" or "india" => TuyaApi.Region.India,
-        _ => throw new ArgumentException($"Unknown region '{region}'. Use eu, eu-w, us, us-e, cn or in."),
+        _ => throw new ValidationException("error.setup.unknownRegion", region),
     };
 }
