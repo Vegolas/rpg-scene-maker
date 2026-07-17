@@ -1,0 +1,84 @@
+/* Inline scene/event/sound trigger chips. Uses Obsidian theme variables so it fits light/dark
+   and whatever theme the user runs. */
+
+.sm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.05em 0.5em;
+  margin: 0 0.1em;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 0.9em;
+  line-height: 1.5;
+  text-decoration: none;
+  vertical-align: baseline;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sm-chip:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+.sm-chip:active {
+  transform: translateY(1px);
+}
+
+.sm-chip:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.sm-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.sm-chip-art {
+  width: 1.3em;
+  height: 1.3em;
+  border-radius: 3px;
+  object-fit: cover;
+  display: block;
+}
+
+.sm-chip-label {
+  font-weight: 600;
+}
+
+/* Unknown id (not found in the server list): flag it so a typo is obvious. */
+.sm-chip-missing {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+/* Autocomplete suggestion rows. */
+.sm-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.sm-suggestion-art {
+  width: 2em;
+  height: 2em;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.sm-suggestion-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+.sm-suggestion-id {
+  color: var(--text-muted);
+  font-size: 0.8em;
+}

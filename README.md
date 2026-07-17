@@ -154,6 +154,15 @@ For **Claude Desktop**, add it to your `claude_desktop_config.json`:
 
 (Drop the `headers` block when no panel API key is configured.) The tools cover full CRUD plus live control — activate a scene, trigger an event, test a light effect — so you can build and drive your table's mood straight from a Claude conversation.
 
+### 5. Obsidian (optional)
+
+Run scenes straight from your session notes. The [Obsidian plugin](integrations/obsidian/) turns an
+inline token like `` `sm:scene:city` `` into a clickable button — tap it while you read to switch the
+table's lights + music, without leaving the note. It autocompletes the scenes/events/sounds that exist
+on your server (with their art) and fires them in the background over the same GET endpoints. Build and
+install it from [`integrations/obsidian/`](integrations/obsidian/README.md); set your server address (and
+API key, if any) in its settings.
+
 ## Scenes
 
 Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:

@@ -1,0 +1,63 @@
+import { MarkdownPostProcessorContext, Notice, Plugin } from "obsidian";
+import { SceneMakerApi } from "./api";
+import { buildChip } from "./chip";
+import { livePreviewExtension } from "./livepreview";
+import { SceneMakerSuggest } from "./suggest";
+import { DEFAULT_SETTINGS, SceneMakerSettingTab, SceneMakerSettings } from "./settings";
+import { SmToken, parseToken, pathFor } from "./tokens";
+
+export default class SceneMakerPlugin extends Plugin {
+  settings!: SceneMakerSettings;
+  api!: SceneMakerApi;
+
+  async onload(): Promise<void> {
+    await this.loadSettings();
+    this.api = new SceneMakerApi(() => ({ baseUrl: this.settings.baseUrl, apiKey: this.settings.apiKey }));
+
+    this.addSettingTab(new SceneMakerSettingTab(this.app, this));
+
+    // Reading view: turn inline `sm:...` code spans into chips.
+    this.registerMarkdownPostProcessor((el, ctx) => this.renderReadingChips(el, ctx));
+
+    // Live Preview: same chips inline while editing.
+    this.registerEditorExtension(livePreviewExtension(this));
+
+    // Authoring: autocomplete kinds and existing scene/event/sound ids.
+    this.registerEditorSuggest(new SceneMakerSuggest(this.app, this));
+
+    this.addCommand({
+      id: "refresh-lists",
+      name: "Refresh scene / event / sound lists",
+      callback: () => {
+        this.api.clearCache();
+        new Notice("RPG Scene Maker: lists refreshed.");
+      },
+    });
+  }
+
+  private renderReadingChips(el: HTMLElement, _ctx: MarkdownPostProcessorContext): void {
+    el.findAll("code").forEach((code) => {
+      // Only inline code — never fenced code blocks (which render as <code> inside <pre>).
+      if (code.parentElement?.tagName === "PRE") return;
+      const token = parseToken(code.textContent);
+      if (!token) return;
+      code.replaceWith(buildChip(this, token));
+    });
+  }
+
+  /** Fire a token's command and show a toast with the result. */
+  async fire(token: SmToken): Promise<void> {
+    const name = token.label ?? token.arg ?? token.kind;
+    const res = await this.api.fire(pathFor(token));
+    if (res.ok) new Notice(`▶ ${name}`);
+    else new Notice(`⚠ ${name}: ${res.message ?? "failed"}`);
+  }
+
+  async loadSettings(): Promise<void> {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
+  }
+}
