@@ -31,7 +31,7 @@ public class LightServiceApplyTests
 
         public Task<bool> ToggleAsync() => throw new NotSupportedException();
         public Task SetBrightnessAsync(int percent, string? targetId = null, int? transitionMs = null) => throw new NotSupportedException();
-        public Task<object> GetStatusAsync() => throw new NotSupportedException();
+        public Task<LightStatus> GetStatusAsync() => throw new NotSupportedException();
     }
 
     private static async Task<List<string>> ApplyAsync(LightSettings light)

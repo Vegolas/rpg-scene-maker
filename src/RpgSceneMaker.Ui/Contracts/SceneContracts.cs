@@ -11,5 +11,7 @@ public record EffectDto(string Type, int Speed, int Intensity, List<string>? Col
 public record KeyframeDto(int AtMs, bool? Power, string? Color, int? Brightness, int? Temperature, int? TransitionMs);
 public record MusicDto(string? PlayId, double? Volume, bool Pause);
 public record RegisteredLightInfo(string Key, string Name, string Provider);
+// Normalized live bulb state from GET /lights/status (Raw provider payload omitted — the panel only reflects the normalized fields).
+public record LightStatusDto(bool? On, string? Mode, int? Brightness, string? Color, int? Temperature);
 public record ActivationDto(string Scene, string Light, string Music, string SoundEffects, bool FullySucceeded);
 public record ActiveSceneDto(string? Id, DateTimeOffset? ActivatedAt);

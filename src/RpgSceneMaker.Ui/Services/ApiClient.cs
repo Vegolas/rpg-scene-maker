@@ -131,6 +131,10 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     public async Task<List<RegisteredLightInfo>> GetRegisteredLightsAsync() =>
         await GetAsync<List<RegisteredLightInfo>>("lights/list") ?? [];
 
+    /// <summary>Live bulb state (on/off, mode, brightness, colour/temperature) the Lights tab reflects; null
+    /// (silent) when offline or the light provider isn't configured/reachable, like the other pollers.</summary>
+    public Task<LightStatusDto?> GetLightsStatusAsync() => GetAsync<LightStatusDto?>("lights/status");
+
     /// <summary>Restore the configured default lighting (the header's reset button). 400s if none is set.
     /// The success toast text is passed by the caller so it can be localized (ApiClient has no localizer).</summary>
     public Task<bool> ResetLightsToDefaultAsync(string? okMessage = null) => CommandAsync("lights/default", okMessage);
