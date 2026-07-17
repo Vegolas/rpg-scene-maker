@@ -189,7 +189,7 @@ public sealed class AssistantTools(AiToolService tools)
                 new() { ["query"] = Prop("string", "Search terms, e.g. a song title and/or artist.") },
                 required: ["query"])),
         NoArgs("reset_lights", "Reset all lights to the configured default lighting state (the panel's reset-lights button). Errors if no default lighting has been set on the Settings page."),
-        NoArgs("get_lights_status", "Get the light provider's raw current state (Tuya/Hue-specific), for diagnostics. Errors if the light is unreachable."),
+        NoArgs("get_lights_status", "Get the live bulb state: normalized on/off, mode (colour/white), brightness, colour (RRGGBB hex) and white temperature, plus the raw Tuya/Hue payload for diagnostics. Errors if the light is unreachable."),
     ];
 
     // ---- Dispatch ----

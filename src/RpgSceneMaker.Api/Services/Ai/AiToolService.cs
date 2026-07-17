@@ -322,8 +322,9 @@ public sealed class AiToolService(
         await bulb.ApplyAsync(def);
     }
 
-    // Mirrors GET /lights/status: the light provider's raw current state (Tuya/Hue-specific), for diagnostics.
-    public async Task<object> GetLightsStatusAsync()
+    // Mirrors GET /lights/status: the normalized live bulb state (on/off, mode, brightness, colour/
+    // temperature) plus the raw Tuya/Hue payload for diagnostics.
+    public async Task<LightStatus> GetLightsStatusAsync()
     {
         using var scope = scopeFactory.CreateScope();
         var bulb = scope.ServiceProvider.GetRequiredService<ILightService>();

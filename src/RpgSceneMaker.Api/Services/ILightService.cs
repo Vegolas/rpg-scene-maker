@@ -21,8 +21,9 @@ public interface ILightService
     /// <summary>Set brightness (0-100) without changing mode or hue.</summary>
     Task SetBrightnessAsync(int percent, string? targetId = null, int? transitionMs = null);
 
-    /// <summary>Raw provider-specific state, for diagnostics.</summary>
-    Task<object> GetStatusAsync();
+    /// <summary>A normalized snapshot of the live bulb state (on/off, mode, brightness, colour/temperature),
+    /// plus the raw provider payload for diagnostics.</summary>
+    Task<LightStatus> GetStatusAsync();
 
     /// <summary>Apply a scene's light settings.</summary>
     async Task ApplyAsync(LightSettings light)

@@ -172,8 +172,8 @@ public sealed class LibraryMcpTools(AiToolService tools)
     [McpServerTool(Name = "reset_lights"), Description("Reset all lights to the configured default lighting state (the panel's reset-lights button). Throws if no default lighting has been set on the Settings page.")]
     public Task ResetLights() => tools.ResetLightsAsync();
 
-    [McpServerTool(Name = "get_lights_status"), Description("Get the light provider's raw current state (Tuya/Hue-specific), for diagnostics. Throws if the light is unreachable.")]
-    public Task<object> GetLightsStatus() => tools.GetLightsStatusAsync();
+    [McpServerTool(Name = "get_lights_status"), Description("Get the live bulb state: normalized on/off, mode (colour/white), brightness, colour (RRGGBB hex) and white temperature, plus the raw Tuya/Hue payload for diagnostics. Throws if the light is unreachable.")]
+    public Task<LightStatus> GetLightsStatus() => tools.GetLightsStatusAsync();
 }
 
 /// <summary>Spotify music transport + playback state. Requires Spotify to be connected (Settings) with an active device.</summary>

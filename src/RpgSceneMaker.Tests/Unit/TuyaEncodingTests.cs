@@ -79,4 +79,22 @@ public class TuyaEncodingTests
         using var db = new SqliteTestDb();
         Assert.Equal(expected, Service(db, "v1").ScaleBrightness(percent));
     }
+
+    // UnscaleBrightness (used by /lights/status) is the inverse of ScaleBrightness — reading back a raw
+    // DP the panel reflects must land on the percent that produced it.
+    [Theory]
+    [InlineData("v2", 1)]
+    [InlineData("v2", 50)]
+    [InlineData("v2", 80)]
+    [InlineData("v2", 100)]
+    [InlineData("v1", 1)]
+    [InlineData("v1", 50)]
+    [InlineData("v1", 80)]
+    [InlineData("v1", 100)]
+    public void Unscale_brightness_inverts_scale(string profile, int percent)
+    {
+        using var db = new SqliteTestDb();
+        var svc = Service(db, profile);
+        Assert.Equal(percent, svc.UnscaleBrightness(svc.ScaleBrightness(percent)));
+    }
 }

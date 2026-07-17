@@ -2,6 +2,7 @@ using System.Globalization;
 using com.clusterrr.TuyaNet;
 using RpgSceneMaker.Api.Data;
 using RpgSceneMaker.Api.Errors;
+using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -92,11 +93,46 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
         }
     }
 
-    /// <summary>Raw data points, e.g. to figure out whether the bulb is a v1 or v2 layout.</summary>
-    public async Task<object> GetStatusAsync()
+    /// <summary>Normalized live state, decoded from the bulb's data points. The raw DP map is kept in
+    /// <see cref="LightStatus.Raw"/> (e.g. to figure out whether the bulb is a v1 or v2 layout).</summary>
+    public async Task<LightStatus> GetStatusAsync()
     {
         var dps = await QueryAsync();
-        return dps.ToDictionary(kv => kv.Key, kv => kv.Value?.ToString());
+        var raw = dps.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value?.ToString());
+
+        bool? on = dps.TryGetValue(Profile.Switch, out var sw) ? ParseBool(sw) : null;
+        var rawMode = dps.TryGetValue(Profile.Mode, out var m) ? m?.ToString() : null;
+
+        int? brightness = null;
+        string? color = null;
+        int? temperature = null;
+
+        if (rawMode == "colour" && dps.TryGetValue(Profile.Color, out var c) && c?.ToString() is { } colour)
+        {
+            var (h, s, v) = DecodeColour(colour);
+            var (r, g, b) = ColorMath.HsvToRgb(h, s, 1.0); // full value — intensity is reported separately
+            color = $"{r:x2}{g:x2}{b:x2}";
+            brightness = Math.Clamp((int)Math.Round(v * 100), 1, 100);
+        }
+        else // white (or a scene/music mode we can't model — still surface brightness/temperature)
+        {
+            if (dps.TryGetValue(Profile.Brightness, out var br) && TryToInt(br, out var rawBri))
+                brightness = UnscaleBrightness(rawBri);
+            if (dps.TryGetValue(Profile.Temperature, out var t) && TryToInt(t, out var rawTemp))
+                temperature = IsV1
+                    ? (int)Math.Round(Math.Clamp(rawTemp, 0, 255) * 100.0 / 255)
+                    : (int)Math.Round(Math.Clamp(rawTemp, 0, 1000) * 100.0 / 1000);
+        }
+
+        return new LightStatus
+        {
+            On = on,
+            Mode = color is not null ? "colour" : brightness is not null || temperature is not null ? "white" : null,
+            Brightness = brightness,
+            Color = color,
+            Temperature = temperature,
+            Raw = raw,
+        };
     }
 
     private TuyaDevice CreateDevice()
@@ -140,6 +176,13 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
             : 10 + (int)Math.Round((1000 - 10) * p / 100.0);
     }
 
+    /// <summary>Inverse of <see cref="ScaleBrightness"/>: a raw brightness DP back to a 0-100 percent.</summary>
+    internal int UnscaleBrightness(int raw)
+    {
+        var (min, max) = IsV1 ? (25, 255) : (10, 1000);
+        return Math.Clamp((int)Math.Round((raw - min) * 100.0 / (max - min)), 1, 100);
+    }
+
     // v2 colour: hhhhssssvvvv (h 0-360, s/v 0-1000, all hex)
     // v1 colour: rrggbbhhhhssvv (rgb hex + h 0-360 hex + s/v 0-255 hex)
     internal string EncodeColour(double h, double s, double v)
@@ -175,4 +218,7 @@ public class TuyaLightService(SettingsStore settings, ILogger<TuyaLightService> 
 
     private static bool ParseBool(object? value) =>
         value?.ToString()?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool TryToInt(object? value, out int result) =>
+        int.TryParse(value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
 }
