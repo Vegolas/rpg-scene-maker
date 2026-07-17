@@ -122,11 +122,11 @@ Scene Maker can hand its scenes, events and light effects to an AI — either as
 
 1. Get an API key for the provider you want: [console.anthropic.com](https://console.anthropic.com) (Anthropic), [platform.openai.com](https://platform.openai.com) (OpenAI), or [ai.google.dev](https://ai.google.dev) (Gemini). Usage runs on your own account — set a spend limit there if you like.
 2. Open the panel's **⚙ Settings → AI Assistant**, pick the **Provider**, paste that provider's key, set a **Model** (e.g. `claude-opus-4-8`, `gpt-4o`, `gemini-2.0-flash`), and tap **Save assistant settings**. The key is stored on the server and never shown again; leave the field blank on later saves to keep it while changing the provider/model.
-3. Chat from the **🤖 Assistant** tab: e.g. *"create a spooky crypt scene with dim purple lights and ambient music"* or *"add a thunder event with a white flash and my thunderclap sound"*. The assistant can list, create, edit, delete, activate and trigger scenes/events/light effects, and read your lights, sounds and Spotify playlists for context — the same tools the MCP server exposes.
+3. Chat from the **🤖 Assistant** tab: e.g. *"create a spooky crypt scene with dim purple lights and ambient music"*, *"add a thunder event with a white flash and my thunderclap sound"*, *"pause the music and turn it down"*, or *"build me a Horror screen with my crypt scene and thunder event"*. The assistant can list, create, edit, delete, activate and trigger scenes/events/screens/light effects, control Spotify playback and the soundboard live, and read your lights, sounds and Spotify playlists for context — the same tools the MCP server exposes.
 
 **MCP server (Claude Code / Claude Desktop)**
 
-The app hosts an MCP endpoint at **`/mcp`** with the same ~23 tools. Point a client at it:
+The app hosts an MCP endpoint at **`/mcp`** with the same ~43 tools. Point a client at it:
 
 ```
 claude mcp add --transport http rpg-scene-maker http://localhost:5252/mcp
@@ -241,7 +241,7 @@ Translations are plain JSON files on the server, so anyone — including an AI a
 | Setup (config) | `GET /setup/config`, `PUT /setup/config` — read/update provider + Hue/Tuya settings at runtime (persisted to the database) |
 | Setup (assistant) | `GET/PUT /setup/assistant/config` (BYOK provider + key + model; the key is never echoed back), `GET\|POST /setup/assistant/disconnect` |
 | Assistant (chat) | `POST /assistant/send`, `GET /assistant/state?rev=…`, `GET\|POST /assistant/stop`, `GET\|POST /assistant/clear` |
-| MCP | `/mcp` — Model Context Protocol server (~23 tools over scenes/events/light FX) for Claude Code / Claude Desktop |
+| MCP | `/mcp` — Model Context Protocol server (~43 tools over scenes/events/screens/light FX + music & sound control) for Claude Code / Claude Desktop |
 | Translations | `GET /i18n/list` (available languages), `GET /i18n/{code}` (one language's strings) |
 
 All command endpoints accept GET or POST; parameters go in the query string.

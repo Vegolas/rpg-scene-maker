@@ -169,21 +169,32 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 - **`SceneStore` / `SettingsStore`** — persistence (see below).
 - **`AiToolService`** ([AiToolService.cs](src/RpgSceneMaker.Api/Services/Ai/AiToolService.cs)) — the shared
   AI **tool façade** (a singleton) behind both AI surfaces (MCP + the assistant): full CRUD + live control
-  over scenes, events and Light FX, plus read-only context (`list_lights` via the registry, `list_sounds`,
-  `list_spotify_playlists`, `search_spotify_tracks`) and `reset_lights` — 23 ops total. It reuses the exact
-  HTTP paths' machinery: the `Validation/*` guards, the stores, and Scene/Event image cleanup (capture old
-  `Image`, upsert, `ImageFileStorage.Delete` on replace/delete). Because `SceneActivator`/`EventActivator`/
-  `ILightService`/`SpotifyClient` are **scoped**, every op that touches them does `using var scope =
-  scopeFactory.CreateScope()` and resolves per call (the `EventTimelineRunner`/`LightFxTester` pattern);
+  over scenes, events, **screens** and Light FX; **Spotify music transport** (`play_music`/`pause_music`/
+  `resume_music`/`next_track`/`previous_track`/`set_music_volume`/`set_music_shuffle`/`set_music_repeat`);
+  **soundboard control** (`play_sound`/`stop_sound`/`stop_all_sounds`/`update_sound`); plus read-only context
+  and state (`list_lights`, `list_sounds`, `list_spotify_playlists`, `search_spotify_tracks`, `reset_lights`,
+  `get_lights_status`, `get_music_state`, `get_sounds_state`, `get_event_state`) — **43 ops total**. Setup/
+  secrets/logs/diagnostics stay deliberately excluded. It reuses the exact HTTP paths' machinery: the
+  `Validation/*` guards, the stores, and Scene/Event/Screen image cleanup (capture old `Image`, upsert,
+  `ImageFileStorage.Delete` on replace/delete). Because `SceneActivator`/`EventActivator`/`ILightService`/
+  `SpotifyClient` are **scoped**, every op that touches them does `using var scope = scopeFactory.CreateScope()`
+  and resolves per call (the `EventTimelineRunner`/`LightFxTester` pattern; music/lights-status use a
+  `WithSpotifyAsync`/scoped `ILightService` helper), while the singleton `SoundboardPlayer` needs no scope;
   `AiJson` gives it a `JsonSerializerDefaults.Web` options so tool JSON matches the wire exactly. The FX
   detach-on-delete logic is factored into `LightFxDetacher` ([LightFxDetacher.cs](src/RpgSceneMaker.Api/Services/LightFxDetacher.cs))
-  so the endpoint and the façade delete FX identically.
+  so the endpoint and the façade delete FX identically. `update_sound` deliberately edits only name/category/
+  volume/loop (never the tile art or file); there is deliberately **no** `delete_sound` op (it would have to
+  replicate the endpoint's scene/event/timeline scrub).
 - **MCP server** — `ModelContextProtocol.AspNetCore` (stateless streamable HTTP) mapped at **`/mcp`**
   (`AddMcpServer().WithHttpTransport(o => o.Stateless = true)` + `MapMcp("/mcp")` in
-  [Program.cs](src/RpgSceneMaker.Api/Program.cs), before `MapFallbackToFile`). The 23 tools
+  [Program.cs](src/RpgSceneMaker.Api/Program.cs), before `MapFallbackToFile`). The 43 tools
   ([McpTools.cs](src/RpgSceneMaker.Api/Services/Ai/McpTools.cs)) are thin `[McpServerTool]` adapters over
-  `AiToolService` (upserts take the typed entity so schemas auto-generate from the models). Point Claude Code
-  / Claude Desktop here; it is behind the optional API-key gate like the rest of the API.
+  `AiToolService`, grouped into tool-type classes by domain (scene/event/screen/lightFx/music/sound/library),
+  each registered with a `.WithTools<…>()` call in Program.cs (upserts take the typed entity so schemas
+  auto-generate from the models). Point Claude Code / Claude Desktop here; it is behind the optional API-key
+  gate like the rest of the API. **The MCP surface and the assistant's `AssistantTools.Definitions` must stay
+  in lockstep** — every op appears on both, dispatching through the façade; `AiToolSurfaceParityTests` fails
+  the build if the two name sets ever diverge.
 - **`AssistantService` / `AssistantStore` / `IAssistantProvider`** — the in-panel **BYOK assistant**, which
   runs against **any of three backends** (Anthropic / OpenAI / Gemini), one active at a time. `AssistantStore`
   ([AssistantStore.cs](src/RpgSceneMaker.Api/Services/AssistantStore.cs)) persists the active `provider` +

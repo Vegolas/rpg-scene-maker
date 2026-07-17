@@ -96,12 +96,15 @@ builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.Providers.IAssistant
 builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Ai.AssistantService>();
 
 // MCP server hosted in-process at /mcp (streamable HTTP, stateless — MCP clients resend the API key on every
-// request, so there is no session to keep). The four tool-type classes are thin adapters over AiToolService.
+// request, so there is no session to keep). The tool-type classes are thin adapters over AiToolService.
 builder.Services.AddMcpServer()
     .WithHttpTransport(o => o.Stateless = true)
     .WithTools<RpgSceneMaker.Api.Services.Ai.SceneMcpTools>()
     .WithTools<RpgSceneMaker.Api.Services.Ai.EventMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.ScreenMcpTools>()
     .WithTools<RpgSceneMaker.Api.Services.Ai.LightFxMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.MusicMcpTools>()
+    .WithTools<RpgSceneMaker.Api.Services.Ai.SoundMcpTools>()
     .WithTools<RpgSceneMaker.Api.Services.Ai.LibraryMcpTools>();
 
 // In-memory log buffer surfaced by the panel's Logs tab. Whitelist our own logs at Information and

@@ -27,8 +27,9 @@ public class AssistantProvidersTests
     {
         var tools = AssistantTools.Definitions;
 
-        // 23 façade ops, matching the MCP surface, with unique names.
-        Assert.Equal(23, tools.Count);
+        // 43 façade ops, matching the MCP surface, with unique names. (AiToolSurfaceParityTests asserts the
+        // two surfaces carry the exact same name set; this only pins the count + uniqueness.)
+        Assert.Equal(43, tools.Count);
         Assert.Equal(tools.Count, tools.Select(t => t.Name).Distinct().Count());
 
         foreach (var tool in tools)

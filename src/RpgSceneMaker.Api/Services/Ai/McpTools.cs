@@ -1,16 +1,18 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using RpgSceneMaker.Api.Contracts;
 using RpgSceneMaker.Api.Models;
 
 namespace RpgSceneMaker.Api.Services.Ai;
 
 // MCP tool surface: thin [McpServerTool] adapters over the shared AiToolService singleton, grouped into
-// four tool-type classes (scenes / events / light FX / library+control) so the MCP server (hosted at /mcp,
-// wired in Program.cs) and the in-panel assistant call the exact same facade. Each method returns the
-// facade's result (entity/record) directly — the SDK serializes it with camelCase Web defaults, matching the
-// HTTP wire. Facade validation throws ArgumentException (bad slug/reserved id/unknown ref); the MCP SDK turns
-// a thrown exception into a tool-call error the model can read and correct, so we let them propagate. The
-// descriptions carry the domain rules an LLM needs to build valid entities without seeing the HTTP endpoints.
+// tool-type classes by domain (scenes / events / screens / light FX / music / sounds / library+control) so
+// the MCP server (hosted at /mcp, wired in Program.cs) and the in-panel assistant call the exact same facade.
+// Each method returns the facade's result (entity/record) directly — the SDK serializes it with camelCase Web
+// defaults, matching the HTTP wire. Facade validation throws ArgumentException (bad slug/reserved id/unknown
+// ref); the MCP SDK turns a thrown exception into a tool-call error the model can read and correct, so we let
+// them propagate. The descriptions carry the domain rules an LLM needs to build valid entities without seeing
+// the HTTP endpoints.
 
 /// <summary>Scene CRUD + live control. A scene is a whole table state (lighting + music + one-shot sounds).</summary>
 [McpServerToolType]
@@ -82,6 +84,36 @@ public sealed class EventMcpTools(AiToolService tools)
 
     [McpServerTool(Name = "stop_event"), Description("Stop the currently running event timeline, if any. Returns true if one was running.")]
     public bool StopEvent() => tools.StopEvent();
+
+    [McpServerTool(Name = "get_event_state"), Description("Get the id of the event whose timeline is currently running, or null if none is running.")]
+    public EventStateDto GetEventState() => tools.GetEventState();
+}
+
+/// <summary>Screen CRUD. A screen is an organizational board of shortcut tiles onto existing scenes/events/sounds/music.</summary>
+[McpServerToolType]
+public sealed class ScreenMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "list_screens"), Description("List every saved screen (full entities). A screen is a board of shortcut tiles pointing at existing scenes/events/sounds/music/reset-lights — purely organizational, it owns no state of its own.")]
+    public Task<List<Screen>> ListScreens() => tools.ListScreensAsync();
+
+    [McpServerTool(Name = "get_screen"), Description("Get one screen by id, or null if no screen has that id.")]
+    public Task<Screen?> GetScreen([Description("Screen id: a lowercase slug matching [a-z0-9-_].")] string id) =>
+        tools.GetScreenAsync(id);
+
+    [McpServerTool(Name = "upsert_screen"), Description(
+        "Create or replace the screen at the given id (the id in the URL wins; the screen body's own id is overwritten). " +
+        "Rules the screen body must follow: id is a lowercase slug [a-z0-9-_]; Name is required; up to 100 Tiles. " +
+        "Each ScreenTile has a Kind of scene|event|sound|music|light-reset|break plus a Ref and Label: for scene/event/sound the Ref is that entity's id (from list_scenes/list_events/list_sounds); " +
+        "for music the Ref is a spotify: URI or open.spotify.com link and a Label is required; light-reset and break take no Ref (break is a layout-only line break whose Label is an optional section heading). " +
+        "A screen references existing entities only — it never carries light/music/sound state. Returns the stored screen.")]
+    public Task<Screen> UpsertScreen(
+        [Description("The full screen entity to save (see the rules in this tool's description).")] Screen screen,
+        [Description("Screen id to save it under: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.UpsertScreenAsync(screen, id);
+
+    [McpServerTool(Name = "delete_screen"), Description("Delete the screen with this id (and its tile image). Returns true if it existed, false otherwise. Nothing references a screen, so no other entities are affected.")]
+    public Task<bool> DeleteScreen([Description("Screen id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.DeleteScreenAsync(id);
 }
 
 /// <summary>Light FX library CRUD + live preview. A Light FX is a reusable named keyframe animation referenced by scenes and event timelines.</summary>
@@ -139,4 +171,77 @@ public sealed class LibraryMcpTools(AiToolService tools)
 
     [McpServerTool(Name = "reset_lights"), Description("Reset all lights to the configured default lighting state (the panel's reset-lights button). Throws if no default lighting has been set on the Settings page.")]
     public Task ResetLights() => tools.ResetLightsAsync();
+
+    [McpServerTool(Name = "get_lights_status"), Description("Get the light provider's raw current state (Tuya/Hue-specific), for diagnostics. Throws if the light is unreachable.")]
+    public Task<object> GetLightsStatus() => tools.GetLightsStatusAsync();
+}
+
+/// <summary>Spotify music transport + playback state. Requires Spotify to be connected (Settings) with an active device.</summary>
+[McpServerToolType]
+public sealed class MusicMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "play_music"), Description(
+        "Play music NOW on the connected Spotify device: pass a spotify: URI or an open.spotify.com link " +
+        "(from list_spotify_playlists / search_spotify_tracks). Throws if the link is invalid, Spotify isn't connected, or no device is active.")]
+    public Task<object> PlayMusic([Description("A spotify: URI or open.spotify.com link (track/playlist/album/artist).")] string uri) =>
+        tools.PlayMusicAsync(uri);
+
+    [McpServerTool(Name = "pause_music"), Description("Pause Spotify playback on the connected device.")]
+    public Task<object> PauseMusic() => tools.PauseMusicAsync();
+
+    [McpServerTool(Name = "resume_music"), Description("Resume Spotify playback on the connected device (keeps the current queue/track).")]
+    public Task<object> ResumeMusic() => tools.ResumeMusicAsync();
+
+    [McpServerTool(Name = "next_track"), Description("Skip to the next Spotify track.")]
+    public Task<object> NextTrack() => tools.NextTrackAsync();
+
+    [McpServerTool(Name = "previous_track"), Description("Go to the previous Spotify track.")]
+    public Task<object> PreviousTrack() => tools.PreviousTrackAsync();
+
+    [McpServerTool(Name = "set_music_volume"), Description("Set the Spotify device volume. value is 0.0 (mute) to 1.0 (full).")]
+    public Task<object> SetMusicVolume([Description("Volume 0.0-1.0.")] double value) => tools.SetMusicVolumeAsync(value);
+
+    [McpServerTool(Name = "set_music_shuffle"), Description("Turn Spotify shuffle on or off.")]
+    public Task<object> SetMusicShuffle([Description("true to shuffle, false to play in order.")] bool enabled) =>
+        tools.SetMusicShuffleAsync(enabled);
+
+    [McpServerTool(Name = "set_music_repeat"), Description("Set the Spotify repeat mode: off, track (repeat one), or playlist (repeat the whole context).")]
+    public Task<object> SetMusicRepeat([Description("One of: off, track, playlist.")] string mode) =>
+        tools.SetMusicRepeatAsync(mode);
+
+    [McpServerTool(Name = "get_music_state"), Description("Get the current Spotify playback state (track/artist, device, volume, progress, shuffle, repeat), or null if nothing is active.")]
+    public Task<SpotifyPlaybackState?> GetMusicState() => tools.GetMusicStateAsync();
+}
+
+/// <summary>Soundboard live control + metadata. Sounds play on the server's own audio device (overlapping voices).</summary>
+[McpServerToolType]
+public sealed class SoundMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "play_sound"), Description(
+        "Play one soundboard sound NOW on the server's speakers, overlaying anything already playing (find ids with list_sounds). " +
+        "Optional volume 0.0-1.0 overrides the sound's stored level. Throws if the id is unknown or the audio device/file is unavailable.")]
+    public Task<object> PlaySound(
+        [Description("Sound id (from list_sounds).")] string id,
+        [Description("Optional playback volume 0.0-1.0; omit to use the sound's stored volume.")] double? volume = null) =>
+        tools.PlaySoundAsync(id, volume);
+
+    [McpServerTool(Name = "stop_sound"), Description("Stop every voice currently playing this sound id (a no-op if it isn't playing).")]
+    public object StopSound([Description("Sound id (from list_sounds).")] string id) => tools.StopSound(id);
+
+    [McpServerTool(Name = "stop_all_sounds"), Description("Stop all soundboard playback on the server.")]
+    public object StopAllSounds() => tools.StopAllSounds();
+
+    [McpServerTool(Name = "update_sound"), Description(
+        "Update a soundboard sound's editable metadata (name/category/volume/loop). Every field is optional; each omitted field is left unchanged. " +
+        "Does not touch the audio file or the tile art. Returns the updated sound.")]
+    public Task<SoundInfo> UpdateSound(
+        [Description("Sound id (from list_sounds).")] string id,
+        [Description("New display name; omit to leave unchanged.")] string? name = null,
+        [Description("New category; omit to leave unchanged.")] string? category = null,
+        [Description("New default volume 0.0-1.0; omit to leave unchanged.")] double? volume = null,
+        [Description("Whether the sound loops; omit to leave unchanged.")] bool? loop = null) =>
+        tools.UpdateSoundAsync(id, name, category, volume, loop);
+
+    [McpServerTool(Name = "get_sounds_state"), Description("Get the ids of the sounds currently playing on the server's soundboard.")]
+    public SoundStateDto GetSoundsState() => tools.GetSoundsState();
 }

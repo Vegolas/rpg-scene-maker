@@ -7,14 +7,14 @@ using RpgSceneMaker.Api.Services.Ai.Providers;
 namespace RpgSceneMaker.Api.Services.Ai;
 
 /// <summary>
-/// The in-panel assistant's tool surface: the same 23 façade operations the MCP server exposes, but as
+/// The in-panel assistant's tool surface: the same façade operations the MCP server exposes, but as
 /// provider-neutral <see cref="AiToolDefinition"/>s plus an executor. <see cref="Definitions"/> is the
 /// static schema list sent to the model on every turn (each provider adapter maps it to its own SDK's tool
 /// type); <see cref="ExecuteAsync"/> dispatches a tool call back onto <see cref="AiToolService"/>.
 /// Integration/validation failures are caught here and returned as error tool-results (IsError=true) so the
 /// model can read the message and self-correct instead of the run crashing. Tool names, param names and
 /// entity JSON shapes match the MCP tools byte-for-byte (camelCase via <see cref="AiJson"/>), so both
-/// surfaces behave identically.
+/// surfaces behave identically — the AiToolSurfaceParityTests guard that the two name sets stay equal.
 /// </summary>
 public sealed class AssistantTools(AiToolService tools)
 {
@@ -47,7 +47,16 @@ public sealed class AssistantTools(AiToolService tools)
         "shape as a 'custom' LightEffect): each keyframe has a color (#RRGGBB hex), brightness and temperature " +
         "(0-100), atMs (offset) and transitionMs (ramp duration to that keyframe).";
 
-    /// <summary>The 23 tool definitions, matching the MCP tool names and the façade operations 1:1.</summary>
+    private const string ScreenShape =
+        "The full screen entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg wins), " +
+        "name (required), optional image, compact (bool display hint), and tiles[] (up to 100). Each tile has " +
+        "kind (one of scene|event|sound|music|light-reset|break) plus ref and label: for scene/event/sound the " +
+        "ref is that entity's id (from list_scenes/list_events/list_sounds); for music the ref is a spotify: " +
+        "URI or open.spotify.com link and label is required; light-reset and break take no ref (break is a " +
+        "layout line break whose label is an optional section heading). A screen owns no light/music/sound " +
+        "state — it only references existing entities.";
+
+    /// <summary>The tool definitions, matching the MCP tool names and the façade operations 1:1.</summary>
     public static IReadOnlyList<AiToolDefinition> Definitions { get; } =
     [
         // Scenes
@@ -76,6 +85,7 @@ public sealed class AssistantTools(AiToolService tools)
         WithId("trigger_event",
             "Fire an event NOW: its flash and overlaid sounds run concurrently (each reports ok/skipped/error), or, if it has a non-empty timeline, the timeline starts in the background and returns immediately. Errors if the event id is unknown."),
         NoArgs("stop_event", "Stop the currently running event timeline, if any. Returns true if one was running."),
+        NoArgs("get_event_state", "Get the id of the event whose timeline is currently running, or null if none is running."),
 
         // Light FX
         NoArgs("list_light_fx",
@@ -100,6 +110,74 @@ public sealed class AssistantTools(AiToolService tools)
                 required: ["id"])),
         NoArgs("stop_light_fx_test", "Stop the running Light FX preview, if any, and restore the live lights. Returns true if a preview was running."),
 
+        // Screens
+        NoArgs("list_screens", "List every saved screen (full entities). A screen is a board of shortcut tiles pointing at existing scenes/events/sounds/music/reset-lights — purely organizational, it owns no state of its own."),
+        WithId("get_screen", "Get one screen by id, or null if none has that id."),
+        Tool2("upsert_screen",
+            "Create or replace the screen at the given id (the id arg wins). Returns the stored screen.",
+            "id", "Screen id to save under: a lowercase slug [a-z0-9-_].",
+            "screen", ScreenShape),
+        WithId("delete_screen", "Delete the screen with this id (and its tile image). Returns true if it existed, false otherwise. Nothing references a screen, so no other entities are affected."),
+
+        // Music (Spotify transport)
+        new AiToolDefinition(
+            "play_music",
+            "Play music NOW on the connected Spotify device: a spotify: URI or open.spotify.com link (from list_spotify_playlists / search_spotify_tracks). Errors if the link is invalid, Spotify isn't connected, or no device is active.",
+            Schema(
+                new() { ["uri"] = Prop("string", "A spotify: URI or open.spotify.com link (track/playlist/album/artist).") },
+                required: ["uri"])),
+        NoArgs("pause_music", "Pause Spotify playback on the connected device."),
+        NoArgs("resume_music", "Resume Spotify playback on the connected device (keeps the current queue/track)."),
+        NoArgs("next_track", "Skip to the next Spotify track."),
+        NoArgs("previous_track", "Go to the previous Spotify track."),
+        new AiToolDefinition(
+            "set_music_volume",
+            "Set the Spotify device volume (0.0 mute – 1.0 full).",
+            Schema(
+                new() { ["value"] = Prop("number", "Volume 0.0-1.0.") },
+                required: ["value"])),
+        new AiToolDefinition(
+            "set_music_shuffle",
+            "Turn Spotify shuffle on or off.",
+            Schema(
+                new() { ["enabled"] = Prop("boolean", "true to shuffle, false to play in order.") },
+                required: ["enabled"])),
+        new AiToolDefinition(
+            "set_music_repeat",
+            "Set the Spotify repeat mode: off, track (repeat one), or playlist (repeat the whole context).",
+            Schema(
+                new() { ["mode"] = Prop("string", "One of: off, track, playlist.") },
+                required: ["mode"])),
+        NoArgs("get_music_state", "Get the current Spotify playback state (track/artist, device, volume, progress, shuffle, repeat), or null if nothing is active."),
+
+        // Sounds (live control + metadata)
+        new AiToolDefinition(
+            "play_sound",
+            "Play one soundboard sound NOW on the server's speakers, overlaying anything already playing (ids from list_sounds). Optional volume 0.0-1.0 overrides the stored level. Errors if the id is unknown or the audio device/file is unavailable.",
+            Schema(
+                new()
+                {
+                    ["id"] = Prop("string", "Sound id (from list_sounds)."),
+                    ["volume"] = Prop("number", "Optional playback volume 0.0-1.0; omit to use the sound's stored volume."),
+                },
+                required: ["id"])),
+        WithId("stop_sound", "Stop every voice currently playing this sound id (a no-op if it isn't playing)."),
+        NoArgs("stop_all_sounds", "Stop all soundboard playback on the server."),
+        new AiToolDefinition(
+            "update_sound",
+            "Update a soundboard sound's editable metadata (name/category/volume/loop). Every field is optional; each omitted field is left unchanged. Does not touch the audio file or tile art. Returns the updated sound.",
+            Schema(
+                new()
+                {
+                    ["id"] = Prop("string", "Sound id (from list_sounds)."),
+                    ["name"] = Prop("string", "New display name; omit to leave unchanged."),
+                    ["category"] = Prop("string", "New category; omit to leave unchanged."),
+                    ["volume"] = Prop("number", "New default volume 0.0-1.0; omit to leave unchanged."),
+                    ["loop"] = Prop("boolean", "Whether the sound loops; omit to leave unchanged."),
+                },
+                required: ["id"])),
+        NoArgs("get_sounds_state", "Get the ids of the sounds currently playing on the server's soundboard."),
+
         // Context / control
         NoArgs("list_lights", "List the registered lights (key, name, provider). Use each light's key as a scene light's lightKey or as test_light_fx's lightKey."),
         NoArgs("list_sounds", "List the soundboard sounds (id, name, category, volume, loop, duration). Use each sound's id in a scene's or event's soundEffects."),
@@ -111,6 +189,7 @@ public sealed class AssistantTools(AiToolService tools)
                 new() { ["query"] = Prop("string", "Search terms, e.g. a song title and/or artist.") },
                 required: ["query"])),
         NoArgs("reset_lights", "Reset all lights to the configured default lighting state (the panel's reset-lights button). Errors if no default lighting has been set on the Settings page."),
+        NoArgs("get_lights_status", "Get the light provider's raw current state (Tuya/Hue-specific), for diagnostics. Errors if the light is unreachable."),
     ];
 
     // ---- Dispatch ----
@@ -139,6 +218,12 @@ public sealed class AssistantTools(AiToolService tools)
                 "delete_event" => await tools.DeleteEventAsync(Id(input)),
                 "trigger_event" => await tools.TriggerEventAsync(Id(input)),
                 "stop_event" => tools.StopEvent(),
+                "get_event_state" => tools.GetEventState(),
+
+                "list_screens" => await tools.ListScreensAsync(),
+                "get_screen" => await tools.GetScreenAsync(Id(input)),
+                "upsert_screen" => await tools.UpsertScreenAsync(Entity<Screen>(input, "screen"), Id(input)),
+                "delete_screen" => await tools.DeleteScreenAsync(Id(input)),
 
                 "list_light_fx" => await tools.ListLightFxAsync(),
                 "get_light_fx" => await tools.GetLightFxAsync(Id(input)),
@@ -147,11 +232,29 @@ public sealed class AssistantTools(AiToolService tools)
                 "test_light_fx" => await tools.TestLightFxAsync(Id(input), OptStr(input, "lightKey"), OptInt(input, "seconds") ?? 10),
                 "stop_light_fx_test" => tools.StopLightFxTest(),
 
+                "play_music" => await tools.PlayMusicAsync(Str(input, "uri")),
+                "pause_music" => await tools.PauseMusicAsync(),
+                "resume_music" => await tools.ResumeMusicAsync(),
+                "next_track" => await tools.NextTrackAsync(),
+                "previous_track" => await tools.PreviousTrackAsync(),
+                "set_music_volume" => await tools.SetMusicVolumeAsync(Dbl(input, "value")),
+                "set_music_shuffle" => await tools.SetMusicShuffleAsync(Bool(input, "enabled")),
+                "set_music_repeat" => await tools.SetMusicRepeatAsync(Str(input, "mode")),
+                "get_music_state" => await tools.GetMusicStateAsync(),
+
+                "play_sound" => await tools.PlaySoundAsync(Id(input), OptDbl(input, "volume")),
+                "stop_sound" => tools.StopSound(Id(input)),
+                "stop_all_sounds" => tools.StopAllSounds(),
+                "update_sound" => await tools.UpdateSoundAsync(
+                    Id(input), OptStr(input, "name"), OptStr(input, "category"), OptDbl(input, "volume"), OptBool(input, "loop")),
+                "get_sounds_state" => tools.GetSoundsState(),
+
                 "list_lights" => tools.ListLights(),
                 "list_sounds" => await tools.ListSoundsAsync(),
                 "list_spotify_playlists" => await tools.ListSpotifyPlaylistsAsync(),
                 "search_spotify_tracks" => await tools.SearchSpotifyTracksAsync(Str(input, "query")),
                 "reset_lights" => await ResetAsync(),
+                "get_lights_status" => await tools.GetLightsStatusAsync(),
 
                 _ => throw new ArgumentException($"Unknown tool '{name}'."),
             };
@@ -188,6 +291,24 @@ public sealed class AssistantTools(AiToolService tools)
 
     private static int? OptInt(IReadOnlyDictionary<string, JsonElement> input, string key) =>
         input.TryGetValue(key, out var el) && el.ValueKind == JsonValueKind.Number ? el.GetInt32() : null;
+
+    private static double Dbl(IReadOnlyDictionary<string, JsonElement> input, string key) =>
+        input.TryGetValue(key, out var el) && el.ValueKind == JsonValueKind.Number
+            ? el.GetDouble()
+            : throw new ArgumentException($"The '{key}' argument (a number) is required.");
+
+    private static double? OptDbl(IReadOnlyDictionary<string, JsonElement> input, string key) =>
+        input.TryGetValue(key, out var el) && el.ValueKind == JsonValueKind.Number ? el.GetDouble() : null;
+
+    private static bool Bool(IReadOnlyDictionary<string, JsonElement> input, string key) =>
+        input.TryGetValue(key, out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? el.GetBoolean()
+            : throw new ArgumentException($"The '{key}' argument (true or false) is required.");
+
+    private static bool? OptBool(IReadOnlyDictionary<string, JsonElement> input, string key) =>
+        input.TryGetValue(key, out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? el.GetBoolean()
+            : null;
 
     private static T Entity<T>(IReadOnlyDictionary<string, JsonElement> input, string key)
     {

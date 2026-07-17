@@ -1,3 +1,4 @@
+using RpgSceneMaker.Api.Contracts;
 using RpgSceneMaker.Api.Models;
 using RpgSceneMaker.Api.Validation;
 
@@ -16,14 +17,15 @@ public record ActiveSceneInfo(string? Id, DateTimeOffset? ActivatedAt);
 public record LightFxTestInfo(string Testing, int Seconds);
 
 /// <summary>
-/// Shared tool layer over scenes, events and light FX (plus read-only context and live control), used by
-/// both the MCP server and the in-panel assistant (both added in later commits) so the two surfaces behave
-/// identically to each other and to the HTTP endpoints they mirror. CRUD goes straight to the stores +
-/// existing validators + image cleanup, exactly like the endpoints. Registered as a singleton, but
-/// <see cref="SceneActivator"/> / <see cref="EventActivator"/> / <see cref="ILightService"/> /
-/// <see cref="SpotifyClient"/> are scoped (the light provider is chosen per-scope from settings), so each
-/// activation/trigger/reset/Spotify call creates its own service scope for the operation (the pattern used by
-/// <see cref="EventTimelineRunner"/>); <see cref="LightFxTester"/> owns its own scope per test run.
+/// Shared tool layer over scenes, events, screens and light FX (plus read-only context and live control —
+/// Spotify music transport, soundboard playback, and lights), used by both the MCP server and the in-panel
+/// assistant so the two surfaces behave identically to each other and to the HTTP endpoints they mirror. CRUD
+/// goes straight to the stores + existing validators + image cleanup, exactly like the endpoints. Registered
+/// as a singleton, but <see cref="SceneActivator"/> / <see cref="EventActivator"/> / <see cref="ILightService"/>
+/// / <see cref="SpotifyClient"/> are scoped (the light provider is chosen per-scope from settings), so each
+/// activation/trigger/reset/Spotify/lights-status call creates its own service scope for the operation (the
+/// pattern used by <see cref="EventTimelineRunner"/>); <see cref="LightFxTester"/> owns its own scope per test
+/// run. The soundboard (<see cref="SoundboardPlayer"/>) is a singleton, so live sound control needs no scope.
 /// </summary>
 public sealed class AiToolService(
     IServiceScopeFactory scopeFactory,
@@ -38,7 +40,9 @@ public sealed class AiToolService(
     EventTimelineRunner timelineRunner,
     LightFxTester fxTester,
     ImageFileStorage images,
-    EffectEngine effects)
+    EffectEngine effects,
+    SoundboardPlayer player,
+    SoundFileStorage soundFiles)
 {
     // ---- Scenes ----
 
@@ -129,6 +133,39 @@ public sealed class AiToolService(
     // Stop the running event timeline (if any). Returns whether one was running.
     public bool StopEvent() => timelineRunner.Stop();
 
+    // Mirrors GET /events/state: the id of the event whose timeline is currently running, or null.
+    public EventStateDto GetEventState() => new(timelineRunner.RunningEventId);
+
+    // ---- Screens ----
+
+    public Task<List<Screen>> ListScreensAsync() => screens.GetAllAsync();
+
+    // There is deliberately no GET /screens/{id} endpoint; read straight from the store (the panel does the
+    // same, picking a board out of /screens/list client-side).
+    public Task<Screen?> GetScreenAsync(string id) => screens.GetAsync(id);
+
+    // Mirrors PUT /screens/{id}: stamp the id, validate, then upsert and drop replaced/cleared tile art.
+    public async Task<Screen> UpsertScreenAsync(Screen screen, string id)
+    {
+        screen.Id = id;
+        ScreenValidation.Validate(screen);
+        var oldImage = (await screens.GetAsync(id))?.Image;
+        await screens.UpsertAsync(screen);
+        if (!string.IsNullOrEmpty(oldImage) && !string.Equals(oldImage, screen.Image, StringComparison.OrdinalIgnoreCase))
+            images.Delete(oldImage);
+        return screen;
+    }
+
+    // Mirrors DELETE /screens/{id}: remove the tile art too. Nothing references a screen (it is the thing that
+    // references others), so unlike scene/event delete there is nothing to scrub. False when it didn't exist.
+    public async Task<bool> DeleteScreenAsync(string id)
+    {
+        var image = (await screens.GetAsync(id))?.Image;
+        if (!await screens.DeleteAsync(id)) return false;
+        images.Delete(image);
+        return true;
+    }
+
     // ---- Light FX ----
 
     public Task<List<LightFx>> ListLightFxAsync() => lightFx.GetAllAsync();
@@ -168,6 +205,90 @@ public sealed class AiToolService(
 
     public bool StopLightFxTest() => fxTester.Stop();
 
+    // ---- Sounds (live control + metadata) ----
+
+    // Mirrors PUT /sounds/{id} for the AI-editable fields only (name/category/volume/loop); each null arg is
+    // left unchanged. Tile art is deliberately NOT touched here (the AI can't manage image uploads), unlike
+    // the endpoint which sets Image as sent. Returns the updated sound as the slim context record.
+    public async Task<SoundInfo> UpdateSoundAsync(string id, string? name, string? category, double? volume, bool? loop)
+    {
+        if (await sounds.GetAsync(id) is not { } sound)
+            throw new ArgumentException($"Unknown sound '{id}'.");
+        if (name is not null) sound.Name = name.Trim();
+        if (category is not null) sound.Category = category.Trim();
+        if (volume is { } v) sound.Volume = v;
+        if (loop is { } l) sound.Loop = l;
+        SoundValidation.Validate(sound);
+        await sounds.UpsertAsync(sound);
+        return new SoundInfo(sound.Id, sound.Name, sound.Category, sound.Volume, sound.Loop, sound.DurationMs);
+    }
+
+    // Mirrors /sounds/{id}/play: overlay one soundboard sound on the server's audio device (volume defaults to
+    // the sound's stored level). SoundboardPlayer is a singleton, so no scope is needed.
+    public async Task<object> PlaySoundAsync(string id, double? volume)
+    {
+        if (await sounds.GetAsync(id) is not { } sound)
+            throw new ArgumentException($"Unknown sound '{id}'.");
+        player.Play(sound.Id, soundFiles.FullPath(sound), sound.Loop, volume ?? sound.Volume);
+        return new { playing = sound.Id };
+    }
+
+    // Mirrors /sounds/{id}/stop: stop every voice playing this sound id (a no-op if it isn't playing).
+    public object StopSound(string id)
+    {
+        player.Stop(id);
+        return new { stopped = id };
+    }
+
+    // Mirrors /sounds/stop: stop all soundboard playback.
+    public object StopAllSounds()
+    {
+        player.StopAll();
+        return new { stopped = "all" };
+    }
+
+    // Mirrors GET /sounds/state: the ids of the sounds currently playing on the server.
+    public SoundStateDto GetSoundsState() => new(player.PlayingIds);
+
+    // ---- Music (Spotify transport) ----
+
+    // Mirrors /music/play: play a spotify: URI or open.spotify.com link on the connected device.
+    public Task<object> PlayMusicAsync(string uri)
+    {
+        if (!SpotifyClient.IsSpotifyUri(uri))
+            throw new ArgumentException($"'{uri}' is not a Spotify URI or an open.spotify.com link.");
+        return WithSpotifyAsync<object>(async s => { await s.PlayAsync(uri); return new { playing = uri }; });
+    }
+
+    public Task<object> PauseMusicAsync() =>
+        WithSpotifyAsync<object>(async s => { await s.PauseAsync(); return new { music = "paused" }; });
+
+    public Task<object> ResumeMusicAsync() =>
+        WithSpotifyAsync<object>(async s => { await s.ResumeAsync(); return new { music = "playing" }; });
+
+    public Task<object> NextTrackAsync() =>
+        WithSpotifyAsync<object>(async s => { await s.NextAsync(); return new { music = "next" }; });
+
+    public Task<object> PreviousTrackAsync() =>
+        WithSpotifyAsync<object>(async s => { await s.PreviousAsync(); return new { music = "previous" }; });
+
+    public Task<object> SetMusicVolumeAsync(double value) =>
+        WithSpotifyAsync<object>(async s => { await s.SetVolumeAsync(value); return new { volume = value }; });
+
+    public Task<object> SetMusicShuffleAsync(bool enabled) =>
+        WithSpotifyAsync<object>(async s => { await s.SetShuffleAsync(enabled); return new { shuffle = enabled }; });
+
+    // Mirrors /music/repeat: off | track | playlist (SpotifyClient maps "playlist" to Spotify's "context").
+    public Task<object> SetMusicRepeatAsync(string mode)
+    {
+        if (mode is not ("off" or "track" or "playlist"))
+            throw new ArgumentException("Repeat mode must be one of: off, track, playlist.");
+        return WithSpotifyAsync<object>(async s => { await s.SetRepeatAsync(mode); return new { repeat = mode }; });
+    }
+
+    // Mirrors GET /music/state: current playback (null when no device is active).
+    public Task<SpotifyPlaybackState?> GetMusicStateAsync() => WithSpotifyAsync(s => s.GetStateAsync());
+
     // ---- Context / control ----
 
     public IReadOnlyList<LightInfo> ListLights() =>
@@ -180,21 +301,13 @@ public sealed class AiToolService(
         return all.Select(s => new SoundInfo(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.DurationMs)).ToList();
     }
 
-    public async Task<List<SpotifyPlaylist>> ListSpotifyPlaylistsAsync()
-    {
-        // SpotifyClient is a typed HttpClient (scoped) — resolve one per call, never cache it.
-        using var scope = scopeFactory.CreateScope();
-        var spotify = scope.ServiceProvider.GetRequiredService<SpotifyClient>();
-        return await spotify.GetPlaylistsAsync();
-    }
+    public Task<List<SpotifyPlaylist>> ListSpotifyPlaylistsAsync() => WithSpotifyAsync(s => s.GetPlaylistsAsync());
 
-    public async Task<List<SpotifyTrack>> SearchSpotifyTracksAsync(string query)
+    public Task<List<SpotifyTrack>> SearchSpotifyTracksAsync(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Provide a search term.");
-        using var scope = scopeFactory.CreateScope();
-        var spotify = scope.ServiceProvider.GetRequiredService<SpotifyClient>();
-        return await spotify.SearchTracksAsync(query);
+        return WithSpotifyAsync(s => s.SearchTracksAsync(query));
     }
 
     // Mirrors GET|POST /lights/default — the panel's reset-lights button.
@@ -207,5 +320,20 @@ public sealed class AiToolService(
         using var scope = scopeFactory.CreateScope();
         var bulb = scope.ServiceProvider.GetRequiredService<ILightService>();
         await bulb.ApplyAsync(def);
+    }
+
+    // Mirrors GET /lights/status: the light provider's raw current state (Tuya/Hue-specific), for diagnostics.
+    public async Task<object> GetLightsStatusAsync()
+    {
+        using var scope = scopeFactory.CreateScope();
+        var bulb = scope.ServiceProvider.GetRequiredService<ILightService>();
+        return await bulb.GetStatusAsync();
+    }
+
+    // SpotifyClient is a typed HttpClient (scoped) — resolve one inside a fresh scope per call, never cache it.
+    private async Task<T> WithSpotifyAsync<T>(Func<SpotifyClient, Task<T>> op)
+    {
+        using var scope = scopeFactory.CreateScope();
+        return await op(scope.ServiceProvider.GetRequiredService<SpotifyClient>());
     }
 }
