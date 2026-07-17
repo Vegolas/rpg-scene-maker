@@ -97,7 +97,7 @@ public static class SoundEndpoints
             return Results.Ok(ToDto(sound));
         });
 
-        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, ImageFileStorage images, SoundboardPlayer player, SceneStore scenes, EventStore events) =>
+        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, ImageFileStorage images, SoundboardPlayer player, SceneStore scenes, EventStore events, ScreenStore screens) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 return Results.NotFound();
@@ -143,6 +143,8 @@ public static class SoundEndpoints
                 if (dirty)
                     await events.UpsertAsync(evt);
             }
+            // Drop any shortcut tile that pointed at the now-gone sound so it doesn't dangle on a board.
+            await ReferenceScrubber.ScrubScreenTilesAsync(screens, "sound", sound.Id);
             return Results.NoContent();
         });
 

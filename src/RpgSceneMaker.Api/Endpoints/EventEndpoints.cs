@@ -38,11 +38,13 @@ public static class EventEndpoints
             return Results.Ok(evt);
         });
 
-        events.MapDelete("/{id}", async (string id, EventStore store, ImageFileStorage images) =>
+        events.MapDelete("/{id}", async (string id, EventStore store, ImageFileStorage images, ScreenStore screens) =>
         {
             var image = (await store.GetAsync(id))?.Image;
             if (!await store.DeleteAsync(id)) return Results.NotFound();
             images.Delete(image);
+            // Drop any shortcut tile that pointed at the now-gone event so it doesn't dangle on a board.
+            await ReferenceScrubber.ScrubScreenTilesAsync(screens, "event", id);
             return Results.NoContent();
         });
 

@@ -29,6 +29,7 @@ public sealed class AiToolService(
     IServiceScopeFactory scopeFactory,
     SceneStore scenes,
     EventStore events,
+    ScreenStore screens,
     LightFxStore lightFx,
     SoundStore sounds,
     SettingsStore settings,
@@ -57,12 +58,20 @@ public sealed class AiToolService(
         return scene;
     }
 
-    // Mirrors DELETE /scenes/{id}: remove the tile art too. False when the scene didn't exist.
+    // Mirrors DELETE /scenes/{id}: remove the tile art too, and scrub every dangling reference (shortcut
+    // tiles, event After, the active-scene highlight). False when the scene didn't exist.
     public async Task<bool> DeleteSceneAsync(string id)
     {
         var image = (await scenes.GetAsync(id))?.Image;
         if (!await scenes.DeleteAsync(id)) return false;
         images.Delete(image);
+        await ReferenceScrubber.ScrubScreenTilesAsync(screens, "scene", id);
+        await ReferenceScrubber.ScrubEventAfterSceneAsync(events, id);
+        if (string.Equals(state.ActiveSceneId, id, StringComparison.OrdinalIgnoreCase))
+        {
+            state.ActiveSceneId = null;
+            state.ActivatedAt = null;
+        }
         return true;
     }
 
@@ -96,12 +105,14 @@ public sealed class AiToolService(
         return evt;
     }
 
-    // Mirrors DELETE /events/{id}: remove the tile art too. False when the event didn't exist.
+    // Mirrors DELETE /events/{id}: remove the tile art too, and drop any shortcut tile that pointed at it.
+    // False when the event didn't exist.
     public async Task<bool> DeleteEventAsync(string id)
     {
         var image = (await events.GetAsync(id))?.Image;
         if (!await events.DeleteAsync(id)) return false;
         images.Delete(image);
+        await ReferenceScrubber.ScrubScreenTilesAsync(screens, "event", id);
         return true;
     }
 

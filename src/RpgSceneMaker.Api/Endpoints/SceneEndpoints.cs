@@ -30,11 +30,21 @@ public static class SceneEndpoints
             return Results.Ok(scene);
         });
 
-        scenes.MapDelete("/{id}", async (string id, SceneStore store, ImageFileStorage images) =>
+        scenes.MapDelete("/{id}", async (string id, SceneStore store, ImageFileStorage images,
+            ScreenStore screens, EventStore events, CurrentState state) =>
         {
             var image = (await store.GetAsync(id))?.Image;
             if (!await store.DeleteAsync(id)) return Results.NotFound();
             images.Delete(image);
+            // Scrub everything that referenced the now-gone scene so nothing dangles: shortcut tiles, any
+            // event that activated it via After, and the "currently showing" highlight.
+            await ReferenceScrubber.ScrubScreenTilesAsync(screens, "scene", id);
+            await ReferenceScrubber.ScrubEventAfterSceneAsync(events, id);
+            if (string.Equals(state.ActiveSceneId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                state.ActiveSceneId = null;
+                state.ActivatedAt = null;
+            }
             return Results.NoContent();
         });
 
