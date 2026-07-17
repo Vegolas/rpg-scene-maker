@@ -11,6 +11,11 @@
     <title>Scene Maker</title>
     <base href="/" />
     <meta name="theme-color" content="#101318" />
+    <!-- Installable PWA: manifest + icons for the home screen / app launcher -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <!-- Fullscreen when added to the iPad home screen -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -41,6 +46,7 @@
     <script src="js/image-crop.js"></script>
     <script src="js/timeline.js"></script>
     <script src="js/chat.js"></script>
+    <script src="js/pwa.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>
 

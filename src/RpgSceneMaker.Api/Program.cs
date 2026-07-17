@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api;
 using RpgSceneMaker.Api.Data;
@@ -213,7 +214,12 @@ app.Use(async (context, next) =>
 
 // The Blazor WASM control panel is served from this same process.
 app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
+// Serve the PWA web app manifest with the right MIME type. `.webmanifest` is in the
+// default provider, but map it explicitly so a trimmed runtime can't 404 it
+// (StaticFiles refuses unknown extensions), which would silently break install.
+var staticFileTypes = new FileExtensionContentTypeProvider();
+staticFileTypes.Mappings[".webmanifest"] = "application/manifest+json";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticFileTypes });
 
 app.MapGet("/health", () => new { status = "ok" });
 

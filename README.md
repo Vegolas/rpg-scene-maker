@@ -22,9 +22,11 @@ This serves both the API and the control panel on **http://localhost:5252** (and
 
 1. Run the API on your PC. The first `dotnet run` after this change makes Windows ask about network access — **allow it for private networks**. (If you skipped the prompt: `netsh advfirewall firewall add rule name="RPG Scene Maker" dir=in action=allow protocol=TCP localport=5252`.)
 2. Find your PC's LAN address: `ipconfig` → IPv4, e.g. `192.168.1.20`. A DHCP reservation for the PC keeps the address stable.
-3. On the iPad open Safari → `http://192.168.1.20:5252`, then **Share → Add to Home Screen**. It launches fullscreen like a native app.
+3. On the iPad open Safari → `http://192.168.1.20:5252`, then **Share → Add to Home Screen**. The panel is an installable PWA — it gets its own icon and launches fullscreen like a native app, with no Safari chrome.
 4. Recommended: set an API key (see Security below), then enter the same key on the iPad via the ⚙ button — it is stored on the device.
 5. Table tip: Settings → Display & Brightness → Auto-Lock → Never (or use Guided Access) so the panel doesn't sleep mid-session.
+
+> **Installing on Android / a desktop browser:** Chrome and Edge show an **Install** button in the address bar, but only on a *secure* origin — `http://localhost:5252` on the PC itself, or the panel served over HTTPS. Over a plain `http://` LAN address they won't offer install (a browser rule, not an app limit); use the iPad's **Add to Home Screen** above, which works over LAN http.
 
 ## One-time setup
 
