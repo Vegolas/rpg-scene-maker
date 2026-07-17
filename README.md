@@ -16,7 +16,7 @@ Every command endpoint accepts **both GET and POST**, so the built-in Stream Dec
 dotnet run --project src/RpgSceneMaker.Api
 ```
 
-This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify now-playing, transport, volume, shuffle/repeat, playlist list and track search), **Lights** (mood colors, brightness, white temperature), **Sounds** (import + soundboard), **Events** (one-shot light flash + sound stingers), **Screens** (custom shortcut boards), and **Logs**.
+This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify now-playing, transport, volume, shuffle/repeat, playlist list and track search), **Lights** (mood colors, brightness, white temperature, per-light targeting), **Sounds** (import + soundboard), **Events** (one-shot light flash + sound stingers), **Effects** (reusable Light FX library), **Screens** (custom shortcut boards), **Assistant** (an optional bring-your-own-key AI chat that appears once you configure a provider key under ⚙), and **Logs**.
 
 ## Using it from an iPad (or any tablet/phone)
 
@@ -231,10 +231,13 @@ Translations are plain JSON files on the server, so anyone — including an AI a
 | Area | Endpoints |
 |---|---|
 | Scenes | `GET /scenes`, `GET /scenes/active`, `GET/PUT/DELETE /scenes/{id}`, `GET\|POST /scenes/{id}/activate` |
-| Lights | `/lights/on`, `/lights/off`, `/lights/toggle`, `/lights/color?hex=FF8C2A&brightness=80`, `/lights/white?brightness=80&temperature=30`, `/lights/brightness?value=50`, `GET /lights/status` |
+| Lights | `/lights/on`, `/lights/off`, `/lights/toggle`, `/lights/color?hex=FF8C2A&brightness=80`, `/lights/white?brightness=80&temperature=30`, `/lights/brightness?value=50`, `/lights/default` (reset to the configured default state), `GET /lights/status`, `GET /lights/list`, per-light `/lights/{key}/on\|off\|color\|white\|brightness` |
 | Music (Spotify) | `/music/play?id=…` (a `spotify:` URI / `open.spotify.com` link), `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/shuffle?value=true`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/search?q=…`, `GET /music/state` |
 | Sounds (soundboard) | `GET /sounds/list`, `POST /sounds/import` (multipart), `PUT\|DELETE /sounds/{id}`, `/sounds/{id}/play?volume=0.8`, `/sounds/{id}/stop`, `/sounds/stop` (all), `GET /sounds/state` |
 | Events | `GET /events/list`, `GET/PUT/DELETE /events/{id}`, `GET\|POST /events/{id}/trigger` |
+| Light FX | `GET /lightfx/list`, `PUT\|DELETE /lightfx/{id}`, `GET\|POST /lightfx/{id}/test`, `GET\|POST /lightfx/test/stop` |
+| Screens | `GET /screens/list`, `PUT\|DELETE /screens/{id}` |
+| Images | `POST /images/upload` (multipart), `GET /images/{name}` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
 | Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |
@@ -243,6 +246,8 @@ Translations are plain JSON files on the server, so anyone — including an AI a
 | Assistant (chat) | `POST /assistant/send`, `GET /assistant/state?rev=…`, `GET\|POST /assistant/stop`, `GET\|POST /assistant/clear` |
 | MCP | `/mcp` — Model Context Protocol server (~43 tools over scenes/events/screens/light FX + music & sound control) for Claude Code / Claude Desktop |
 | Translations | `GET /i18n/list` (available languages), `GET /i18n/{code}` (one language's strings) |
+| Logs | `GET /logs/list`, `GET\|POST /logs/clear` |
+| Diagnostics | `GET /diagnostics` |
 
 All command endpoints accept GET or POST; parameters go in the query string.
 
