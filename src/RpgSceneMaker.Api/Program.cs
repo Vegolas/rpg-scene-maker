@@ -6,6 +6,7 @@ using RpgSceneMaker.Api.Endpoints;
 using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Logging;
 using RpgSceneMaker.Api.Services;
+using RpgSceneMaker.Api.Services.Images;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,13 @@ builder.Services.AddSingleton<TuyaLightService>();
 builder.Services.AddSingleton<TuyaSetupService>();
 builder.Services.AddHttpClient<HueLightService>(client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddHttpClient<HueSetupService>(client => client.Timeout = TimeSpan.FromSeconds(10));
+
+// Image search + import: Scryfall over its public API + card-art CDN. Typed client (the source sets the
+// User-Agent/Accept Scryfall requires in its ctor); searches are memo-cached, so add the shared cache too.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<ScryfallImageSource>(client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddTransient<IImageSearchSource>(sp => sp.GetRequiredService<ScryfallImageSource>());
+
 builder.Services.AddSingleton<SceneStore>();
 
 // Soundboard: metadata in SQLite, audio files on disk, playback on the server's own audio device.

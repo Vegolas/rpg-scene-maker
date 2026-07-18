@@ -22,6 +22,7 @@
         <button class="btn btn--small" @onclick="Upload" disabled="@_busy">
             @(_busy ? L["artField.uploading"] : HasImage ? L["artField.replace"] : L["artField.upload"])
         </button>
+        <button class="btn btn--small" @onclick="OpenSearch" disabled="@_busy">@L["artField.search"]</button>
         @if (HasImage)
         {
             <button class="btn btn--small btn--danger" @onclick="Remove" disabled="@_busy">@L["common.remove"]</button>
@@ -29,13 +30,31 @@
     </div>
 </div>
 
+@if (_searchOpen)
+{
+    <ImageSearchPicker OnPicked="OnSearchPicked" OnClose="CloseSearch" />
+}
+
 @code {
     [Parameter] public string? Image { get; set; }
     [Parameter] public EventCallback<string?> ImageChanged { get; set; }
 
     private bool _busy;
+    private bool _searchOpen;
 
     private bool HasImage => !string.IsNullOrEmpty(Image);
+
+    private void OpenSearch() => _searchOpen = true;
+
+    private void CloseSearch() => _searchOpen = false;
+
+    // A picked search result was imported server-side; store its id exactly like a fresh upload, then close.
+    private async Task OnSearchPicked(string? id)
+    {
+        Image = id;
+        await ImageChanged.InvokeAsync(id);
+        _searchOpen = false;
+    }
 
     // Ensure the API key is cached so ImageUrl() builds the correct (key-bearing) src synchronously.
     protected override Task OnInitializedAsync() => Api.GetApiKeyAsync();

@@ -211,6 +211,12 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 - `soundEffects`: sound ids (from the Sounds tab) played **over** whatever is already playing — a clap on top of the music. Omit for a flash-only event.
 - Fire an event with `GET|POST /events/{id}/trigger` (so a Stream Deck *Website* button works). Light and sound run concurrently and the response reports each part (HTTP 207 if something failed).
 
+## Tile art
+
+Scenes, events, screens and sounds can each carry a background image on their tile. In any editor, tap **Upload art** to crop and upload your own picture — or tap **Search art** to find one without leaving the panel: type a query, pick a thumbnail from the grid, and the server imports it and sets it as that tile's art.
+
+The built-in search source is [Scryfall](https://scryfall.com)'s public API — no key or account needed, though it does need internet access (everything else at runtime stays on your LAN). The results are *Magic: The Gathering* card art: **© Wizards of the Coast, served via Scryfall**. That's fine for personal use at your own table — please don't redistribute it.
+
 ## Language & translations
 
 The panel's language is switched at runtime from **Settings → Language** (saved per device, so each tablet/PC can differ). English and Polish ship in the box.
@@ -248,7 +254,7 @@ Translations are plain JSON files on the server, so anyone — including an AI a
 | Events | `GET /events/list`, `GET/PUT/DELETE /events/{id}`, `GET\|POST /events/{id}/trigger` |
 | Light FX | `GET /lightfx/list`, `PUT\|DELETE /lightfx/{id}`, `GET\|POST /lightfx/{id}/test`, `GET\|POST /lightfx/test/stop` |
 | Screens | `GET /screens/list`, `PUT\|DELETE /screens/{id}` |
-| Images | `POST /images/upload` (multipart), `GET /images/{name}` |
+| Images | `POST /images/upload` (multipart), `GET /images/{name}`, `GET /images/sources`, `GET /images/search?source=&q=`, `POST /images/import` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
 | Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |

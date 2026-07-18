@@ -1,0 +1,178 @@
+@* Full-screen art picker: type a query → grid of provider thumbnails → tap one → the server imports it
+   and OnPicked fires with the stored image id (same id the upload flow returns). Opened from ArtField.
+   No modal primitive exists in the app, so this is a fixed-inset overlay (like the JS crop overlay). *@
+@inject ApiClient Api
+@inject UiState Ui
+@inject Localizer L
+
+<div class="imgsearch-overlay" role="dialog" aria-modal="true" aria-label="@L["artSearch.title"]">
+    <div class="imgsearch-head">
+        <h2 class="imgsearch-title">@L["artSearch.title"]</h2>
+        <button type="button" class="btn btn--icon imgsearch-close" @onclick="Close"
+                disabled="@Importing" aria-label="@L["artSearch.close"]">
+            <Icon Name="close" />
+        </button>
+    </div>
+
+    <div class="imgsearch-search">
+        @if (_sources.Count > 1)
+        {
+            <select class="input imgsearch-source" value="@_sourceId" @onchange="OnSourceChanged"
+                    aria-label="@L["artSearch.source"]">
+                @foreach (var s in _sources)
+                {
+                    <option value="@s.Id">@s.Name</option>
+                }
+            </select>
+        }
+        <input class="input imgsearch-input" type="text" @bind="_query" @bind:event="oninput"
+               @onkeydown="OnKeyDown" placeholder="@L["artSearch.placeholder"]"
+               aria-label="@L["artSearch.placeholder"]" />
+        <button type="button" class="btn btn--primary imgsearch-btn" @onclick="SearchAsync"
+                disabled="@(_searching || Importing)">
+            <Icon Name="search" /> @L["artSearch.searchBtn"]
+        </button>
+    </div>
+
+    <div class="imgsearch-body">
+        @if (_searching)
+        {
+            <p class="imgsearch-note">@L["artSearch.searching"]</p>
+        }
+        else if (_error is not null)
+        {
+            <p class="imgsearch-note imgsearch-note--error">@_error</p>
+        }
+        else if (_response is null)
+        {
+            <p class="imgsearch-note">@L["artSearch.hint"]</p>
+        }
+        else if (_response.Results.Count == 0)
+        {
+            <p class="imgsearch-note">@L["artSearch.empty"]</p>
+        }
+        else
+        {
+            <div class="imgsearch-grid">
+                @foreach (var r in _response.Results)
+                {
+                    var busy = _importingUrl == r.Url;
+                    <button type="button" class="imgsearch-tile@(busy ? " is-busy" : "")"
+                            @onclick="() => PickAsync(r)" disabled="@Importing">
+                        <img class="imgsearch-thumb" loading="lazy" src="@r.ThumbUrl" alt="@r.Title" />
+                        <span class="imgsearch-caption">
+                            <span class="imgsearch-name">@r.Title</span>
+                            @if (!string.IsNullOrWhiteSpace(r.Detail))
+                            {
+                                <span class="imgsearch-artist">@r.Detail</span>
+                            }
+                        </span>
+                        @if (busy)
+                        {
+                            <span class="imgsearch-importing">@L["artSearch.importing"]</span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (Attribution is { Length: > 0 } attribution)
+    {
+        <div class="imgsearch-foot">@attribution</div>
+    }
+</div>
+
+@code {
+    // Fires with the stored image id (the file name) once an imported pick succeeds.
+    [Parameter] public EventCallback<string?> OnPicked { get; set; }
+
+    // Fires when the picker should close (close button, or right after a successful pick).
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<ImageSourceDto> _sources = [];
+    private string? _sourceId;
+    private string _query = "";
+    private bool _searching;
+    private string? _error;
+    private ImageSearchResponseDto? _response;   // null = the initial hint state (no search run yet)
+    private string? _importingUrl;               // the tile currently importing; disables the rest
+
+    private bool Importing => _importingUrl is not null;
+
+    // Attribution for the selected source (falls back to the first) — the licensing note under the grid.
+    private string? Attribution =>
+        (_sources.FirstOrDefault(s => s.Id == _sourceId) ?? _sources.FirstOrDefault())?.Attribution;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Cache the API key so <img> src and the search request carry it, then load the source list. If the
+        // fetch fails the picker still works: no sources → search with the source omitted, no attribution.
+        await Api.GetApiKeyAsync();
+        _sources = await Api.GetImageSourcesAsync();
+        _sourceId = _sources.FirstOrDefault()?.Id;
+    }
+
+    private void OnSourceChanged(ChangeEventArgs e)
+    {
+        _sourceId = e.Value?.ToString();
+        _response = null; // results belonged to the old source — drop back to the hint
+        _error = null;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        if (_searching || Importing || string.IsNullOrWhiteSpace(_query)) return;
+        _searching = true;
+        _error = null;
+        try
+        {
+            var (result, error) = await Api.SearchImagesAsync(_sourceId, _query);
+            if (result is not null)
+            {
+                _response = result;
+            }
+            else
+            {
+                _error = error;
+                _response = null;
+            }
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private async Task PickAsync(ImageResultDto result)
+    {
+        if (Importing) return;
+        _importingUrl = result.Url;
+        try
+        {
+            var (id, error) = await Api.ImportImageAsync(result.Url);
+            if (id is not null)
+            {
+                await OnPicked.InvokeAsync(id);
+                await OnClose.InvokeAsync();
+            }
+            else
+            {
+                Ui.ReportError(error ?? L["artSearch.toast.importFailed"]);
+                _importingUrl = null; // re-enable so the user can retry / pick another
+            }
+        }
+        catch (Exception ex)
+        {
+            Ui.ReportError(L.Format("artSearch.toast.importFailedDetail", ex.Message));
+            _importingUrl = null;
+        }
+    }
+
+    private Task Close() => Importing ? Task.CompletedTask : OnClose.InvokeAsync();
+}
