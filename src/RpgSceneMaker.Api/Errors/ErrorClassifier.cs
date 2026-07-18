@@ -21,6 +21,7 @@ public static class ErrorClassifier
         SpotifyException => (StatusCodes.Status502BadGateway, "error.title.spotify"),
         SoundboardException => (StatusCodes.Status503ServiceUnavailable, "error.title.soundboard"),
         AiProviderException => (StatusCodes.Status502BadGateway, "error.title.aiProvider"),
+        ImageSourceException => (StatusCodes.Status502BadGateway, "error.title.imageSource"),
         // Generic upstream/transport failure. Spotify and Hue wrap their own into SpotifyException/HueException
         // (handled above), so this arm only catches un-wrapped HTTP-client / AI-SDK transport faults — hence a
         // provider-neutral title rather than a Spotify-specific one.

@@ -132,6 +132,24 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   and event's `SoundEffects` and from event timeline clips, so activations/triggers never warn about a
   dangling reference. Nothing is mapped at the bare `/sounds` path so the
   panel's Sounds tab can live there (same reason `/lights` uses `/lights/list`). **NAudio output is Windows-only.**
+- **`ImageFileStorage` / image search + import (`Services/Images/`)** — entity tile art lives on disk at
+  `%LocalAppData%\RpgSceneMaker\images\` (override `Images:Path`), one file per image, referenced by stored
+  file name only; `ImageFileStorage` mirrors `SoundFileStorage` (traversal-guarded names, 10 MB cap). Besides
+  the browser `POST /images/upload` (multipart) and `GET /images/{name}` (byte server), the panel can search
+  a provider and import a picked image server-side through the **`IImageSearchSource`** seam
+  ([IImageSearchSource.cs](src/RpgSceneMaker.Api/Services/Images/IImageSearchSource.cs)): a source exposes an
+  `Id`/`Name`/English `Attribution`, a `SearchAsync` → `ImageSearchResponseDto`, a `CanFetch(Uri)` host
+  allowlist, and a streaming `FetchImageAsync`. The one implementation is `ScryfallImageSource` (typed
+  `HttpClient` with the Scryfall-required `User-Agent`/`Accept` set in its ctor) — it hits
+  `api.scryfall.com/cards/search?...&unique=art`, maps each card (or each face of a double-faced card) to its
+  `art_crop`, caps at 60 hits, treats a 404 as empty results, maps a 400 to `error.imageSearch.badQuery`, and
+  memo-caches successful searches for 15 min in `IMemoryCache`. `/images/*`
+  ([ImageEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/ImageEndpoints.cs)) adds `GET /sources` (over the
+  injected `IEnumerable<IImageSearchSource>`), `GET /search?source=&q=`, and `POST /import` ({ url } — fetches
+  an allowlisted https URL, re-checks the host after redirects, derives the extension from `Content-Type`
+  (URL-ext fallback), enforces the 10 MB cap on both `Content-Length` and the streamed copy, then saves via
+  `ImageFileStorage.SaveAsync`). Upstream Scryfall/CDN failures throw **`ImageSourceException`** → 502
+  (`error.title.imageSource`), classified in `ErrorClassifier` like Hue/Spotify/AiProvider.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
   bounded ring buffer of recent log entries, fed by `InMemoryLoggerProvider` (our logs at Information,

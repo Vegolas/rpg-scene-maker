@@ -1,0 +1,152 @@
+/* ============================================================
+   Image search picker (in-app art search & import)
+   A full-screen overlay opened from ArtField: a fixed header +
+   search row, one scrolling results grid, and an attribution
+   footer. Mirrors the crop overlay's fixed-inset, safe-area
+   shell. z-index 45 sits above all editor chrome (save bar 15,
+   topbar 20, tab bar 30, assistant dock 40) but below toasts
+   (50), so an import-failure toast stays visible over it — the
+   same "below toasts" convention the assistant dock follows.
+   ============================================================ */
+.imgsearch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding: max(var(--s-4), env(safe-area-inset-top, 0px)) var(--s-4) max(var(--s-4), env(safe-area-inset-bottom, 0px));
+  overscroll-behavior: contain;
+}
+
+/* ---- header: title + close (fixed; the body scrolls between them and the footer) ---- */
+.imgsearch-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.imgsearch-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font: var(--text-2xl);
+  color: var(--text);
+}
+.imgsearch-close { flex: 0 0 auto; }
+
+/* ---- search row: optional source select + query input + button ---- */
+.imgsearch-search {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+.imgsearch-source { flex: 0 0 auto; max-width: 40%; }
+.imgsearch-input { flex: 1 1 auto; min-width: 0; }
+.imgsearch-btn { flex: 0 0 auto; }
+
+/* ---- body: the only scrolling region ---- */
+.imgsearch-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.imgsearch-note {
+  margin: 0;
+  padding: var(--s-8) var(--s-4);
+  text-align: center;
+  color: var(--text-muted);
+  font: var(--text-sm);
+}
+.imgsearch-note--error { color: var(--danger); }
+
+/* ---- results grid of image tiles ---- */
+.imgsearch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s-3);
+  padding-bottom: var(--s-4);
+}
+@media (min-width: 900px) {
+  .imgsearch-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+}
+
+.imgsearch-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--t-fast), transform var(--t-fast);
+}
+.imgsearch-tile:hover { border-color: var(--accent); }
+.imgsearch-tile:active { transform: translateY(1px); }
+.imgsearch-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.imgsearch-tile:disabled { cursor: default; }
+
+.imgsearch-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--well);
+}
+
+.imgsearch-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-2) var(--s-3);
+  min-width: 0;
+}
+.imgsearch-name {
+  color: var(--text);
+  font: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imgsearch-artist {
+  color: var(--text-muted);
+  font: var(--text-tag);
+  letter-spacing: .3px;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Busy (importing) tile: dim the art + caption and float a solid "Importing…" pill over it. */
+.imgsearch-tile.is-busy .imgsearch-thumb,
+.imgsearch-tile.is-busy .imgsearch-caption { opacity: .4; }
+.imgsearch-importing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: var(--text-sm);
+  white-space: nowrap;
+}
+
+/* ---- attribution footer (the source's licensing note) ---- */
+.imgsearch-foot {
+  flex: 0 0 auto;
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-faint);
+  font: var(--text-sm);
+}

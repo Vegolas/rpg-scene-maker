@@ -457,6 +457,31 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         return _apiKey is { } key ? $"{url}?apiKey={Uri.EscapeDataString(key)}" : url;
     }
 
+    /// <summary>Registered image-search sources (id + display name + attribution) for the art picker; empty
+    /// (silent) when offline, so the picker can still search with the source omitted and no attribution.</summary>
+    public async Task<List<ImageSourceDto>> GetImageSourcesAsync() =>
+        await GetAsync<List<ImageSourceDto>>("images/sources") ?? [];
+
+    /// <summary>Search a source for art; the picker shows the returned error inline. Pass a null/blank
+    /// sourceId to let the server pick the sole registered source.</summary>
+    public Task<(ImageSearchResponseDto? Result, string? Error)> SearchImagesAsync(string? sourceId, string query)
+    {
+        var path = $"images/search?q={Uri.EscapeDataString(query)}";
+        if (!string.IsNullOrWhiteSpace(sourceId))
+            path += $"&source={Uri.EscapeDataString(sourceId)}";
+        return FetchAsync<ImageSearchResponseDto>(HttpMethod.Get, path);
+    }
+
+    /// <summary>Import a picked image by URL server-side; returns its stored file name (same { id } shape as
+    /// UploadImageAsync), which goes straight into the entity's Image.</summary>
+    public async Task<(string? Id, string? Error)> ImportImageAsync(string url)
+    {
+        var (node, error) = await FetchAsync<JsonNode>(HttpMethod.Post, "images/import", new { url });
+        if (error is not null) return (null, error);
+        var id = node?["id"]?.GetValue<string>();
+        return string.IsNullOrEmpty(id) ? (null, "Import succeeded but no image id was returned.") : (id, null);
+    }
+
     // ---------- events (one-shot triggered effects) ----------
 
     public async Task<List<EventDto>> GetEventsAsync() =>
