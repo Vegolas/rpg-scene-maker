@@ -7,6 +7,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<Sound> Sounds => Set<Sound>();
+    public DbSet<MusicTrack> MusicTracks => Set<MusicTrack>();
+    public DbSet<MusicPlaylist> MusicPlaylists => Set<MusicPlaylist>();
     public DbSet<GameEvent> Events => Set<GameEvent>();
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<LightFx> LightFxs => Set<LightFx>();
@@ -38,6 +40,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             sound.HasKey(s => s.Id);
             // Sound ids appear in hand-typed /sounds/{id}/play URLs, so match them case-insensitively too.
             sound.Property(s => s.Id).UseCollation("NOCASE");
+        });
+
+        modelBuilder.Entity<MusicTrack>(track =>
+        {
+            track.HasKey(t => t.Id);
+            // Track ids appear in /music/library/tracks/{id} URLs and local:track:{id} play ids — case-insensitive.
+            track.Property(t => t.Id).UseCollation("NOCASE");
+        });
+
+        modelBuilder.Entity<MusicPlaylist>(playlist =>
+        {
+            playlist.HasKey(p => p.Id);
+            playlist.Property(p => p.Id).UseCollation("NOCASE");
+            // TrackIds (a List<string>) maps to a JSON column by convention, like Scene.SoundEffects.
         });
 
         modelBuilder.Entity<GameEvent>(evt =>

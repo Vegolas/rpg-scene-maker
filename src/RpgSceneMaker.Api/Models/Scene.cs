@@ -116,7 +116,13 @@ public class LightSettings
 
 public class MusicSettings
 {
-    /// <summary>Spotify track/playlist/album/artist URI or open.spotify.com link. Leave null to keep current music.</summary>
+    /// <summary>Which music source this block targets: "spotify" or "local". Null means legacy — inferred from
+    /// the <see cref="PlayId"/> shape (a local: id → local, else Spotify). Stored in the Music JSON column, so
+    /// adding it needs no migration.</summary>
+    public string? Source { get; set; }
+
+    /// <summary>What to play: a Spotify track/playlist/album/artist URI or open.spotify.com link, or a local
+    /// library reference (<c>local:track:{id}</c> / <c>local:playlist:{id}</c>). Leave null to keep current music.</summary>
     public string? PlayId { get; set; }
 
     /// <summary>0.0 - 1.0.</summary>

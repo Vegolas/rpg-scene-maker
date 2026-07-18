@@ -26,6 +26,11 @@ var imagesPath = builder.Configuration["Images:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
     "RpgSceneMaker", "images");
 
+// Local music-library audio files live next to the database; Music:Path overrides the location.
+var musicPath = builder.Configuration["Music:Path"] ?? Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    "RpgSceneMaker", "music");
+
 // UI translation files live next to the database; Locales:Path overrides the location. Community/agent
 // authors drop or edit a <code>.json here; English is also embedded as the fallback (see LocaleService).
 var localesPath = builder.Configuration["Locales:Path"] ?? Path.Combine(
@@ -55,6 +60,22 @@ builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
 builder.Services.AddSingleton<SoundboardPlayer>();
 // Shared import tail (unique id, save, measure, validate, upsert) for /sounds/import + /sounds/library/import.
 builder.Services.AddSingleton<SoundImporter>();
+
+// Local music library: track/playlist metadata in SQLite, audio files on disk, playback on the server's own
+// audio device (its own output, independent of the soundboard mixer).
+builder.Services.AddSingleton<MusicTrackStore>();
+builder.Services.AddSingleton<MusicPlaylistStore>();
+builder.Services.AddSingleton(new MusicFileStorage(musicPath));
+builder.Services.AddSingleton<MusicImporter>();
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Music.LocalMusicPlayer>();
+
+// Pluggable music sources behind the IMusicSource seam (mirrors ILightService's Tuya/Hue). The router picks
+// one per request; the active-source memory is ephemeral like CurrentState. Sources are scoped (SpotifyClient
+// is a scoped typed-HttpClient), so the router that composes them is scoped too.
+builder.Services.AddSingleton<RpgSceneMaker.Api.Services.Music.MusicSourceState>();
+builder.Services.AddScoped<RpgSceneMaker.Api.Services.Music.IMusicSource, RpgSceneMaker.Api.Services.Music.SpotifyMusicSource>();
+builder.Services.AddScoped<RpgSceneMaker.Api.Services.Music.IMusicSource, RpgSceneMaker.Api.Services.Music.LocalMusicSource>();
+builder.Services.AddScoped<RpgSceneMaker.Api.Services.Music.MusicRouter>();
 
 // Full-art tile backgrounds: uploaded via /images, stored on disk, referenced by stored file name.
 builder.Services.AddSingleton(new ImageFileStorage(imagesPath));

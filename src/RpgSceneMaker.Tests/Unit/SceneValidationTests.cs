@@ -180,4 +180,20 @@ public class SceneValidationTests
         scene.Music = new MusicSettings { PlayId = "spotify:playlist:abc", Volume = 0.5 };
         SceneValidation.Validate(scene);
     }
+
+    [Fact]
+    public void Accepts_local_play_id()
+    {
+        var scene = Valid();
+        scene.Music = new MusicSettings { Source = "local", PlayId = "local:track:tavern", Volume = 0.5 };
+        SceneValidation.Validate(scene);
+    }
+
+    [Fact]
+    public void Rejects_unknown_music_source()
+    {
+        var scene = Valid();
+        scene.Music = new MusicSettings { Source = "youtube" };
+        Assert.ThrowsAny<ArgumentException>(() => SceneValidation.Validate(scene));
+    }
 }

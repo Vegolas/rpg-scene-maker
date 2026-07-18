@@ -176,41 +176,44 @@ public sealed class LibraryMcpTools(AiToolService tools)
     public Task<LightStatus> GetLightsStatus() => tools.GetLightsStatusAsync();
 }
 
-/// <summary>Spotify music transport + playback state. Requires Spotify to be connected (Settings) with an active device.</summary>
+/// <summary>Music transport + playback state, across both sources (Spotify and the local file library).
+/// Transport targets the active source (the one last played); play picks the source from the id shape.</summary>
 [McpServerToolType]
 public sealed class MusicMcpTools(AiToolService tools)
 {
     [McpServerTool(Name = "play_music"), Description(
-        "Play music NOW on the connected Spotify device: pass a spotify: URI or an open.spotify.com link " +
-        "(from list_spotify_playlists / search_spotify_tracks). Throws if the link is invalid, Spotify isn't connected, or no device is active.")]
-    public Task<object> PlayMusic([Description("A spotify: URI or open.spotify.com link (track/playlist/album/artist).")] string uri) =>
+        "Play music NOW: pass a spotify: URI or open.spotify.com link (from list_spotify_playlists / " +
+        "search_spotify_tracks), OR a local library id — local:track:{id} or local:playlist:{id} (ids from a scene's " +
+        "music or the library). The source is inferred from the id shape and becomes the active source. Throws if the " +
+        "id is unrecognized, or (for Spotify) it isn't connected / no device is active.")]
+    public Task<object> PlayMusic([Description("A spotify: URI / open.spotify.com link, or a local:track:{id} / local:playlist:{id} id.")] string uri) =>
         tools.PlayMusicAsync(uri);
 
-    [McpServerTool(Name = "pause_music"), Description("Pause Spotify playback on the connected device.")]
+    [McpServerTool(Name = "pause_music"), Description("Pause playback on the active music source (Spotify or local).")]
     public Task<object> PauseMusic() => tools.PauseMusicAsync();
 
-    [McpServerTool(Name = "resume_music"), Description("Resume Spotify playback on the connected device (keeps the current queue/track).")]
+    [McpServerTool(Name = "resume_music"), Description("Resume playback on the active music source (keeps the current queue/track).")]
     public Task<object> ResumeMusic() => tools.ResumeMusicAsync();
 
-    [McpServerTool(Name = "next_track"), Description("Skip to the next Spotify track.")]
+    [McpServerTool(Name = "next_track"), Description("Skip to the next track on the active music source.")]
     public Task<object> NextTrack() => tools.NextTrackAsync();
 
-    [McpServerTool(Name = "previous_track"), Description("Go to the previous Spotify track.")]
+    [McpServerTool(Name = "previous_track"), Description("Go to the previous track on the active music source.")]
     public Task<object> PreviousTrack() => tools.PreviousTrackAsync();
 
-    [McpServerTool(Name = "set_music_volume"), Description("Set the Spotify device volume. value is 0.0 (mute) to 1.0 (full).")]
+    [McpServerTool(Name = "set_music_volume"), Description("Set the active music source's volume. value is 0.0 (mute) to 1.0 (full).")]
     public Task<object> SetMusicVolume([Description("Volume 0.0-1.0.")] double value) => tools.SetMusicVolumeAsync(value);
 
-    [McpServerTool(Name = "set_music_shuffle"), Description("Turn Spotify shuffle on or off.")]
+    [McpServerTool(Name = "set_music_shuffle"), Description("Turn shuffle on or off on the active music source.")]
     public Task<object> SetMusicShuffle([Description("true to shuffle, false to play in order.")] bool enabled) =>
         tools.SetMusicShuffleAsync(enabled);
 
-    [McpServerTool(Name = "set_music_repeat"), Description("Set the Spotify repeat mode: off, track (repeat one), or playlist (repeat the whole context).")]
+    [McpServerTool(Name = "set_music_repeat"), Description("Set the active music source's repeat mode: off, track (repeat one), or playlist (repeat the whole context).")]
     public Task<object> SetMusicRepeat([Description("One of: off, track, playlist.")] string mode) =>
         tools.SetMusicRepeatAsync(mode);
 
-    [McpServerTool(Name = "get_music_state"), Description("Get the current Spotify playback state (track/artist, device, volume, progress, shuffle, repeat), or null if nothing is active.")]
-    public Task<SpotifyPlaybackState?> GetMusicState() => tools.GetMusicStateAsync();
+    [McpServerTool(Name = "get_music_state"), Description("Get the current music playback state: the active source, the list of available sources, and track/artist, device, volume, progress, shuffle and repeat (isPlaying is false when nothing is playing).")]
+    public Task<MusicStateDto> GetMusicState() => tools.GetMusicStateAsync();
 }
 
 /// <summary>Soundboard live control + metadata. Sounds play on the server's own audio device (overlapping voices).</summary>

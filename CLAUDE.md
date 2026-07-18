@@ -71,12 +71,35 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `ApplyAsync(LightSettings)` default-interface method maps a scene's light block to power/colour/white.
   A configurable **default state** (`LightingConfig.DefaultLight`) is applied by `GET/POST /lights/default`
   — the panel's always-visible "reset lights" button; set it on the Settings page (400s until then).
-- **`SpotifyClient` / `SpotifyStore`** — music is Spotify-only. `SpotifyClient` wraps the Spotify Web
+- **`SpotifyClient` / `SpotifyStore`** — Spotify is *one* music source, behind the `IMusicSource` seam
+  (below). `SpotifyClient` wraps the Spotify Web
   API (Authorization Code + PKCE, no client secret) to drive a Spotify Connect device on the LAN;
   `SpotifyStore` persists the Client ID, refresh token and preferred device (in SQLite). The OAuth
   connect flow lives under `/setup/spotify/*` in [SetupEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SetupEndpoints.cs),
-  and `/music/*` ([MusicEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/MusicEndpoints.cs)) maps straight onto `SpotifyClient` (play/pause/resume/next/previous/volume/shuffle/repeat +
-  playlists/search/state). Playing requires a `spotify:` URI or `open.spotify.com` link.
+  and the Spotify-specific browser (`/music/playlists`, `/music/search`) still maps straight onto
+  `SpotifyClient`; the `/music/*` transport now routes through the `MusicRouter` (below), with
+  `SpotifyMusicSource` a thin `IMusicSource` adapter over `SpotifyClient` (left intact).
+- **`IMusicSource` / `MusicRouter` / local music library** — music is **pluggable** (mirroring how
+  `ILightService` abstracts Tuya/Hue): [`IMusicSource`](src/RpgSceneMaker.Api/Services/Music/IMusicSource.cs)
+  (play/pause/resume/next/previous/volume/shuffle/repeat/state, a neutral `MusicState`) has two
+  implementations — `SpotifyMusicSource` and `LocalMusicSource` (over `LocalMusicPlayer`). A scoped
+  `MusicRouter` picks the source per request: `/music/play?id=` **infers it from the id shape**
+  (`spotify:`/`open.spotify.com` → Spotify; `local:track:{id}` / `local:playlist:{id}` → local, via
+  `LocalMusicId`), the bare transport (`pause`/`resume`/`next`/`previous`/`volume`/`shuffle`/`repeat`)
+  targets the *active* source (the last successful play, remembered in the ephemeral singleton
+  `MusicSourceState`, like `CurrentState`) with an optional `?source=` override, and `/music/state`
+  returns the neutral state + the active `source` + the `available` source keys. `MusicSettings.Source`
+  gives a scene the same discriminator (null = infer from `PlayId`). **Local library**:
+  `MusicTrack`/`MusicPlaylist` (SQLite, NOCASE ids) + `MusicTrackStore` / `MusicPlaylistStore` /
+  `MusicFileStorage` / `MusicImporter` mirror the `Sound*` trio (files at
+  `%LocalAppData%\RpgSceneMaker\music\`, override `Music:Path`) and back `/music/library/*` (tracks +
+  playlists CRUD and a multipart `import`). [`LocalMusicPlayer`](src/RpgSceneMaker.Api/Services/Music/LocalMusicPlayer.cs)
+  (singleton, NAudio, **Windows-only** like `SoundboardPlayer` — its own output device, one stream at a
+  time, *not* the soundboard mixer) plays a queue with shuffle + repeat off/track/playlist, advancing at
+  each track's natural end. **All output-device creation is one lazy method wrapped in
+  `SoundboardException` → 503**, so a non-Windows host (#76/#81/#82) degrades cleanly instead of crashing.
+  Deleting a track releases its file if it's playing, scrubs the id from every playlist, and nulls any
+  scene `Music.PlayId` that pointed at it (keeping volume) — like the sound-delete scrub.
 - **`SceneActivator` / `SceneLightApplier`** — `SceneActivator` applies a scene's light/music/sound effects
   **concurrently**; each part reports ok/skipped/error independently (activation returns HTTP 207 if any part
   failed). The light half lives in `SceneLightApplier` (per-light entries + legacy "all lights" block,
@@ -257,7 +280,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.json. The DB is at
 `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path`). Context:
 [AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
-as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`), `Events`
+as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`),
+`MusicTracks`/`MusicPlaylists` (local music library; playlist `TrackIds` a JSON column; ids `NOCASE`), `Events`
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
 `Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
 `NOCASE`) and a
@@ -268,9 +292,11 @@ connection (Client ID, refresh token, preferred device) is also persisted here v
 Sound-effect **audio files** live on disk, not in the DB, at `%LocalAppData%\RpgSceneMaker\sounds\`
 (override with `Sounds:Path`); each `Sound` row references its file by name via `SoundFileStorage`.
 `Scene.SoundEffects` (a `List<string>` JSON column) holds the ids of sounds a scene fires on activation.
+Local **music files** live alongside at `%LocalAppData%\RpgSceneMaker\music\` (override `Music:Path`),
+one file per `MusicTrack` via `MusicFileStorage`.
 
 `appsettings.json` holds deployment config only: `Urls`, `Security:ApiKey`, `Database:Path`, `Sounds:Path`,
-`Locales:Path`.
+`Music:Path`, `Locales:Path`.
 
 ### Changing the schema — create a migration
 

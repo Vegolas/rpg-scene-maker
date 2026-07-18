@@ -33,6 +33,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Database__Path", _dbPath);
         Environment.SetEnvironmentVariable("Sounds__Path", Path.Combine(_root, "sounds"));
         Environment.SetEnvironmentVariable("Images__Path", Path.Combine(_root, "images"));
+        Environment.SetEnvironmentVariable("Music__Path", Path.Combine(_root, "music"));
         Environment.SetEnvironmentVariable("Scenes__FilePath", "does-not-exist.json");
         Environment.SetEnvironmentVariable("Security__ApiKey", apiKey ?? "");
 
@@ -65,6 +66,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Database__Path", null);
         Environment.SetEnvironmentVariable("Sounds__Path", null);
         Environment.SetEnvironmentVariable("Images__Path", null);
+        Environment.SetEnvironmentVariable("Music__Path", null);
         Environment.SetEnvironmentVariable("Scenes__FilePath", null);
         Environment.SetEnvironmentVariable("Security__ApiKey", null);
         SqliteConnection.ClearAllPools();

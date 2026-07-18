@@ -1,5 +1,6 @@
 using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
+using RpgSceneMaker.Api.Services.Music;
 
 namespace RpgSceneMaker.Api.Services;
 
@@ -12,7 +13,7 @@ public record ActivationResult(string Scene, string Light, string Music, string 
 /// <summary>Applies a scene: light, music and sound effects run concurrently so the table switches fast.</summary>
 public class SceneActivator(
     SceneLightApplier sceneLights,
-    SpotifyClient spotify,
+    MusicRouter router,
     SoundStore soundStore,
     SoundFileStorage soundFiles,
     SoundboardPlayer player,
@@ -51,12 +52,13 @@ public class SceneActivator(
         return new ActivationResult(stopped, lightTask.Result, musicTask.Result, sfxTask.Result);
     }
 
-    // Pause the music a scene was playing. Silent no-op when Spotify isn't connected, and a missing
-    // device is tolerated (throwOnNoDevice: false), so stopping never fails just because of the music.
+    // Pause the music a scene was playing (the active source). Silent no-op when nothing is playing (no active
+    // source and Spotify not connected → reported "skipped"), and a missing device is tolerated
+    // (throwOnNoDevice: false), so stopping never fails just because of the music.
     private async Task<bool> PauseMusicAsync()
     {
-        if (!spotify.IsConnected) return false;
-        await spotify.PauseAsync(throwOnNoDevice: false);
+        if (router.ResolveActiveOrNull() is not { } source) return false;
+        await source.PauseAsync(throwOnNoDevice: false);
         return true;
     }
 
@@ -72,27 +74,25 @@ public class SceneActivator(
 
         if (music.Pause)
         {
-            // Best-effort pause so a scene without a live device still succeeds.
-            await spotify.PauseAsync(throwOnNoDevice: false);
+            // Best-effort pause of the targeted (or active) source so a scene without a live device still succeeds.
+            await router.Resolve(music.Source).PauseAsync(throwOnNoDevice: false);
             return true;
         }
 
         if (!string.IsNullOrWhiteSpace(music.PlayId))
         {
-            if (!SpotifyClient.IsSpotifyUri(music.PlayId))
-                throw new ValidationException("error.music.notSpotifyUri", music.PlayId);
-
-            // Play first: it wakes the preferred device, while volume on an idle device can 404.
-            await spotify.PlayAsync(music.PlayId);
+            // Route by the scene's explicit Source, else infer from the PlayId shape. Play first (it wakes a
+            // Spotify device, and volume on an idle device can 404), then set volume on the same source.
+            var key = await router.PlayAsync(music.PlayId, music.Source);
             if (music.Volume is double playVolume)
-                await spotify.SetVolumeAsync(playVolume);
+                await router.Resolve(key).SetVolumeAsync(playVolume);
             return true;
         }
 
         // Volume-only tweak with no track to start.
         if (music.Volume is double volume)
         {
-            await spotify.SetVolumeAsync(volume);
+            await router.Resolve(music.Source).SetVolumeAsync(volume);
             return true;
         }
 

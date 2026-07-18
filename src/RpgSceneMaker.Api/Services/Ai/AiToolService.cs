@@ -1,5 +1,6 @@
 using RpgSceneMaker.Api.Contracts;
 using RpgSceneMaker.Api.Models;
+using RpgSceneMaker.Api.Services.Music;
 using RpgSceneMaker.Api.Validation;
 
 namespace RpgSceneMaker.Api.Services.Ai;
@@ -250,44 +251,41 @@ public sealed class AiToolService(
     // Mirrors GET /sounds/state: the ids of the sounds currently playing on the server.
     public SoundStateDto GetSoundsState() => new(player.PlayingIds);
 
-    // ---- Music (Spotify transport) ----
+    // ---- Music (source-routed transport) ----
 
-    // Mirrors /music/play: play a spotify: URI or open.spotify.com link on the connected device.
-    public Task<object> PlayMusicAsync(string uri)
-    {
-        if (!SpotifyClient.IsSpotifyUri(uri))
-            throw new ArgumentException($"'{uri}' is not a Spotify URI or an open.spotify.com link.");
-        return WithSpotifyAsync<object>(async s => { await s.PlayAsync(uri); return new { playing = uri }; });
-    }
+    // Mirrors /music/play: play a spotify: URI/link OR a local:track:{id} / local:playlist:{id}; the router
+    // infers the source from the id shape (and remembers it as active). Errors on an unrecognized id.
+    public Task<object> PlayMusicAsync(string uri) =>
+        WithMusicAsync<object>(async r => { var source = await r.PlayAsync(uri); return new { playing = uri, source }; });
 
     public Task<object> PauseMusicAsync() =>
-        WithSpotifyAsync<object>(async s => { await s.PauseAsync(); return new { music = "paused" }; });
+        WithMusicAsync<object>(async r => { await r.Resolve().PauseAsync(); return new { music = "paused" }; });
 
     public Task<object> ResumeMusicAsync() =>
-        WithSpotifyAsync<object>(async s => { await s.ResumeAsync(); return new { music = "playing" }; });
+        WithMusicAsync<object>(async r => { await r.Resolve().ResumeAsync(); return new { music = "playing" }; });
 
     public Task<object> NextTrackAsync() =>
-        WithSpotifyAsync<object>(async s => { await s.NextAsync(); return new { music = "next" }; });
+        WithMusicAsync<object>(async r => { await r.Resolve().NextAsync(); return new { music = "next" }; });
 
     public Task<object> PreviousTrackAsync() =>
-        WithSpotifyAsync<object>(async s => { await s.PreviousAsync(); return new { music = "previous" }; });
+        WithMusicAsync<object>(async r => { await r.Resolve().PreviousAsync(); return new { music = "previous" }; });
 
     public Task<object> SetMusicVolumeAsync(double value) =>
-        WithSpotifyAsync<object>(async s => { await s.SetVolumeAsync(value); return new { volume = value }; });
+        WithMusicAsync<object>(async r => { await r.Resolve().SetVolumeAsync(value); return new { volume = value }; });
 
     public Task<object> SetMusicShuffleAsync(bool enabled) =>
-        WithSpotifyAsync<object>(async s => { await s.SetShuffleAsync(enabled); return new { shuffle = enabled }; });
+        WithMusicAsync<object>(async r => { await r.Resolve().SetShuffleAsync(enabled); return new { shuffle = enabled }; });
 
-    // Mirrors /music/repeat: off | track | playlist (SpotifyClient maps "playlist" to Spotify's "context").
+    // Mirrors /music/repeat: off | track | playlist (Spotify maps "playlist" to its "context").
     public Task<object> SetMusicRepeatAsync(string mode)
     {
         if (mode is not ("off" or "track" or "playlist"))
             throw new ArgumentException("Repeat mode must be one of: off, track, playlist.");
-        return WithSpotifyAsync<object>(async s => { await s.SetRepeatAsync(mode); return new { repeat = mode }; });
+        return WithMusicAsync<object>(async r => { await r.Resolve().SetRepeatAsync(mode); return new { repeat = mode }; });
     }
 
-    // Mirrors GET /music/state: current playback (null when no device is active).
-    public Task<SpotifyPlaybackState?> GetMusicStateAsync() => WithSpotifyAsync(s => s.GetStateAsync());
+    // Mirrors GET /music/state: neutral playback state + which source produced it + the available sources.
+    public Task<MusicStateDto> GetMusicStateAsync() => WithMusicAsync(r => r.GetStateAsync(null));
 
     // ---- Context / control ----
 
@@ -332,9 +330,17 @@ public sealed class AiToolService(
     }
 
     // SpotifyClient is a typed HttpClient (scoped) — resolve one inside a fresh scope per call, never cache it.
+    // Kept for the Spotify-only browser (playlists/search), which is not part of the source seam.
     private async Task<T> WithSpotifyAsync<T>(Func<SpotifyClient, Task<T>> op)
     {
         using var scope = scopeFactory.CreateScope();
         return await op(scope.ServiceProvider.GetRequiredService<SpotifyClient>());
+    }
+
+    // MusicRouter is scoped (it composes the scoped sources) — resolve one inside a fresh scope per call.
+    private async Task<T> WithMusicAsync<T>(Func<MusicRouter, Task<T>> op)
+    {
+        using var scope = scopeFactory.CreateScope();
+        return await op(scope.ServiceProvider.GetRequiredService<MusicRouter>());
     }
 }

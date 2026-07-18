@@ -119,36 +119,36 @@ public sealed class AssistantTools(AiToolService tools)
             "screen", ScreenShape),
         WithId("delete_screen", "Delete the screen with this id (and its tile image). Returns true if it existed, false otherwise. Nothing references a screen, so no other entities are affected."),
 
-        // Music (Spotify transport)
+        // Music (source-routed transport: Spotify or the local file library)
         new AiToolDefinition(
             "play_music",
-            "Play music NOW on the connected Spotify device: a spotify: URI or open.spotify.com link (from list_spotify_playlists / search_spotify_tracks). Errors if the link is invalid, Spotify isn't connected, or no device is active.",
+            "Play music NOW: a spotify: URI or open.spotify.com link (from list_spotify_playlists / search_spotify_tracks), OR a local library id — local:track:{id} or local:playlist:{id}. The source is inferred from the id shape and becomes the active source. Errors if the id is unrecognized, or (for Spotify) it isn't connected / no device is active.",
             Schema(
-                new() { ["uri"] = Prop("string", "A spotify: URI or open.spotify.com link (track/playlist/album/artist).") },
+                new() { ["uri"] = Prop("string", "A spotify: URI / open.spotify.com link, or a local:track:{id} / local:playlist:{id} id.") },
                 required: ["uri"])),
-        NoArgs("pause_music", "Pause Spotify playback on the connected device."),
-        NoArgs("resume_music", "Resume Spotify playback on the connected device (keeps the current queue/track)."),
-        NoArgs("next_track", "Skip to the next Spotify track."),
-        NoArgs("previous_track", "Go to the previous Spotify track."),
+        NoArgs("pause_music", "Pause playback on the active music source (Spotify or local)."),
+        NoArgs("resume_music", "Resume playback on the active music source (keeps the current queue/track)."),
+        NoArgs("next_track", "Skip to the next track on the active music source."),
+        NoArgs("previous_track", "Go to the previous track on the active music source."),
         new AiToolDefinition(
             "set_music_volume",
-            "Set the Spotify device volume (0.0 mute – 1.0 full).",
+            "Set the active music source's volume (0.0 mute – 1.0 full).",
             Schema(
                 new() { ["value"] = Prop("number", "Volume 0.0-1.0.") },
                 required: ["value"])),
         new AiToolDefinition(
             "set_music_shuffle",
-            "Turn Spotify shuffle on or off.",
+            "Turn shuffle on or off on the active music source.",
             Schema(
                 new() { ["enabled"] = Prop("boolean", "true to shuffle, false to play in order.") },
                 required: ["enabled"])),
         new AiToolDefinition(
             "set_music_repeat",
-            "Set the Spotify repeat mode: off, track (repeat one), or playlist (repeat the whole context).",
+            "Set the active music source's repeat mode: off, track (repeat one), or playlist (repeat the whole context).",
             Schema(
                 new() { ["mode"] = Prop("string", "One of: off, track, playlist.") },
                 required: ["mode"])),
-        NoArgs("get_music_state", "Get the current Spotify playback state (track/artist, device, volume, progress, shuffle, repeat), or null if nothing is active."),
+        NoArgs("get_music_state", "Get the current music playback state: the active source, the available sources, and track/artist, device, volume, progress, shuffle and repeat (isPlaying is false when nothing is playing)."),
 
         // Sounds (live control + metadata)
         new AiToolDefinition(

@@ -1,6 +1,7 @@
 using RpgSceneMaker.Api.Errors;
 using RpgSceneMaker.Api.Models;
 using RpgSceneMaker.Api.Services;
+using RpgSceneMaker.Api.Services.Music;
 
 namespace RpgSceneMaker.Api.Validation;
 
@@ -49,9 +50,13 @@ public static class SceneValidation
 
         if (scene.Music is { } music)
         {
+            if (music.Source is { } source && source is not ("spotify" or "local"))
+                throw new ValidationException("error.scene.musicSource", source);
             if (music.Volume is { } volume && volume is < 0.0 or > 1.0)
                 throw new ValidationException("error.scene.musicVolumeRange");
-            if (!string.IsNullOrWhiteSpace(music.PlayId) && !SpotifyClient.IsSpotifyUri(music.PlayId))
+            // A play id must be a Spotify link/URI or a local library reference (local:track:/local:playlist:).
+            if (!string.IsNullOrWhiteSpace(music.PlayId)
+                && !SpotifyClient.IsSpotifyUri(music.PlayId) && !LocalMusicId.IsLocal(music.PlayId))
                 throw new ValidationException("error.scene.musicUri", music.PlayId);
         }
     }
