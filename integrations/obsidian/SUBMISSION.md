@@ -63,10 +63,16 @@ git branch -D obsidian-split
 ```
 
 After the split, in the new repo the plugin files sit at the root: `manifest.json`, `versions.json`,
-`package.json`, `styles.css`, `LICENSE`, `README.md`, `src/`, `esbuild.config.mjs`, `tsconfig.json`,
-`version-bump.mjs`, `.gitignore`.
+`package.json`, `package-lock.json`, `styles.css`, `LICENSE`, `README.md`, `src/`,
+`esbuild.config.mjs`, `tsconfig.json`, `version-bump.mjs`, `.gitignore`.
 
 Notes on what is / isn't in the new repo:
+- **`package-lock.json` MUST be committed** — the release workflow's `npm ci` refuses to run without a
+  lockfile (`EUSAGE: The npm ci command can only install with an existing package-lock.json`). It used
+  to be gitignored here, which made a split repo fail its first release; the ignore was removed and the
+  lockfile is tracked now. If your split predates that fix: delete the `package-lock.json` line from the
+  new repo's `.gitignore`, copy the lockfile from the monorepo, commit, then re-push the release tag
+  (`git push --delete origin 0.1.0 && git push origin 0.1.0` after re-tagging the new commit).
 - **`main.js` is not committed** — `.gitignore` (carried over) ignores it. Obsidian downloads it from
   the **release**, not the repo; the release workflow rebuilds it. (Same in this monorepo: `main.js`
   is gitignored and never committed here either.)
