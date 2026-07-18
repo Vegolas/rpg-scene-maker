@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured);
+- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/RpgSceneMaker.Ui/Components/OnboardingWizard.razor), not a nav tab);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
   through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
@@ -155,6 +155,17 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   and event's `SoundEffects` and from event timeline clips, so activations/triggers never warn about a
   dangling reference. Nothing is mapped at the bare `/sounds` path so the
   panel's Sounds tab can live there (same reason `/lights` uses `/lights/list`). **NAudio output is Windows-only.**
+- **`FreesoundStore` / `FreesoundClient` / `SoundImporter`** — the **Freesound** sound-library integration
+  (issue #73): search + import CC-licensed effects straight into the soundboard. `FreesoundClient` is a typed
+  `HttpClient` (base URL `Freesound:BaseUrl`, default `https://freesound.org`, so verification can point at a
+  mock) hitting the token-auth Freesound API; `FreesoundStore` persists the API token (single-row
+  `FreesoundConfig`, **never echoed** — the config endpoints return only `{configured}`). `SoundImporter` is the
+  shared import tail (unique id, save, measure `DurationMs`, validate, upsert) reused by both `/sounds/import`
+  (multipart) and `/sounds/library/import` (fetch a chosen Freesound preview). `/sounds/library/*`
+  ([SoundEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SoundEndpoints.cs)) adds `search` + `import`; the token is
+  managed over `/setup/freesound/*` ([SetupEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SetupEndpoints.cs))
+  (`config` get/put + `disconnect`). Upstream failures throw **`FreesoundException`** → 502
+  (`error.title.freesound`), classified in `ErrorClassifier` like Hue/Spotify.
 - **`ImageFileStorage` / image search + import (`Services/Images/`)** — entity tile art lives on disk at
   `%LocalAppData%\RpgSceneMaker\images\` (override `Images:Path`), one file per image, referenced by stored
   file name only; `ImageFileStorage` mirrors `SoundFileStorage` (traversal-guarded names, 10 MB cap). Besides
@@ -174,6 +185,23 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `ImageFileStorage.SaveAsync`). Upstream Scryfall/CDN failures throw **`ImageSourceException`** → 502
   (`error.title.imageSource`), classified in `ErrorClassifier` like Hue/Spotify/AiProvider.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
+- **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
+  (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single image/handout the GM
+  has pushed to a shared table screen, a small recent-history list, and a monotonic `rev` for the panel's
+  `/tv/state?rev=` poll. `/tv/*` ([TvEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/TvEndpoints.cs)) covers
+  `state`, `content/current` (streams the current image's bytes via `Results.File`; 404 once cleared/missing),
+  `show`/`clear` (GET+POST push commands) and `show/recent`. **Gate split**: only `/tv/show*` + `/tv/clear` are
+  in `IsProtectedPath`; `/tv`, `/tv/state` and `/tv/content/current` stay OPEN so a shared player screen never
+  needs the admin key — the only key-free data is the one image the GM deliberately pushed. Nothing is mapped at
+  bare `/tv` (like `/screens`) so the panel's `/tv` page falls through to `index.html`.
+- **First-run onboarding (#75)** — a guided setup overlay the panel shows on a fresh install. State lives in a
+  nullable `OnboardingDoneUtc` column on the single-row `LightingConfig`: `GET /setup/onboarding` returns `show`
+  (= the flag is still null) plus per-step "already configured" hints, and **auto-completes for upgrades** (if
+  lights/Spotify/local-music are already set up but the flag is null, it stamps done so long-time users never see
+  the wizard); `GET|POST /setup/onboarding/done` stamps it via `SettingsStore.MarkOnboardingDone()`. The UI is
+  [`OnboardingWizard.razor`](src/RpgSceneMaker.Ui/Components/OnboardingWizard.razor), reusing the Settings forms;
+  every step is skippable, and Settings has a "Run setup wizard" button that reopens the overlay locally without
+  clearing the flag.
 - **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
   bounded ring buffer of recent log entries, fed by `InMemoryLoggerProvider` (our logs at Information,
   everything else at Warning+) and surfaced by `/logs/list` + the panel's Logs tab. The error middleware
@@ -254,6 +282,14 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `AiProviderException`, mapped to a `502` arm in the Program.cs error switch. The single conversation is
   **persisted to SQLite** (one `AssistantConversation` row via `AssistantConversationStore`, hydrated lazily on
   first access) so it survives a server restart; `clear` wipes it permanently.
+- **Installable Windows build (#75)** — [release-win.yml](.github/workflows/release-win.yml) cross-publishes
+  (from an ubuntu runner) a self-contained, single-file **win-x64** exe via the
+  [`win-x64` publish profile](src/RpgSceneMaker.Api/Properties/PublishProfiles/win-x64.pubxml) on a `v*` tag (or
+  manual dispatch), packaging `RpgSceneMaker.Api.exe` + the trimmed Blazor `wwwroot` + starter `scenes.json`
+  into `rpg-scene-maker-win-x64.zip` as a GitHub release. Program.cs recognizes this build by an **empty
+  entry-assembly `Location`** (`isPublishedExe`): it then roots the content root at `AppContext.BaseDirectory`
+  (so it runs from any launch dir) and defaults `Launch:OpenBrowser` on. The everyday PR build
+  ([build.yml](.github/workflows/build.yml)) is untouched.
 
 ### Conventions
 
@@ -268,9 +304,10 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   than returning ad-hoc error bodies; for a new exception *type*, add a `switch` arm to `ErrorClassifier`. See
   the error-localization notes under `LocaleService` above.
 - **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /sounds /events /screens
-  /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` require it (`X-Api-Key` header or `?apiKey=`;
-  the Spotify OAuth callback is exempt). The panel stores it in browser localStorage. Keep new protected
-  prefixes in `IsProtectedPath` in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
+  /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` — plus the TV **push** commands
+  `/tv/show*` and `/tv/clear` (the rest of the player-facing `/tv` surface stays open, see `TvState`) — require it
+  (`X-Api-Key` header or `?apiKey=`; the Spotify OAuth callback is exempt). The panel stores it in browser
+  localStorage. Keep new protected prefixes in `IsProtectedPath` in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
 - **DTOs are duplicated**, not shared: the API's wire DTOs live in `Contracts/` and the UI keeps its own
   copies in [its own `Contracts/`](src/RpgSceneMaker.Ui/Contracts) (there is no shared contracts project).
   If you change an API DTO, update the matching UI DTO by hand.
@@ -284,8 +321,10 @@ as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids
 `MusicTracks`/`MusicPlaylists` (local music library; playlist `TrackIds` a JSON column; ids `NOCASE`), `Events`
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
 `Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
-`NOCASE`) and a
-single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`) and a single-row
+`NOCASE`), a
+single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`, plus a nullable
+`OnboardingDoneUtc` stamp for the first-run wizard), a single-row `FreesoundConfig` (the Freesound API token)
+and a single-row
 `AssistantConversation` (the in-panel assistant's persisted transcript + history, each a JSON string). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 
@@ -296,7 +335,8 @@ Local **music files** live alongside at `%LocalAppData%\RpgSceneMaker\music\` (o
 one file per `MusicTrack` via `MusicFileStorage`.
 
 `appsettings.json` holds deployment config only: `Urls`, `Security:ApiKey`, `Database:Path`, `Sounds:Path`,
-`Music:Path`, `Locales:Path`.
+`Music:Path`, `Images:Path`, `Locales:Path`, and `Launch:OpenBrowser` (auto-open the panel at startup — default
+on for the installable exe, off under `dotnet run`).
 
 ### Changing the schema — create a migration
 

@@ -3,9 +3,9 @@
 A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor WASM)** that switches your whole table mood with one tap — from a Stream Deck, an iPad, or any browser:
 
 - **Lighting** — a Tuya smart bulb (e.g. Polux GU10) **or Philips Hue lights**, controlled **directly over your LAN** (fast, works without internet). Pick the system on the panel's ⚙ Settings page — scenes and endpoints are identical for both.
-- **Music** — **Spotify** (Premium) via the Spotify Web API, driving a Spotify Connect device on your LAN.
-- **Sound effects** — a built-in **soundboard**: import your own audio (MP3/WAV/OGG) and fire one-shots or looping ambience, played on the machine running the app. Each sound has its own volume and loop setting, and scenes can trigger sounds too.
-- **Scenes** — named presets combining light color/brightness + a Spotify playlist/track + sound effects, stored in a local SQLite database.
+- **Music** — **Spotify** (Premium) via the Spotify Web API driving a Spotify Connect device on your LAN, **or a built-in local music library** (import your own audio and play it on the machine running the app — no Spotify needed). Scenes and the Music tab work with either.
+- **Sound effects** — a built-in **soundboard**: import your own audio (MP3/WAV/OGG) — or search and import Creative-Commons effects from **Freesound** (with your own free API token) — and fire one-shots or looping ambience, played on the machine running the app. Each sound has its own volume and loop setting, and scenes can trigger sounds too.
+- **Scenes** — named presets combining light color/brightness + a Spotify or local playlist/track + sound effects, stored in a local SQLite database.
 - **Screens** — named shortcut boards that group your existing scenes, events, sounds and Spotify playlists onto one tap-friendly screen (e.g. a "Fantasy" or "Horror" board). Purely for organization — everything stays editable on its own tab.
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
@@ -47,7 +47,7 @@ Prefer to run from source, or on Linux/macOS? See **[Running](#running)** below.
 dotnet run --project src/RpgSceneMaker.Api
 ```
 
-This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify now-playing, transport, volume, shuffle/repeat, playlist list and track search), **Lights** (mood colors, brightness, white temperature, per-light targeting), **Sounds** (import + soundboard), **Events** (one-shot light flash + sound stingers), **Effects** (reusable Light FX library), **Screens** (custom shortcut boards), **Assistant** (an optional bring-your-own-key AI chat that appears once you configure a provider key under ⚙), and **Logs**.
+This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify plus a local music library — now-playing, transport, volume, shuffle/repeat, playlists and track search), **Lights** (mood colors, brightness, white temperature, per-light targeting), **Sounds** (import your own or search Freesound + soundboard), **Events** (one-shot light flash + sound stingers), **Effects** (reusable Light FX library), **Screens** (custom shortcut boards), **TV** (push an image or handout to a shared table screen), **Assistant** (an optional bring-your-own-key AI chat that appears once you configure a provider key under ⚙), and **Logs**.
 
 ## Using it from an iPad (or any tablet/phone)
 
@@ -102,7 +102,7 @@ Settings changed in the panel are saved to the SQLite database (see Persistence 
 
 Tip: give the bridge a fixed IP (DHCP reservation in your router) so the saved address doesn't go stale.
 
-### 2. Spotify (music)
+### 2. Music: Spotify and/or a local library
 
 Spotify has no local API, so this uses the Spotify Web API to remote-control a **Spotify Connect** device on your LAN (a phone, desktop app, speaker, etc.). **Spotify Premium is required** for playback control. Setup is a one-time OAuth connect from the control panel:
 
@@ -131,6 +131,10 @@ http://localhost:5252/music/play?id=spotify:playlist:37i9dQZF1DX8NTLI2TtZa6
 - *"Spotify Premium is required"* — playback control over the Web API is a Premium-only feature; free accounts can't be remote-controlled.
 - *"redirect_uri: Not matching configuration" / connect loops back with an error* — the Redirect URI in the Spotify dashboard must match the one shown in Settings **character for character** (no trailing slash, `http` not `https`, port included), and the connect must be started from the server PC — not from the iPad/LAN address, which Spotify won't accept over http.
 - *Worked for weeks, now "Spotify error"* — the saved token can be revoked (password change, "remove access" in your Spotify account). Tap **Disconnect** and connect again.
+
+**Local music library (no account needed)**
+
+Prefer your own files, or don't have Spotify? Import audio straight into the app on the **Music** tab → *Import audio* (MP3/WAV/OGG). Tracks play on the **machine running the app** via NAudio (**Windows-only**, like the soundboard — Spotify and lighting stay cross-platform), on their own output device independent of the soundboard mixer. Group tracks into **local playlists**, and point a scene at one with a `local:track:…` or `local:playlist:…` id — the Music tab and scene editor fill these in for you. `/music/play?id=…` accepts the same ids, and the shared transport (pause/resume/next/volume/shuffle/repeat) targets whichever source is currently playing.
 
 ### 3. Stream Deck
 
@@ -210,7 +214,7 @@ Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 ```
 
 - `light`: `color` (hex) **or** white via `brightness` + `temperature` (0 = warm, 100 = cold); `power: false` turns it off.
-- `music`: `playId` starts a playlist/track/album/artist — a `spotify:` URI or `open.spotify.com` link (a pasted share link works as-is); `volume` is 0–1 (mapped to the Spotify device volume), or `"pause": true` to stop playback.
+- `music`: `playId` starts a playlist/track/album/artist — a `spotify:` URI or `open.spotify.com` link (a pasted share link works as-is), or a local-library `local:track:…` / `local:playlist:…` id; `volume` is 0–1, or `"pause": true` to stop playback. Add `"source": "spotify"` / `"local"` to force a source (otherwise it's inferred from the id).
 - `soundEffects`: a list of sound ids (from the Sounds tab) to fire — e.g. `"soundEffects": ["thunder", "rain"]`.
 - Any part can be omitted — light, music and sound effects are applied concurrently, and the response reports each part separately (HTTP 207 if something failed).
 
@@ -222,8 +226,9 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 - **Tune** — each sound has a **volume** and a **loop** toggle (one-shot vs. continuous ambience). Tap ✎ on a sound to rename it, set its category, adjust volume/looping, and *Preview*.
 - **Play** — tap a sound to play, tap again to stop. Sounds **overlap** (thunder over rain); **Stop all** stops everything.
 - **From scenes** — in the scene editor's *Sound Effects* section, pick which sounds a scene fires. Activating the scene stops current playback, then plays the picked sounds with their own volume/loop.
+- **Freesound library** — no files of your own? Tap *Search library* on the Sounds tab to search [Freesound](https://freesound.org)'s Creative-Commons library and import a result in one tap (the author/licence attribution is kept on the sound). It needs a free Freesound API token — create one at [freesound.org/apiv2/apply](https://freesound.org/apiv2/apply) and paste it under **⚙ Settings → Sound library (Freesound)**.
 
-> Sound playback uses NAudio and is **Windows-only** (lighting and Spotify work cross-platform).
+> Sound and local-music playback use NAudio and are **Windows-only** (lighting and Spotify work cross-platform).
 
 ## Events
 
@@ -247,6 +252,12 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 Scenes, events, screens and sounds can each carry a background image on their tile. In any editor, tap **Upload art** to crop and upload your own picture — or tap **Search art** to find one without leaving the panel: type a query, pick a thumbnail from the grid, and the server imports it and sets it as that tile's art.
 
 The built-in search source is [Scryfall](https://scryfall.com)'s public API — no key or account needed, though it does need internet access (everything else at runtime stays on your LAN). The results are *Magic: The Gathering* card art: **© Wizards of the Coast, served via Scryfall**. That's fine for personal use at your own table — please don't redistribute it.
+
+## TV display
+
+Push a prepared image — a map, a handout, an NPC portrait — to a **shared table screen** without leaving the panel. Open **`http://<your-pc>:5252/tv`** on whatever the table sees (a TV's browser, a spare tablet, a cast tab); it shows only what you push, full-screen. From the panel's **TV** tab, upload or pick an image and tap *Show* to put it on that screen, *Clear* to blank it, or re-show something from the recent list.
+
+The player display (`/tv`, `/tv/state`, `/tv/content/current`) stays **outside the API-key gate** so a shared screen never needs the admin key — the only key-free data is the single image you deliberately pushed. The GM push commands (`/tv/show`, `/tv/clear`) are gated like the rest of the API.
 
 ## Language & translations
 
@@ -272,7 +283,7 @@ Translations are plain JSON files on the server, so anyone — including an AI a
 - Keep any `{0}` placeholders in a value. Count-dependent keys come in `.one`/`.other` variants (plus `.few`/`.many` for languages such as Polish that need them).
 - English also ships embedded in the app, so deleting or corrupting a file on disk can never blank the panel.
 
-> Server-side error messages (e.g. a Hue or Spotify failure surfaced as a toast) are currently shown in English regardless of the selected language.
+> Coded server-side error and validation messages are localized to the panel's language too (the panel sends it as the `X-Ui-Lang` header). Only raw text passed straight through from an upstream device or service — a Hue/Spotify/Freesound error string — stays in English.
 
 ## Endpoint reference
 
@@ -280,17 +291,21 @@ Translations are plain JSON files on the server, so anyone — including an AI a
 |---|---|
 | Scenes | `GET /scenes`, `GET /scenes/active`, `GET/PUT/DELETE /scenes/{id}`, `GET\|POST /scenes/{id}/activate` |
 | Lights | `/lights/on`, `/lights/off`, `/lights/toggle`, `/lights/color?hex=FF8C2A&brightness=80`, `/lights/white?brightness=80&temperature=30`, `/lights/brightness?value=50`, `/lights/default` (reset to the configured default state), `GET /lights/status`, `GET /lights/list`, per-light `/lights/{key}/on\|off\|color\|white\|brightness` |
-| Music (Spotify) | `/music/play?id=…` (a `spotify:` URI / `open.spotify.com` link), `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/shuffle?value=true`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/search?q=…`, `GET /music/state` |
-| Sounds (soundboard) | `GET /sounds/list`, `POST /sounds/import` (multipart), `PUT\|DELETE /sounds/{id}`, `/sounds/{id}/play?volume=0.8`, `/sounds/{id}/stop`, `/sounds/stop` (all), `GET /sounds/state` |
+| Music | `/music/play?id=…` (a `spotify:` URI / `open.spotify.com` link **or** a local `local:track:…` / `local:playlist:…` id), `/music/pause`, `/music/resume`, `/music/next`, `/music/previous`, `/music/volume?value=0.5`, `/music/shuffle?value=true`, `/music/repeat?mode=off\|track\|playlist`, `GET /music/playlists`, `GET /music/search?q=…`, `GET /music/state` |
+| Music library (local) | `GET /music/library/tracks`, `POST /music/library/import` (multipart), `PUT\|DELETE /music/library/tracks/{id}`, `GET /music/library/playlists`, `PUT\|DELETE /music/library/playlists/{id}` |
+| Sounds (soundboard) | `GET /sounds/list`, `POST /sounds/import` (multipart), `PUT\|DELETE /sounds/{id}`, `/sounds/{id}/play?volume=0.8`, `/sounds/{id}/stop`, `/sounds/stop` (all), `GET /sounds/state`, `GET /sounds/library/search?q=…`, `POST /sounds/library/import` (Freesound) |
 | Events | `GET /events/list`, `GET/PUT/DELETE /events/{id}`, `GET\|POST /events/{id}/trigger` |
 | Light FX | `GET /lightfx/list`, `PUT\|DELETE /lightfx/{id}`, `GET\|POST /lightfx/{id}/test`, `GET\|POST /lightfx/test/stop` |
 | Screens | `GET /screens/list`, `PUT\|DELETE /screens/{id}` |
+| TV display | `GET /tv/state`, `GET /tv/content/current`, `GET\|POST /tv/show?image=…&label=…`, `GET\|POST /tv/clear`, `GET /tv/show/recent` |
 | Images | `POST /images/upload` (multipart), `GET /images/{name}`, `GET /images/sources`, `GET /images/search?source=&q=`, `POST /images/import` |
 | Setup (Tuya) | `GET /setup/scan?seconds=10`, `GET /setup/local-keys?accessId=…&apiSecret=…&deviceId=…&region=eu` |
 | Setup (Hue) | `GET /setup/hue/discover`, `GET /setup/hue/register?bridgeIp=…`, `GET /setup/hue/lights` |
 | Setup (Spotify) | `GET/PUT /setup/spotify/config`, `GET /setup/spotify/login`, `GET /setup/spotify/callback`, `GET /setup/spotify/devices`, `GET\|POST /setup/spotify/disconnect` |
 | Setup (config) | `GET /setup/config`, `PUT /setup/config` — read/update provider + Hue/Tuya settings at runtime (persisted to the database) |
 | Setup (assistant) | `GET/PUT /setup/assistant/config` (BYOK provider + key + model; the key is never echoed back), `GET\|POST /setup/assistant/disconnect` |
+| Setup (Freesound) | `GET/PUT /setup/freesound/config` (BYO API token; the token is never echoed back), `GET\|POST /setup/freesound/disconnect` |
+| Setup (onboarding) | `GET /setup/onboarding` (should the first-run wizard show?), `GET\|POST /setup/onboarding/done` |
 | Assistant (chat) | `POST /assistant/send`, `GET /assistant/state?rev=…`, `GET\|POST /assistant/stop`, `GET\|POST /assistant/clear` |
 | MCP | `/mcp` — Model Context Protocol server (~43 tools over scenes/events/screens/light FX + music & sound control) for Claude Code / Claude Desktop |
 | Translations | `GET /i18n/list` (available languages), `GET /i18n/{code}` (one language's strings) |
@@ -301,7 +316,7 @@ All command endpoints accept GET or POST; parameters go in the query string.
 
 ## Persistence
 
-Scenes, lighting settings (provider, Hue, Tuya) and the Spotify connection (Client ID, refresh token, preferred device) live in a SQLite database at `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path` in `appsettings.json`). The schema is created/upgraded automatically at startup via EF Core migrations. Note the Spotify token in that file grants control of your Spotify account's playback — treat backups of the database accordingly.
+Scenes, lighting settings (provider, Hue, Tuya), the Spotify connection (Client ID, refresh token, preferred device), the local-music/soundboard metadata, and your **Freesound** and **AI-assistant** API tokens all live in a SQLite database at `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path` in `appsettings.json`). Imported audio (sounds + local music) and uploaded tile-art images live on disk next to it under `sounds\`, `music\` and `images\`. The schema is created/upgraded automatically at startup via EF Core migrations. Note the Spotify token and API keys in that file grant access to your accounts — treat backups of the database accordingly.
 
 On first run with an empty database, the legacy JSON files are imported once: `scenes.json` (also the starter template on a fresh clone) and `settings.local.json` (the pre-SQLite settings overlay). After that the database is the source of truth — the legacy files are never read again and can be kept as a backup or deleted.
 
@@ -315,6 +330,9 @@ Deployment-level config only — everything else is managed from the panel and s
 | `Security:ApiKey` | Optional shared secret. When set, all control endpoints require it (`X-Api-Key` header or `?apiKey=`); the panel asks for it under ⚙. |
 | `Database:Path` | SQLite file location, default `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db`. |
 | `Sounds:Path` | Folder for imported sound-effect audio files, default `%LocalAppData%\RpgSceneMaker\sounds`. |
+| `Music:Path` | Folder for imported local-music audio files, default `%LocalAppData%\RpgSceneMaker\music`. |
+| `Images:Path` | Folder for uploaded tile-art images, default `%LocalAppData%\RpgSceneMaker\images`. |
 | `Locales:Path` | Folder for UI translation JSON files, default `%LocalAppData%\RpgSceneMaker\locales`. |
+| `Launch:OpenBrowser` | Auto-open the panel in your default browser at startup. Defaults **on** for the double-clickable Windows build, **off** under `dotnet run`. |
 
 > ⚠️ The API listens on your whole LAN by default so the iPad can reach it. On a home network the worst case is someone toggling your lights, but set `Security:ApiKey` anyway — one line of config, and the panel + Stream Deck both support it. Never expose the port to the internet.

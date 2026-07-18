@@ -28,6 +28,12 @@ public static class ErrorClassifier
         // provider-neutral title rather than a Spotify-specific one.
         HttpRequestException or TaskCanceledException =>
             (StatusCodes.Status502BadGateway, "error.title.upstreamUnreachable"),
+        // A configured storage file/dir is missing on disk (e.g. Results.File can't find a stored image).
+        // These derive from IOException, so this MORE SPECIFIC arm must precede the socket/IO/timeout arm
+        // below (which means "bulb unreachable"). A missing local file is an internal/config fault, not a
+        // device timeout — an honest 500 with a generic storage title rather than a misleading 504 (#90).
+        FileNotFoundException or DirectoryNotFoundException =>
+            (StatusCodes.Status500InternalServerError, "error.title.storage"),
         SocketException or IOException or TimeoutException =>
             (StatusCodes.Status504GatewayTimeout, "error.title.bulbUnreachable"),
         _ => (StatusCodes.Status500InternalServerError, "error.title.unexpected"),

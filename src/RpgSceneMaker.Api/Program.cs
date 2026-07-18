@@ -29,32 +29,38 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = isPublishedExe ? AppContext.BaseDirectory : null,
 });
 
+// Each configured storage path is root-resolved once here (Path.GetFullPath), so a RELATIVE operator
+// override (e.g. --Images:Path ./imgs) becomes an absolute path against the process CWD and stays consistent
+// everywhere downstream — the storage services AND Results.File, which otherwise resolves a non-rooted path
+// against the web root and 404s the very file the storage service just wrote under the CWD (issue #90). The
+// absolute %LocalAppData% defaults pass through GetFullPath unchanged.
+
 // Scenes and lighting settings live in SQLite; Database:Path overrides the default location.
-var dbPath = builder.Configuration["Database:Path"] ?? Path.Combine(
+var dbPath = Path.GetFullPath(builder.Configuration["Database:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "RpgSceneMaker", "rpg-scene-maker.db");
+    "RpgSceneMaker", "rpg-scene-maker.db"));
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 
 // Sound-effect audio files live next to the database; Sounds:Path overrides the location.
-var soundsPath = builder.Configuration["Sounds:Path"] ?? Path.Combine(
+var soundsPath = Path.GetFullPath(builder.Configuration["Sounds:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "RpgSceneMaker", "sounds");
+    "RpgSceneMaker", "sounds"));
 
 // Full-art tile background images live next to the database; Images:Path overrides the location.
-var imagesPath = builder.Configuration["Images:Path"] ?? Path.Combine(
+var imagesPath = Path.GetFullPath(builder.Configuration["Images:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "RpgSceneMaker", "images");
+    "RpgSceneMaker", "images"));
 
 // Local music-library audio files live next to the database; Music:Path overrides the location.
-var musicPath = builder.Configuration["Music:Path"] ?? Path.Combine(
+var musicPath = Path.GetFullPath(builder.Configuration["Music:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "RpgSceneMaker", "music");
+    "RpgSceneMaker", "music"));
 
 // UI translation files live next to the database; Locales:Path overrides the location. Community/agent
 // authors drop or edit a <code>.json here; English is also embedded as the fallback (see LocaleService).
-var localesPath = builder.Configuration["Locales:Path"] ?? Path.Combine(
+var localesPath = Path.GetFullPath(builder.Configuration["Locales:Path"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "RpgSceneMaker", "locales");
+    "RpgSceneMaker", "locales"));
 
 // Startup-captured facts surfaced by GET /diagnostics (developer mode): process start time plus the
 // resolved on-disk paths, so the endpoint reuses the exact values instead of re-resolving them.
@@ -185,7 +191,7 @@ var app = builder.Build();
 
 // Create/upgrade the database, then pull in data from the legacy JSON files on first run.
 {
-    Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
+    Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!); // dbPath is already absolute (root-resolved above)
     using var db = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
     db.Database.Migrate();
     LegacyImporter.Run(db, app.Configuration, app.Environment, app.Logger);

@@ -28,9 +28,6 @@ public class FreesoundClient
         _base = (config["Freesound:BaseUrl"] ?? "https://freesound.org").TrimEnd('/');
     }
 
-    /// <summary>Whether a Freesound API token is configured.</summary>
-    public bool IsConfigured => _store.Current.IsConfigured;
-
     /// <summary>Full-text search. Page is 1-based; the endpoint rejects a blank query before calling this.</summary>
     public async Task<FreesoundSearchResult> SearchAsync(string query, int page, CancellationToken ct = default)
     {

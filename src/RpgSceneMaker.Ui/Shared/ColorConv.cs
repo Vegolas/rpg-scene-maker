@@ -22,8 +22,6 @@ public static class ColorConv
         return (Byte(s, 0), Byte(s, 2), Byte(s, 4));
     }
 
-    public static bool IsValidHex(string? raw) => TryParseRgb(raw) is not null;
-
     /// <summary>Canonical lower-case "#rrggbb" for a raw hex, or null when it can't be parsed.</summary>
     public static string? Normalize(string? raw) =>
         TryParseRgb(raw) is { } c ? Hex(c.R, c.G, c.B) : null;

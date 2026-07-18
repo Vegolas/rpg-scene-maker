@@ -95,7 +95,4 @@ public static class Icons
 
     /// <summary>Inner SVG markup for a semantic icon name; falls back to the warning glyph so a typo is visible.</summary>
     public static string Inner(string name) => Map.TryGetValue(name, out var m) ? m : Warning;
-
-    /// <summary>True if <paramref name="name"/> is a known icon.</summary>
-    public static bool Has(string name) => Map.ContainsKey(name);
 }
