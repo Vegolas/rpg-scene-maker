@@ -66,6 +66,11 @@
         }
     </nav>
 
+    @if (Ui.WizardOpen)
+    {
+        <OnboardingWizard />
+    }
+
     @if (Ui.Toast is not null)
     {
         <div class="toast @(Ui.ToastIsError ? "error" : "")">@Ui.Toast</div>
@@ -152,6 +157,15 @@
         // The Assistant tab is gated on a server-side provider key; load it too.
         var (assistant, _) = await Api.GetAssistantConfigAsync();
         Ui.SetAssistantConfigured(assistant?.Configured ?? false);
+
+        // First-run onboarding (issue #75): checked once at layout init, not per navigation. Open the
+        // wizard when the server says a fresh install should see it — or when this device has a
+        // mid-flight step marker (the Spotify OAuth round-trip reloads the whole app, and connecting
+        // music can auto-complete the server flag mid-wizard; the marker lets the user finish anyway).
+        // A failed fetch (offline / key-gated) opens nothing — the panel must never get stuck.
+        var onboarding = await Api.GetOnboardingAsync();
+        if (onboarding is not null && (onboarding.Show || await Api.GetOnboardingStepAsync() is not null))
+            Ui.SetWizardOpen(true);
     }
 
     private void OnUiChanged() => InvokeAsync(StateHasChanged);

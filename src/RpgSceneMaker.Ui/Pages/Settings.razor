@@ -32,6 +32,14 @@ else
         </div>
     </div>
 
+    <SectionHeading>@L["settings.wizard.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.wizard.hint"]</p>
+        <div class="btn-row" style="margin-top:0.6rem">
+            <button class="btn" @onclick="() => Ui.SetWizardOpen(true)">@L["settings.wizard.runBtn"]</button>
+        </div>
+    </div>
+
     <SectionHeading>@L["settings.menu.title"]</SectionHeading>
     <div class="panel">
         <p class="hint" style="margin-top:0">@L["settings.menu.hint"]</p>
@@ -68,111 +76,16 @@ else
     </div>
     <p class="hint">@L["settings.lightSystem.hint"]</p>
 
+    @* The provider setup forms are shared with the onboarding wizard (Components/Setup). Config is the
+       same object this page's registry/default sections edit, so changes stay in sync; OnChanged
+       re-renders this page (e.g. the registry's add button unlocking after a pair). *@
     @if (IsHue)
     {
-    <SectionHeading>@L["settings.hue.title"]</SectionHeading>
-    <div class="panel">
-        <div class="field">
-            <label for="bridge-ip">@L["settings.hue.bridgeIp"]</label>
-            <div class="field-row">
-                <input id="bridge-ip" type="text" @bind="_config.Hue.BridgeIp" placeholder='@L["settings.hue.ipPlaceholder"]' />
-                <button class="btn" @onclick="Discover" disabled="@_busy">@L["settings.hue.findBtn"]</button>
-            </div>
-        </div>
-
-        @if (HueIsPaired)
-        {
-            <p class="status ok"><Icon Name="ok" /> @L["settings.hue.paired"]</p>
-            <div class="btn-row">
-                <button class="btn" @onclick="LoadHueLights" disabled="@_busy">@L["settings.hue.refreshLights"]</button>
-                <button class="btn" @onclick="TestLight" disabled="@_busy">@L["settings.hue.testToggle"]</button>
-                <button class="btn btn--danger" @onclick="ForgetHue" disabled="@_busy">@L["settings.hue.forgetPairing"]</button>
-            </div>
-
-            @if (_hueLights is not null)
-            {
-                <p class="hint" style="margin-top:1rem">@L["settings.hue.lightsControlHint"]</p>
-                <div class="klist">
-                    @foreach (var light in _hueLights)
-                    {
-                        <label class="krow check @(_config.Hue.LightIds.Contains(light.Id) ? "playing" : "")">
-                            <input type="checkbox"
-                                   checked="@_config.Hue.LightIds.Contains(light.Id)"
-                                   @onchange="e => ToggleLight(light.Id, e)" />
-                            <span class="krow-ico"><Icon Name="@(light.Reachable ? "lights" : "warn")" /></span>
-                            <span class="krow-title">@light.Name <small class="hint">@light.Type@(light.Reachable ? "" : L["settings.hue.unreachableSuffix"])</small></span>
-                        </label>
-                    }
-                </div>
-            }
-        }
-        else
-        {
-            <p class="status">@L["settings.hue.notPaired"]</p>
-            <ol class="hint steps">
-                <li>@L["settings.hue.step1pre"]<em>@L["settings.hue.findBtn"]</em>@L["settings.hue.step1post"]</li>
-                <li><strong>@L["settings.hue.step2strong"]</strong>@L["settings.hue.step2post"]</li>
-                <li>@L["settings.hue.step3pre"]<em>@L["settings.hue.pairWord"]</em>@L["settings.hue.step3post"]</li>
-            </ol>
-            <div class="btn-row">
-                <button class="btn btn--primary btn--big" @onclick="Pair" disabled="@(_busy || string.IsNullOrWhiteSpace(_config.Hue.BridgeIp))">@L["settings.hue.pairBtn"]</button>
-            </div>
-        }
-
-        @if (_hueStatus is not null)
-        {
-            <p class="status @(_hueStatusIsError ? "err" : "ok")">@_hueStatus</p>
-        }
-
-        <div class="btn-row" style="margin-top:1rem">
-            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">@L["settings.hue.saveBtn"]</button>
-        </div>
-    </div>
+        <HueSetupForm Config="_config" OnChanged="StateHasChanged" />
     }
     else
     {
-    <SectionHeading>@L["settings.tuya.title"]</SectionHeading>
-    <div class="panel">
-        <div class="field">
-            <label for="tuya-ip">@L["settings.tuya.bulbIp"]</label>
-            <div class="field-row">
-                <input id="tuya-ip" type="text" @bind="_config.Tuya.Ip" placeholder='@L["settings.tuya.ipPlaceholder"]' />
-                <button class="btn" @onclick="ScanTuya" disabled="@_busy">@L["settings.tuya.scanBtn"]</button>
-            </div>
-        </div>
-        <div class="field">
-            <label for="tuya-id">@L["settings.tuya.deviceId"]</label>
-            <input id="tuya-id" type="text" @bind="_config.Tuya.DeviceId" />
-        </div>
-        <div class="field">
-            <label for="tuya-key">@L["settings.tuya.localKey"]</label>
-            <input id="tuya-key" type="password" @bind="_config.Tuya.LocalKey" />
-        </div>
-        <div class="field-row">
-            <div class="field" style="flex:1">
-                <label for="tuya-proto">@L["settings.tuya.protocol"]</label>
-                <select id="tuya-proto" @bind="_config.Tuya.ProtocolVersion">
-                    <option value="3.3">@L["settings.tuya.proto33"]</option>
-                    <option value="3.1">@L["settings.tuya.proto31"]</option>
-                </select>
-            </div>
-            <div class="field" style="flex:1">
-                <label for="tuya-dp">@L["settings.tuya.dpLayout"]</label>
-                <select id="tuya-dp" @bind="_config.Tuya.DpProfile">
-                    <option value="v2">@L["settings.tuya.dpV2"]</option>
-                    <option value="v1">@L["settings.tuya.dpV1"]</option>
-                </select>
-            </div>
-        </div>
-        @if (_tuyaStatus is not null)
-        {
-            <p class="status">@_tuyaStatus</p>
-        }
-        <div class="btn-row">
-            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">@L["settings.tuya.saveBtn"]</button>
-        </div>
-        <p class="hint">@L["settings.tuya.keyHint"]</p>
-    </div>
+        <TuyaSetupForm Config="_config" OnChanged="StateHasChanged" />
     }
 
     <SectionHeading>@L["settings.registry.title"]</SectionHeading>
@@ -234,7 +147,7 @@ else
         }
 
         <div class="btn-row" style="margin-top:1rem">
-            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">@L["settings.registry.saveBtn"]</button>
+            <button class="btn btn--primary" @onclick="SaveConfig">@L["settings.registry.saveBtn"]</button>
         </div>
     </div>
 
@@ -269,140 +182,20 @@ else
         }
 
         <div class="btn-row" style="margin-top:1rem">
-            <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">@L["settings.default.saveBtn"]</button>
-            <button class="btn" @onclick="TestDefault" disabled="@(_busy || _config.DefaultLight is null)">@L["common.test"]</button>
+            <button class="btn btn--primary" @onclick="SaveConfig">@L["settings.default.saveBtn"]</button>
+            <button class="btn" @onclick="TestDefault" disabled="@(_config.DefaultLight is null)">@L["common.test"]</button>
         </div>
     </div>
     }
     else if (_tab == SettingsTab.Music)
     {
-    <SectionHeading>@L["settings.spotify.title"]</SectionHeading>
-    <div class="panel">
-        <div class="field">
-            <label for="spotify-client-id">@L["settings.spotify.clientId"]</label>
-            <input id="spotify-client-id" type="text" @bind="_spotify.ClientId" placeholder='@L["settings.spotify.clientIdPlaceholder"]' />
-        </div>
-        <div class="btn-row">
-            <button class="btn btn--primary" @onclick="SaveSpotify" disabled="@_busy">@L["settings.spotify.saveClientId"]</button>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(_spotify.RedirectUri))
-        {
-            <div class="field" style="margin-top:1rem">
-                <label for="spotify-redirect">@L["settings.spotify.redirectUri"]</label>
-                <input id="spotify-redirect" type="text" readonly value="@_spotify.RedirectUri" />
-            </div>
-        }
-        <p class="hint">@L["settings.spotify.redirectHintA"]<code>http://localhost:5252</code>@L["settings.spotify.redirectHintB"]<code>http://127.0.0.1:5252</code>@L["settings.spotify.redirectHintC"]</p>
-
-        @if (_spotify.Connected)
-        {
-            <p class="status ok"><Icon Name="ok" /> @L["settings.spotify.connected"]</p>
-            <div class="field" style="margin-top:1rem">
-                <label for="spotify-device">@L["settings.spotify.deviceLabel"]</label>
-                <div class="field-row">
-                    <select id="spotify-device" @onchange="OnSpotifyDeviceChanged">
-                        <option value="" selected="@string.IsNullOrEmpty(_spotify.PreferredDeviceId)">@L["settings.spotify.deviceAuto"]</option>
-                        @if (_spotifyDevices is not null)
-                        {
-                            @foreach (var d in _spotifyDevices)
-                            {
-                                <option value="@d.Id" selected="@(d.Id == _spotify.PreferredDeviceId)">@d.Name (@d.Type)@(d.IsActive ? L["settings.spotify.activeSuffix"] : "")</option>
-                            }
-                        }
-                        @if (!string.IsNullOrEmpty(_spotify.PreferredDeviceId) &&
-                             (_spotifyDevices is null || !_spotifyDevices.Any(d => d.Id == _spotify.PreferredDeviceId)))
-                        {
-                            <option value="@_spotify.PreferredDeviceId" selected>@_spotify.PreferredDeviceName @L["settings.spotify.offline"]</option>
-                        }
-                    </select>
-                    <button class="btn" @onclick="RefreshSpotifyDevices" disabled="@_busy">@L["common.refresh"]</button>
-                </div>
-            </div>
-            <div class="btn-row">
-                <button class="btn btn--danger" @onclick="DisconnectSpotify" disabled="@_busy">@L["settings.spotify.disconnectBtn"]</button>
-            </div>
-        }
-        else
-        {
-            <p class="status">@L["settings.spotify.notConnected"]</p>
-            <div class="btn-row">
-                <button class="btn btn--primary btn--big" @onclick="ConnectSpotify"
-                        disabled="@(_busy || string.IsNullOrWhiteSpace(_spotify.ClientId))">@L["settings.spotify.connectBtn"]</button>
-            </div>
-        }
-    </div>
-
-    <SectionHeading>@L["settings.freesound.title"]</SectionHeading>
-    <div class="panel">
-        <p class="hint" style="margin-top:0">@L["settings.freesound.hint"]</p>
-        <div class="field">
-            <label for="freesound-key">@L["settings.freesound.apiKey"]</label>
-            <input id="freesound-key" type="password" @bind="_freesound.ApiKey" placeholder='@L["settings.freesound.keyPlaceholder"]' />
-            <p class="hint">@L["settings.freesound.keyHint"]</p>
-        </div>
-        <div class="btn-row">
-            <button class="btn btn--primary" @onclick="SaveFreesound" disabled="@_busy">@L["settings.freesound.saveBtn"]</button>
-        </div>
-
-        @if (_freesound.Configured)
-        {
-            <p class="status ok"><Icon Name="ok" /> @L["settings.freesound.configured"]</p>
-            <div class="btn-row">
-                <button class="btn btn--danger" @onclick="DisconnectFreesound" disabled="@_busy">@L["common.disconnect"]</button>
-            </div>
-        }
-        else
-        {
-            <p class="status">@L["settings.freesound.noKey"]</p>
-        }
-    </div>
+    @* Both panels are shared with the onboarding wizard (Components/Setup); they own their own state. *@
+    <SpotifySetupForm />
+    <FreesoundSetupForm />
     }
     else if (_tab == SettingsTab.Assistant)
     {
-    <SectionHeading>@L["settings.assistant.title"]</SectionHeading>
-    <div class="panel">
-        <div class="field">
-            <label for="assistant-provider">@L["settings.assistant.provider"]</label>
-            <select id="assistant-provider" @bind="_assistant.Provider">
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="openai">OpenAI (GPT)</option>
-                <option value="gemini">Google Gemini</option>
-            </select>
-            <p class="hint">@L["settings.assistant.providerHint"]</p>
-        </div>
-        <div class="field">
-            <label for="assistant-key">@L["settings.assistant.apiKey"]</label>
-            <input id="assistant-key" type="password" @bind="_assistant.ApiKey" placeholder="@ProviderKeyPlaceholder" />
-            <p class="hint">@L["settings.assistant.keyHint"]</p>
-        </div>
-        <div class="field">
-            <label for="assistant-model">@L["settings.assistant.model"]</label>
-            <input id="assistant-model" type="text" @bind="_assistant.Model" placeholder="@ProviderModelPlaceholder" />
-            <p class="hint">@L[ProviderModelHint]</p>
-        </div>
-        <div class="btn-row">
-            <button class="btn btn--primary" @onclick="SaveAssistant" disabled="@_busy">@L["settings.assistant.saveBtn"]</button>
-        </div>
-
-        @if (_assistant.Configured)
-        {
-            <p class="status ok">✓ @L["settings.assistant.configured"]</p>
-            <div class="btn-row">
-                <button class="btn btn--danger" @onclick="DisconnectAssistant" disabled="@_busy">@L["common.disconnect"]</button>
-            </div>
-        }
-        else
-        {
-            <p class="status">@L["settings.assistant.noKey"]</p>
-        }
-
-        <div class="field" style="margin-top:1rem">
-            <label for="mcp-endpoint">@L["settings.assistant.mcpEndpoint"]</label>
-            <input id="mcp-endpoint" type="text" readonly value="@McpEndpoint" />
-            <p class="hint">@L["settings.assistant.mcpHintA"]<code>X-Api-Key</code>@L["settings.assistant.mcpHintB"]</p>
-        </div>
-    </div>
+    <AssistantSetupForm />
     }
 }
 
@@ -419,41 +212,8 @@ else
     private LightingConfigDto? _config;
     private string? _loadError;
     private List<HueLightDto>? _hueLights;
-    private string? _hueStatus;
-    private bool _hueStatusIsError;
-    private string? _tuyaStatus;
     private string? _apiKeyInput;
-    private bool _busy;
     private bool _showHueAdd;
-    private SpotifyConfigDto _spotify = new();
-    private List<SpotifyDeviceDto>? _spotifyDevices;
-    private AssistantConfigDto _assistant = new();
-    private FreesoundConfigDto _freesound = new();
-
-    // The MCP server is hosted at /mcp on the panel's own origin.
-    private string McpEndpoint => $"{Nav.BaseUri}mcp";
-
-    // Provider-specific hints for the AI Assistant key/model fields.
-    private string ProviderKeyPlaceholder => _assistant.Provider switch
-    {
-        "openai" => "sk-…",
-        "gemini" => "AIza…",
-        _ => "sk-ant-…",
-    };
-
-    private string ProviderModelPlaceholder => _assistant.Provider switch
-    {
-        "openai" => "gpt-4o",
-        "gemini" => "gemini-2.0-flash",
-        _ => "claude-opus-4-8",
-    };
-
-    private string ProviderModelHint => _assistant.Provider switch
-    {
-        "openai" => "settings.assistant.modelHint.openai",
-        "gemini" => "settings.assistant.modelHint.gemini",
-        _ => "settings.assistant.modelHint.anthropic",
-    };
 
     private async Task OnLanguageChanged(ChangeEventArgs e)
     {
@@ -479,17 +239,6 @@ else
             return;
         }
         _config = config;
-        if (HueIsPaired) await LoadHueLights();
-
-        var (spotify, _) = await Api.GetSpotifyConfigAsync();
-        if (spotify is not null) _spotify = spotify;
-        if (_spotify.Connected) await RefreshSpotifyDevices();
-
-        var (assistant, _) = await Api.GetAssistantConfigAsync();
-        if (assistant is not null) _assistant = assistant;
-
-        var (freesound, _) = await Api.GetFreesoundConfigAsync();
-        if (freesound is not null) _freesound = freesound;
 
         // Show the result of a just-completed connect attempt (from the OAuth callback redirect).
         switch (QueryValue("spotify"))
@@ -500,102 +249,6 @@ else
             case { } s when s.StartsWith("error", StringComparison.Ordinal):
                 Ui.ReportError(L.Format("settings.toast.spotifyFailed", s[(s.IndexOf(':') + 1)..]));
                 break;
-        }
-    }
-
-    private async Task SaveSpotify()
-    {
-        if (await Api.SaveSpotifyConfigAsync(_spotify))
-        {
-            Ui.ReportOk(L["settings.toast.clientIdSaved"]);
-            var (spotify, _) = await Api.GetSpotifyConfigAsync();
-            if (spotify is not null) _spotify = spotify;
-        }
-    }
-
-    private async Task SaveAssistant()
-    {
-        _busy = true;
-        try
-        {
-            if (await Api.SaveAssistantConfigAsync(_assistant))
-            {
-                _assistant.ApiKey = ""; // the key is never echoed; blank the field after saving
-                var (assistant, _) = await Api.GetAssistantConfigAsync();
-                if (assistant is not null) _assistant = assistant;
-                Ui.ReportOk(L["settings.toast.assistantSaved"]);
-                Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
-            }
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task DisconnectAssistant()
-    {
-        if (await Api.DisconnectAssistantAsync(L["settings.toast.assistantDisconnected"]))
-        {
-            var (assistant, _) = await Api.GetAssistantConfigAsync();
-            if (assistant is not null) _assistant = assistant;
-            Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
-        }
-    }
-
-    private async Task SaveFreesound()
-    {
-        _busy = true;
-        try
-        {
-            if (await Api.SaveFreesoundConfigAsync(_freesound))
-            {
-                _freesound.ApiKey = ""; // the token is never echoed; blank the field after saving
-                var (freesound, _) = await Api.GetFreesoundConfigAsync();
-                if (freesound is not null) _freesound = freesound;
-                Ui.ReportOk(L["settings.toast.freesoundSaved"]);
-            }
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task DisconnectFreesound()
-    {
-        if (await Api.DisconnectFreesoundAsync(L["settings.toast.freesoundDisconnected"]))
-        {
-            var (freesound, _) = await Api.GetFreesoundConfigAsync();
-            if (freesound is not null) _freesound = freesound;
-        }
-    }
-
-    private async Task ConnectSpotify()
-    {
-        // Full-page navigation: the login endpoint redirects the browser to Spotify's consent screen.
-        var url = await Api.GetSpotifyLoginUrlAsync();
-        Nav.NavigateTo(url, forceLoad: true);
-    }
-
-    private async Task RefreshSpotifyDevices()
-    {
-        var (devices, error) = await Api.GetSpotifyDevicesAsync();
-        if (devices is not null) _spotifyDevices = devices;
-        else if (error is not null) Ui.ReportError(error);
-    }
-
-    private async Task OnSpotifyDeviceChanged(ChangeEventArgs e)
-    {
-        var id = e.Value?.ToString() ?? "";
-        _spotify.PreferredDeviceId = id;
-        _spotify.PreferredDeviceName = _spotifyDevices?.FirstOrDefault(d => d.Id == id)?.Name ?? "";
-        if (await Api.SaveSpotifyConfigAsync(_spotify))
-            Ui.ReportOk(id == "" ? L["settings.toast.deviceAuto"] : L.Format("settings.toast.deviceSet", _spotify.PreferredDeviceName));
-    }
-
-    private async Task DisconnectSpotify()
-    {
-        if (await Api.DisconnectSpotifyAsync(L["settings.toast.spotifyDisconnected"]))
-        {
-            _spotify.Connected = false;
-            _spotify.PreferredDeviceId = "";
-            _spotify.PreferredDeviceName = "";
-            _spotifyDevices = null;
         }
     }
 
@@ -633,8 +286,6 @@ else
         _config.Provider = provider;
         if (await Api.SaveConfigAsync(_config))
             Ui.ReportOk(L.Format("settings.toast.providerSet", provider == "hue" ? L["settings.provider.hue"] : L["settings.provider.tuya"]));
-        if (IsHue && HueIsPaired && _hueLights is null)
-            await LoadHueLights();
     }
 
     private async Task SaveConfig()
@@ -644,110 +295,17 @@ else
             Ui.ReportOk(L["settings.toast.saved"]);
     }
 
-    private async Task Discover()
-    {
-        _busy = true;
-        _hueStatus = L["settings.hue.searching"];
-        _hueStatusIsError = false;
-        StateHasChanged();
-        try
-        {
-            var (bridges, error) = await Api.DiscoverBridgesAsync();
-            if (bridges is { Count: > 0 })
-            {
-                _config!.Hue.BridgeIp = bridges[0].Ip;
-                _hueStatus = bridges.Count == 1
-                    ? L.Format("settings.hue.foundOne", bridges[0].Ip)
-                    : L.Plural("settings.hue.foundMany", bridges.Count, bridges[0].Ip, string.Join(", ", bridges.Select(b => b.Ip)));
-            }
-            else
-            {
-                _hueStatus = error ?? L["settings.hue.noBridge"];
-                _hueStatusIsError = true;
-            }
-        }
-        finally { _busy = false; }
-    }
-
-    private async Task Pair()
-    {
-        if (_config is null) return;
-        _busy = true;
-        _hueStatus = L["settings.hue.pairing"];
-        _hueStatusIsError = false;
-        StateHasChanged();
-        try
-        {
-            var (registration, error) = await Api.RegisterHueAsync(_config.Hue.BridgeIp);
-            if (registration is null)
-            {
-                _hueStatus = error ?? L["settings.hue.pairFailed"];
-                _hueStatusIsError = true;
-                return;
-            }
-
-            _config.Hue.AppKey = registration.AppKey;
-            if (await Api.SaveConfigAsync(_config))
-            {
-                _hueStatus = L["settings.hue.pairedSaved"];
-                await LoadHueLights();
-            }
-        }
-        finally { _busy = false; }
-    }
-
+    // Hue lights for the registry's "add Hue light" list (the Hue setup panel loads its own copy).
     private async Task LoadHueLights()
     {
         if (_config is null || !HueIsPaired) return;
         var (lights, error) = await Api.GetHueLightsAsync(_config.Hue.BridgeIp, _config.Hue.AppKey);
         if (lights is null)
         {
-            _hueStatus = error;
-            _hueStatusIsError = true;
+            if (error is not null) Ui.ReportError(error);
             return;
         }
         _hueLights = lights;
-    }
-
-    private void ToggleLight(string id, ChangeEventArgs e)
-    {
-        if (_config is null) return;
-        if (e.Value is true or "true") _config.Hue.LightIds.Add(id);
-        else _config.Hue.LightIds.Remove(id);
-    }
-
-    private async Task ForgetHue()
-    {
-        if (_config is null) return;
-        _config.Hue.AppKey = "";
-        _config.Hue.LightIds.Clear();
-        _hueLights = null;
-        if (await Api.SaveConfigAsync(_config))
-            Ui.ReportOk(L["settings.toast.huePairingRemoved"]);
-    }
-
-    private Task TestLight() => Api.CommandAsync("lights/toggle", L["settings.toast.toggled"]);
-
-    private async Task ScanTuya()
-    {
-        _busy = true;
-        _tuyaStatus = L["settings.tuya.listening"];
-        StateHasChanged();
-        try
-        {
-            var (devices, error) = await Api.ScanTuyaAsync();
-            if (devices is { Count: > 0 })
-            {
-                _config!.Tuya.Ip = devices[0].Ip;
-                _config!.Tuya.DeviceId = devices[0].DeviceId;
-                _tuyaStatus = L.Plural("settings.tuya.found", devices.Count, devices[0].Ip, devices[0].DeviceId);
-            }
-            else
-            {
-                _tuyaStatus = error ?? L["settings.tuya.nothingFound"];
-            }
-        }
-        finally { _busy = false; }
     }
 
     private async Task SaveApiKey()

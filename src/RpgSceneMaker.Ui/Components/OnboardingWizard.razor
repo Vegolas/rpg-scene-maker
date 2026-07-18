@@ -1,0 +1,210 @@
+@using RpgSceneMaker.Ui.Components.Setup
+@inject ApiClient Api
+@inject UiState Ui
+@inject Localizer L
+
+@* First-run onboarding (issue #75): a full-screen overlay hosted by MainLayout — NOT a routed page, so
+   deep links never trap anyone in it, and the chrome-less /tv route (TvLayout) never shows it. Every
+   step is skippable and the whole thing can be skipped from the header; each step reuses the same setup
+   components as the Settings page, so nothing here duplicates setup logic.
+
+   The current step is persisted per-device (localStorage via ApiClient) so the wizard survives the
+   Spotify OAuth full-page round-trip and the language-switch re-render, reopening where the user was. *@
+
+<div class="onboarding" role="dialog" aria-modal="true" aria-label='@L["onboarding.title"]'>
+    <div class="onboarding__frame">
+        <header class="onboarding__head">
+            <span class="onboarding__brand">SCENE MAKER</span>
+            <span class="onboarding__step">@L.Format("onboarding.stepOf", (int)_step, StepCount)</span>
+            @if (_step != Step.Done)
+            {
+                <button class="btn btn--ghost" @onclick="SkipAll">@L["onboarding.skipAll"]</button>
+            }
+        </header>
+
+        @if (!_loaded)
+        {
+            <p class="empty-note">@L["settings.loading"]</p>
+        }
+        else if (_step == Step.Welcome)
+        {
+            <h1 class="onboarding__title">@L["onboarding.welcome.title"]</h1>
+            <p class="onboarding__blurb">@L["onboarding.welcome.blurb"]</p>
+            <div class="panel">
+                <div class="field">
+                    <label for="onb-lang">@L["settings.language.title"]</label>
+                    <select id="onb-lang" @onchange="OnLanguageChanged">
+                        @foreach (var lang in L.Available)
+                        {
+                            <option value="@lang.Code" selected="@(lang.Code == L.CurrentCode)">@lang.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="onboarding__foot">
+                <span class="onboarding__spacer"></span>
+                <button class="btn btn--primary btn--big" @onclick="() => GoTo(Step.Lights)">@L["onboarding.welcome.startBtn"]</button>
+            </div>
+        }
+        else if (_step == Step.Lights)
+        {
+            <h1 class="onboarding__title">@L["onboarding.lights.title"]</h1>
+            <p class="onboarding__blurb">@L["onboarding.lights.blurb"]</p>
+            @if (_flags?.LightsConfigured == true)
+            {
+                <p class="status ok"><Icon Name="ok" /> @L["onboarding.lights.already"]</p>
+            }
+            @if (_config is not null)
+            {
+                <div class="chip-row">
+                    <Chip On="@(_provider == "tuya")" OnClick='() => PickProvider("tuya")'>@L["settings.lightSystem.tuya"]</Chip>
+                    <Chip On="@(_provider == "hue")" OnClick='() => PickProvider("hue")'>@L["settings.lightSystem.hue"]</Chip>
+                </div>
+
+                @if (_provider == "hue")
+                {
+                    <HueSetupForm Config="_config" />
+                }
+                else if (_provider == "tuya")
+                {
+                    <p class="hint">@L["onboarding.lights.tuyaIntro"]</p>
+                    <div class="btn-row" style="margin-bottom:0.4rem">
+                        <a class="btn" href="https://github.com/Vegolas/rpg-scene-maker#1a-tuya-bulb-local-control"
+                           target="_blank" rel="noreferrer">@L["onboarding.lights.openGuide"]</a>
+                    </div>
+                    <TuyaSetupForm Config="_config" />
+                }
+            }
+            <div class="onboarding__foot">
+                <button class="btn btn--ghost" @onclick="() => GoTo(Step.Welcome)">@L["onboarding.back"]</button>
+                <span class="onboarding__spacer"></span>
+                <button class="btn" @onclick="() => GoTo(Step.Music)">@L["onboarding.lights.doLater"]</button>
+                <button class="btn btn--primary btn--big" @onclick="() => GoTo(Step.Music)">@L["onboarding.continue"]</button>
+            </div>
+        }
+        else if (_step == Step.Music)
+        {
+            <h1 class="onboarding__title">@L["onboarding.music.title"]</h1>
+            <p class="onboarding__blurb">@L["onboarding.music.blurb"]</p>
+            @if (_flags?.SpotifyConnected == true)
+            {
+                <p class="status ok"><Icon Name="ok" /> @L["onboarding.music.spotifyConnected"]</p>
+            }
+            <SpotifySetupForm />
+
+            <SectionHeading>@L["music.local.title"]</SectionHeading>
+            <div class="panel">
+                @if (_flags?.LocalMusicAvailable == true || _importedCount > 0)
+                {
+                    <p class="status ok" style="margin-top:0"><Icon Name="ok" /> @L["onboarding.music.localReady"]</p>
+                }
+                <MusicImportField InputId="onb-music-import" OnImported="OnTrackImported" />
+                <p class="hint" style="margin-bottom:0">@L["onboarding.music.localHint"]</p>
+            </div>
+            <div class="onboarding__foot">
+                <button class="btn btn--ghost" @onclick="() => GoTo(Step.Lights)">@L["onboarding.back"]</button>
+                <span class="onboarding__spacer"></span>
+                <button class="btn" @onclick="() => GoTo(Step.Extras)">@L["onboarding.skipStep"]</button>
+                <button class="btn btn--primary btn--big" @onclick="() => GoTo(Step.Extras)">@L["onboarding.continue"]</button>
+            </div>
+        }
+        else if (_step == Step.Extras)
+        {
+            <h1 class="onboarding__title">@L["onboarding.extras.title"]</h1>
+            <p class="onboarding__blurb">@L["onboarding.extras.blurb"]</p>
+            <AssistantSetupForm ShowMcpEndpoint="false" />
+            <FreesoundSetupForm />
+            <div class="onboarding__foot">
+                <button class="btn btn--ghost" @onclick="() => GoTo(Step.Music)">@L["onboarding.back"]</button>
+                <span class="onboarding__spacer"></span>
+                <button class="btn" @onclick="() => GoTo(Step.Done)">@L["onboarding.skipStep"]</button>
+                <button class="btn btn--primary btn--big" @onclick="() => GoTo(Step.Done)">@L["onboarding.continue"]</button>
+            </div>
+        }
+        else
+        {
+            <h1 class="onboarding__title">@L["onboarding.done.title"]</h1>
+            <p class="onboarding__blurb">@L["onboarding.done.blurb"]</p>
+            <div class="onboarding__foot">
+                <button class="btn btn--ghost" @onclick="() => GoTo(Step.Extras)">@L["onboarding.back"]</button>
+                <span class="onboarding__spacer"></span>
+                <button class="btn btn--primary btn--big" @onclick="Finish">@L["onboarding.done.finishBtn"]</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private enum Step { Welcome = 1, Lights = 2, Music = 3, Extras = 4, Done = 5 }
+    private const int StepCount = 5;
+
+    private Step _step = Step.Welcome;
+    private bool _loaded;
+    private OnboardingDto? _flags;
+    private LightingConfigDto? _config;
+    private string? _provider;
+    private int _importedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Fresh flags every time the wizard opens (first run, OAuth return, Settings re-entry) so the
+        // "already set up" pre-marks are current.
+        _flags = await Api.GetOnboardingAsync();
+        var (config, _) = await Api.GetConfigAsync();
+        _config = config;
+
+        // Preselect the provider only when lights are genuinely set up (mirror the server's flag);
+        // otherwise the user picks a system first, so an unconfigured install shows no half-filled form.
+        if (_flags?.LightsConfigured == true)
+            _provider = _config?.Provider.ToLowerInvariant();
+
+        // Resume mid-flight (OAuth round-trip / language re-render); otherwise mark step 1 as in progress.
+        var saved = await Api.GetOnboardingStepAsync();
+        if (saved is >= 1 and <= StepCount) _step = (Step)saved.Value;
+        else await Api.SetOnboardingStepAsync((int)_step);
+        _loaded = true;
+    }
+
+    private async Task GoTo(Step step)
+    {
+        _step = step;
+        await Api.SetOnboardingStepAsync((int)step);
+    }
+
+    private void PickProvider(string provider)
+    {
+        _provider = provider;
+        if (_config is not null) _config.Provider = provider;
+        // Not saved yet — the chosen form's own Save/Pair persists the whole config (including Provider),
+        // so picking a tile and skipping leaves the server untouched.
+    }
+
+    private async Task OnLanguageChanged(ChangeEventArgs e)
+    {
+        var code = e.Value?.ToString();
+        if (string.IsNullOrEmpty(code)) return;
+        // The layout rebuilds its subtree on a language switch, recreating this component — the persisted
+        // step marker (already written) puts the recreated wizard back on this step.
+        await L.SetLanguageAsync(code);
+    }
+
+    private Task OnTrackImported(MusicTrackDto _)
+    {
+        _importedCount++;
+        return Task.CompletedTask;
+    }
+
+    // Header "Skip setup": mark onboarding done (never auto-show again) and close quietly.
+    private Task SkipAll() => CloseAsync(welcome: false);
+
+    // Final "Finish": mark done, close, and greet.
+    private Task Finish() => CloseAsync(welcome: true);
+
+    private async Task CloseAsync(bool welcome)
+    {
+        await Api.CompleteOnboardingAsync();
+        await Api.SetOnboardingStepAsync(null);
+        Ui.SetWizardOpen(false);
+        if (welcome) Ui.ReportOk(L["onboarding.toast.welcome"]);
+    }
+}

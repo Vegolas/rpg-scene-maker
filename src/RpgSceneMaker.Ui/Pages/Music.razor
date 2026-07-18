@@ -118,20 +118,8 @@ else
 <SectionHeading>@L["music.local.title"]</SectionHeading>
 
 <div class="panel">
-    <div class="field" style="margin-bottom:0">
-        <label for="music-import">@L["music.local.importLabel"]</label>
-        <InputFile id="music-import" OnChange="OnFilePicked" accept=".mp3,.wav,.ogg" disabled="@_uploading" />
-        <p class="hint" style="margin-top:0.5rem">
-            @if (_uploading)
-            {
-                <span>@L.Format("music.local.importing", _uploadName)</span>
-            }
-            else
-            {
-                <span>@L["music.local.importHint"]</span>
-            }
-        </p>
-    </div>
+    @* Shared with the onboarding wizard's music step (Components/MusicImportField). *@
+    <MusicImportField OnImported="OnTrackImported" />
 </div>
 
 @if (_tracks is null)
@@ -300,8 +288,6 @@ else if (_playlistsLocal is not null)
     // Local library.
     private List<MusicTrackDto>? _tracks;
     private List<MusicPlaylistDto>? _playlistsLocal;
-    private bool _uploading;
-    private string _uploadName = "";
     private string? _editTrackId;
     private string _editName = "";
     private string _editArtist = "";
@@ -427,35 +413,10 @@ else if (_playlistsLocal is not null)
 
     // ---------- local library actions ----------
 
-    private async Task OnFilePicked(InputFileChangeEventArgs e)
+    private async Task OnTrackImported(MusicTrackDto _)
     {
-        var file = e.File;
-        if (file is null) return;
-
-        _uploading = true;
-        _uploadName = file.Name;
-        StateHasChanged();
-        try
-        {
-            var name = Path.GetFileNameWithoutExtension(file.Name);
-            var (result, error) = await Api.UploadMusicTrackAsync(file, name, "");
-            if (result is not null)
-            {
-                Ui.ReportOk(L.Format("music.local.toast.imported", result.Name));
-                await RefreshLibraryAsync();
-                await PollAsync(); // "available" may have just gained local — surface the transport now
-            }
-            else
-            {
-                Ui.ReportError(error ?? L["music.local.toast.importFailed"]);
-            }
-        }
-        finally
-        {
-            _uploading = false;
-            _uploadName = "";
-            StateHasChanged();
-        }
+        await RefreshLibraryAsync();
+        await PollAsync(); // "available" may have just gained local — surface the transport now
     }
 
     private void ToggleEdit(MusicTrackDto t)

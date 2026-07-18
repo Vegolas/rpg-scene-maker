@@ -273,6 +273,43 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
+    // ---------- onboarding (first-run wizard) ----------
+
+    /// <summary>First-run onboarding state (show flag + per-step "already done" flags); null (silent)
+    /// when offline or key-gated, so a broken fetch can never trap the panel in the wizard.</summary>
+    public Task<OnboardingDto?> GetOnboardingAsync() => GetAsync<OnboardingDto?>("setup/onboarding");
+
+    /// <summary>Stamp onboarding as done server-side so the wizard never auto-shows again.</summary>
+    public Task<bool> CompleteOnboardingAsync() => CommandAsync("setup/onboarding/done");
+
+    private int? _onboardingStep;
+    private bool _onboardingStepLoaded;
+
+    /// <summary>The wizard step this device was on mid-flight (persisted per-device), or null when the
+    /// wizard isn't mid-flight. Lets the wizard survive the Spotify OAuth full-page round-trip and the
+    /// language-switch re-render, reopening where the user left off.</summary>
+    public async Task<int?> GetOnboardingStepAsync()
+    {
+        if (!_onboardingStepLoaded)
+        {
+            var raw = await js.InvokeAsync<string?>("localStorage.getItem", "onboardingStep");
+            _onboardingStep = int.TryParse(raw, out var v) ? v : null;
+            _onboardingStepLoaded = true;
+        }
+        return _onboardingStep;
+    }
+
+    /// <summary>Remember (or clear, with null) the wizard's current step for this device.</summary>
+    public async Task SetOnboardingStepAsync(int? step)
+    {
+        _onboardingStep = step;
+        _onboardingStepLoaded = true;
+        if (step is null)
+            await js.InvokeVoidAsync("localStorage.removeItem", "onboardingStep");
+        else
+            await js.InvokeVoidAsync("localStorage.setItem", "onboardingStep", step.Value.ToString());
+    }
+
     // ---------- spotify (music) ----------
 
     public Task<(SpotifyConfigDto? Result, string? Error)> GetSpotifyConfigAsync() =>

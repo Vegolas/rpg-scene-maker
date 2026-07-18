@@ -1,0 +1,181 @@
+@inject ApiClient Api
+@inject UiState Ui
+@inject Localizer L
+
+@* The Philips Hue setup panel (bridge discovery, link-button pairing, controlled-lights pick, save),
+   extracted from the Settings page so the first-run onboarding wizard reuses the exact same flow.
+   Mutates the host's shared LightingConfigDto; Pair/Save persist it via PUT /setup/config. *@
+
+<SectionHeading>@L["settings.hue.title"]</SectionHeading>
+<div class="panel">
+    <div class="field">
+        <label for="bridge-ip">@L["settings.hue.bridgeIp"]</label>
+        <div class="field-row">
+            <input id="bridge-ip" type="text" @bind="Config.Hue.BridgeIp" placeholder='@L["settings.hue.ipPlaceholder"]' />
+            <button class="btn" @onclick="Discover" disabled="@_busy">@L["settings.hue.findBtn"]</button>
+        </div>
+    </div>
+
+    @if (HueIsPaired)
+    {
+        <p class="status ok"><Icon Name="ok" /> @L["settings.hue.paired"]</p>
+        <div class="btn-row">
+            <button class="btn" @onclick="LoadHueLights" disabled="@_busy">@L["settings.hue.refreshLights"]</button>
+            <button class="btn" @onclick="TestLight" disabled="@_busy">@L["settings.hue.testToggle"]</button>
+            <button class="btn btn--danger" @onclick="ForgetHue" disabled="@_busy">@L["settings.hue.forgetPairing"]</button>
+        </div>
+
+        @if (_hueLights is not null)
+        {
+            <p class="hint" style="margin-top:1rem">@L["settings.hue.lightsControlHint"]</p>
+            <div class="klist">
+                @foreach (var light in _hueLights)
+                {
+                    <label class="krow check @(Config.Hue.LightIds.Contains(light.Id) ? "playing" : "")">
+                        <input type="checkbox"
+                               checked="@Config.Hue.LightIds.Contains(light.Id)"
+                               @onchange="e => ToggleLight(light.Id, e)" />
+                        <span class="krow-ico"><Icon Name="@(light.Reachable ? "lights" : "warn")" /></span>
+                        <span class="krow-title">@light.Name <small class="hint">@light.Type@(light.Reachable ? "" : L["settings.hue.unreachableSuffix"])</small></span>
+                    </label>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <p class="status">@L["settings.hue.notPaired"]</p>
+        <ol class="hint steps">
+            <li>@L["settings.hue.step1pre"]<em>@L["settings.hue.findBtn"]</em>@L["settings.hue.step1post"]</li>
+            <li><strong>@L["settings.hue.step2strong"]</strong>@L["settings.hue.step2post"]</li>
+            <li>@L["settings.hue.step3pre"]<em>@L["settings.hue.pairWord"]</em>@L["settings.hue.step3post"]</li>
+        </ol>
+        <div class="btn-row">
+            <button class="btn btn--primary btn--big" @onclick="Pair" disabled="@(_busy || string.IsNullOrWhiteSpace(Config.Hue.BridgeIp))">@L["settings.hue.pairBtn"]</button>
+        </div>
+    }
+
+    @if (_hueStatus is not null)
+    {
+        <p class="status @(_hueStatusIsError ? "err" : "ok")">@_hueStatus</p>
+    }
+
+    <div class="btn-row" style="margin-top:1rem">
+        <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">@L["settings.hue.saveBtn"]</button>
+    </div>
+</div>
+
+@code {
+    /// <summary>The host's lighting config — shared by reference so edits here are visible to the host
+    /// (e.g. the Settings registry enabling its "add Hue light" button once paired).</summary>
+    [Parameter, EditorRequired] public LightingConfigDto Config { get; set; } = default!;
+
+    /// <summary>Raised after pairing/forgetting/saving so the host can re-render dependent UI.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<HueLightDto>? _hueLights;
+    private string? _hueStatus;
+    private bool _hueStatusIsError;
+    private bool _busy;
+
+    private bool HueIsPaired => !string.IsNullOrWhiteSpace(Config.Hue.AppKey);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (HueIsPaired) await LoadHueLights();
+    }
+
+    private async Task Discover()
+    {
+        _busy = true;
+        _hueStatus = L["settings.hue.searching"];
+        _hueStatusIsError = false;
+        StateHasChanged();
+        try
+        {
+            var (bridges, error) = await Api.DiscoverBridgesAsync();
+            if (bridges is { Count: > 0 })
+            {
+                Config.Hue.BridgeIp = bridges[0].Ip;
+                _hueStatus = bridges.Count == 1
+                    ? L.Format("settings.hue.foundOne", bridges[0].Ip)
+                    : L.Plural("settings.hue.foundMany", bridges.Count, bridges[0].Ip, string.Join(", ", bridges.Select(b => b.Ip)));
+            }
+            else
+            {
+                _hueStatus = error ?? L["settings.hue.noBridge"];
+                _hueStatusIsError = true;
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Pair()
+    {
+        _busy = true;
+        _hueStatus = L["settings.hue.pairing"];
+        _hueStatusIsError = false;
+        StateHasChanged();
+        try
+        {
+            var (registration, error) = await Api.RegisterHueAsync(Config.Hue.BridgeIp);
+            if (registration is null)
+            {
+                _hueStatus = error ?? L["settings.hue.pairFailed"];
+                _hueStatusIsError = true;
+                return;
+            }
+
+            Config.Hue.AppKey = registration.AppKey;
+            if (await Api.SaveConfigAsync(Config))
+            {
+                _hueStatus = L["settings.hue.pairedSaved"];
+                await LoadHueLights();
+                await OnChanged.InvokeAsync();
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LoadHueLights()
+    {
+        if (!HueIsPaired) return;
+        var (lights, error) = await Api.GetHueLightsAsync(Config.Hue.BridgeIp, Config.Hue.AppKey);
+        if (lights is null)
+        {
+            _hueStatus = error;
+            _hueStatusIsError = true;
+            return;
+        }
+        _hueLights = lights;
+    }
+
+    private void ToggleLight(string id, ChangeEventArgs e)
+    {
+        if (e.Value is true or "true") Config.Hue.LightIds.Add(id);
+        else Config.Hue.LightIds.Remove(id);
+    }
+
+    private async Task ForgetHue()
+    {
+        Config.Hue.AppKey = "";
+        Config.Hue.LightIds.Clear();
+        _hueLights = null;
+        if (await Api.SaveConfigAsync(Config))
+        {
+            Ui.ReportOk(L["settings.toast.huePairingRemoved"]);
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private Task TestLight() => Api.CommandAsync("lights/toggle", L["settings.toast.toggled"]);
+
+    private async Task SaveConfig()
+    {
+        if (await Api.SaveConfigAsync(Config))
+        {
+            Ui.ReportOk(L["settings.toast.saved"]);
+            await OnChanged.InvokeAsync();
+        }
+    }
+}

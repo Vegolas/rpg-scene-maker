@@ -1,0 +1,92 @@
+@inject ApiClient Api
+@inject UiState Ui
+@inject Localizer L
+
+@* The Tuya bulb setup panel (LAN scan, device id / local key entry, protocol + DP layout, save),
+   extracted from the Settings page so the first-run onboarding wizard reuses the exact same flow.
+   Mutates the host's shared LightingConfigDto; Save persists it via PUT /setup/config. *@
+
+<SectionHeading>@L["settings.tuya.title"]</SectionHeading>
+<div class="panel">
+    <div class="field">
+        <label for="tuya-ip">@L["settings.tuya.bulbIp"]</label>
+        <div class="field-row">
+            <input id="tuya-ip" type="text" @bind="Config.Tuya.Ip" placeholder='@L["settings.tuya.ipPlaceholder"]' />
+            <button class="btn" @onclick="ScanTuya" disabled="@_busy">@L["settings.tuya.scanBtn"]</button>
+        </div>
+    </div>
+    <div class="field">
+        <label for="tuya-id">@L["settings.tuya.deviceId"]</label>
+        <input id="tuya-id" type="text" @bind="Config.Tuya.DeviceId" />
+    </div>
+    <div class="field">
+        <label for="tuya-key">@L["settings.tuya.localKey"]</label>
+        <input id="tuya-key" type="password" @bind="Config.Tuya.LocalKey" />
+    </div>
+    <div class="field-row">
+        <div class="field" style="flex:1">
+            <label for="tuya-proto">@L["settings.tuya.protocol"]</label>
+            <select id="tuya-proto" @bind="Config.Tuya.ProtocolVersion">
+                <option value="3.3">@L["settings.tuya.proto33"]</option>
+                <option value="3.1">@L["settings.tuya.proto31"]</option>
+            </select>
+        </div>
+        <div class="field" style="flex:1">
+            <label for="tuya-dp">@L["settings.tuya.dpLayout"]</label>
+            <select id="tuya-dp" @bind="Config.Tuya.DpProfile">
+                <option value="v2">@L["settings.tuya.dpV2"]</option>
+                <option value="v1">@L["settings.tuya.dpV1"]</option>
+            </select>
+        </div>
+    </div>
+    @if (_tuyaStatus is not null)
+    {
+        <p class="status">@_tuyaStatus</p>
+    }
+    <div class="btn-row">
+        <button class="btn btn--primary" @onclick="SaveConfig" disabled="@_busy">@L["settings.tuya.saveBtn"]</button>
+    </div>
+    <p class="hint">@L["settings.tuya.keyHint"]</p>
+</div>
+
+@code {
+    /// <summary>The host's lighting config — shared by reference so edits here are visible to the host.</summary>
+    [Parameter, EditorRequired] public LightingConfigDto Config { get; set; } = default!;
+
+    /// <summary>Raised after saving so the host can re-render dependent UI.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string? _tuyaStatus;
+    private bool _busy;
+
+    private async Task ScanTuya()
+    {
+        _busy = true;
+        _tuyaStatus = L["settings.tuya.listening"];
+        StateHasChanged();
+        try
+        {
+            var (devices, error) = await Api.ScanTuyaAsync();
+            if (devices is { Count: > 0 })
+            {
+                Config.Tuya.Ip = devices[0].Ip;
+                Config.Tuya.DeviceId = devices[0].DeviceId;
+                _tuyaStatus = L.Plural("settings.tuya.found", devices.Count, devices[0].Ip, devices[0].DeviceId);
+            }
+            else
+            {
+                _tuyaStatus = error ?? L["settings.tuya.nothingFound"];
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveConfig()
+    {
+        if (await Api.SaveConfigAsync(Config))
+        {
+            Ui.ReportOk(L["settings.toast.saved"]);
+            await OnChanged.InvokeAsync();
+        }
+    }
+}
