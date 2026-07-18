@@ -1,0 +1,263 @@
+@* Online sound-library browser (Freesound): search, preview (one HTML5 clip at a time) and import into the
+   soundboard. When Freesound isn't configured it shows a hint linking to Settings instead of the search. *@
+@implements IAsyncDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject IJSRuntime Js
+@inject Localizer L
+
+@if (_configured is null)
+{
+    <p class="empty-note">@L["library.loading"]</p>
+}
+else if (_configured == false)
+{
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["library.notConfigured.pre"]<a href="settings?tab=music">@L["library.notConfigured.link"]</a>@L["library.notConfigured.post"]</p>
+    </div>
+}
+else
+{
+    <div class="panel">
+        <div class="field">
+            <label for="lib-search">@L["library.searchLabel"]</label>
+            <div class="field-row">
+                <input id="lib-search" type="text" @bind="_query" @bind:event="oninput" @onkeydown="OnKeyDown"
+                       placeholder='@L["library.searchPlaceholder"]' />
+                <button class="btn" @onclick="Search" disabled="@(_searching || string.IsNullOrWhiteSpace(_query))">@L["library.searchBtn"]</button>
+            </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+            <label for="lib-cat">@L["library.categoryLabel"]</label>
+            <input id="lib-cat" type="text" @bind="_category" placeholder='@L["library.categoryPlaceholder"]' />
+        </div>
+    </div>
+
+    @if (_searchError is not null)
+    {
+        <p class="status err">@_searchError</p>
+    }
+
+    @if (_items is null)
+    {
+        <p class="empty-note">@(_searching ? L["library.searching"] : L["library.prompt"])</p>
+    }
+    else if (_items.Count == 0)
+    {
+        <p class="empty-note">@L.Format("library.noResults", _lastQuery)</p>
+    }
+    else
+    {
+        <p class="section-h">@L.Plural("library.resultCount", _total)</p>
+        <div class="lib-list">
+            @foreach (var r in _items)
+            {
+                var isPreviewing = _previewId == r.Id;
+                var isImporting = _importing.Contains(r.Id);
+                var isImported = _imported.Contains(r.Id);
+                <div class="lib-row @(isPreviewing ? "previewing" : "")">
+                    <button class="lib-play" @onclick="() => TogglePreview(r)"
+                            aria-label='@(isPreviewing ? L["library.stopPreview"] : L["library.preview"])'>
+                        <Icon Name="@(isPreviewing ? "stop" : "play")" />
+                    </button>
+                    <div class="lib-row__body">
+                        <div class="lib-row__title">@r.Name</div>
+                        <div class="lib-row__meta">
+                            @if (!string.IsNullOrWhiteSpace(r.Author))
+                            {
+                                <span>@L.Format("library.by", r.Author)</span>
+                            }
+                            @if (r.DurationMs > 0)
+                            {
+                                <span aria-hidden="true">·</span>
+                                <span>@FormatDuration(r.DurationMs)</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(r.License))
+                            {
+                                @if (!string.IsNullOrWhiteSpace(r.LicenseUrl))
+                                {
+                                    <a class="lib-license" href="@r.LicenseUrl" target="_blank" rel="noopener noreferrer">@r.License</a>
+                                }
+                                else
+                                {
+                                    <span class="lib-license">@r.License</span>
+                                }
+                            }
+                        </div>
+                    </div>
+                    <div class="lib-row__actions">
+                        @if (isImported)
+                        {
+                            <span class="lib-imported"><Icon Name="ok" /> @L["library.imported"]</span>
+                        }
+                        else
+                        {
+                            <button class="btn btn--primary" @onclick="() => Import(r)" disabled="@isImporting">
+                                @if (isImporting)
+                                {
+                                    <span class="lib-spin" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    @L["library.import"]
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+        @if (_hasMore)
+        {
+            <div class="btn-row" style="margin-top:0.8rem">
+                <button class="btn" @onclick="LoadMore" disabled="@_searching">@L["library.loadMore"]</button>
+            </div>
+        }
+    }
+}
+
+@code {
+    // Raised after a successful import so the Sounds page can refresh its soundboard list.
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    private bool? _configured;            // null = still checking, false = no token, true = ready to search
+    private string _query = "";
+    private string _lastQuery = "";
+    private string _category = "";        // optional: applied to every import from this browser session
+    private bool _searching;
+    private List<SoundSearchResultDto>? _items;   // null = no search yet; accumulates across "Load more"
+    private int _page = 1;
+    private bool _hasMore;
+    private int _total;
+    private string? _searchError;
+    private int? _previewId;              // id of the result whose preview is playing (one at a time)
+    private readonly HashSet<int> _importing = [];
+    private readonly HashSet<int> _imported = [];
+    private DotNetObjectReference<SoundLibraryBrowser>? _selfRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selfRef = DotNetObjectReference.Create(this);
+        var (config, _) = await Api.GetFreesoundConfigAsync();
+        _configured = config?.Configured == true;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Search();
+    }
+
+    private async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(_query)) return;
+        await StopPreview();
+        _lastQuery = _query.Trim();
+        _page = 1;
+        _items = null;
+        _searchError = null;
+        await FetchAsync(reset: true);
+    }
+
+    private async Task LoadMore()
+    {
+        _page++;
+        await FetchAsync(reset: false);
+    }
+
+    private async Task FetchAsync(bool reset)
+    {
+        _searching = true;
+        StateHasChanged();
+        try
+        {
+            var (data, error) = await Api.SearchSoundLibraryAsync(_lastQuery, _page);
+            if (data is null)
+            {
+                _searchError = error;
+                if (reset) _items = null;
+            }
+            else
+            {
+                _searchError = null;
+                _hasMore = data.HasMore;
+                _total = data.TotalCount;
+                if (reset || _items is null) _items = data.Results.ToList();
+                else _items.AddRange(data.Results);
+            }
+        }
+        finally
+        {
+            _searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TogglePreview(SoundSearchResultDto r)
+    {
+        if (_previewId == r.Id)
+        {
+            await StopPreview();
+            return;
+        }
+        _previewId = r.Id;
+        StateHasChanged();
+        // One clip at a time — the JS helper stops any current preview before starting this one.
+        await Js.InvokeVoidAsync("rpgSoundPreview.play", r.PreviewUrl, _selfRef);
+    }
+
+    private async Task StopPreview()
+    {
+        if (_previewId is null) return;
+        _previewId = null;
+        await Js.InvokeVoidAsync("rpgSoundPreview.stop");
+        StateHasChanged();
+    }
+
+    // Called from JS when a preview reaches its natural end (or fails to load) so the icon resets.
+    [JSInvokable]
+    public void OnPreviewEnded()
+    {
+        _previewId = null;
+        StateHasChanged();
+    }
+
+    private async Task Import(SoundSearchResultDto r)
+    {
+        if (_importing.Contains(r.Id) || _imported.Contains(r.Id)) return;
+        _importing.Add(r.Id);
+        StateHasChanged();
+        try
+        {
+            var category = string.IsNullOrWhiteSpace(_category) ? null : _category.Trim();
+            var (result, error) = await Api.ImportLibrarySoundAsync(r.Id, r.Name, category);
+            if (result is not null)
+            {
+                _imported.Add(r.Id);
+                Ui.ReportOk(L.Format("library.toast.imported", result.Name));
+                await OnImported.InvokeAsync();
+            }
+            else
+            {
+                Ui.ReportError(error ?? L["library.toast.importFailed"]);
+            }
+        }
+        finally
+        {
+            _importing.Remove(r.Id);
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatDuration(int ms)
+    {
+        var ts = TimeSpan.FromMilliseconds(ms);
+        return ts.TotalHours >= 1 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await Js.InvokeVoidAsync("rpgSoundPreview.stop"); }
+        catch { /* circuit already gone */ }
+        _selfRef?.Dispose();
+    }
+}

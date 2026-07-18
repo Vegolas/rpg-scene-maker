@@ -332,6 +332,31 @@ else
             </div>
         }
     </div>
+
+    <SectionHeading>@L["settings.freesound.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.freesound.hint"]</p>
+        <div class="field">
+            <label for="freesound-key">@L["settings.freesound.apiKey"]</label>
+            <input id="freesound-key" type="password" @bind="_freesound.ApiKey" placeholder='@L["settings.freesound.keyPlaceholder"]' />
+            <p class="hint">@L["settings.freesound.keyHint"]</p>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn--primary" @onclick="SaveFreesound" disabled="@_busy">@L["settings.freesound.saveBtn"]</button>
+        </div>
+
+        @if (_freesound.Configured)
+        {
+            <p class="status ok"><Icon Name="ok" /> @L["settings.freesound.configured"]</p>
+            <div class="btn-row">
+                <button class="btn btn--danger" @onclick="DisconnectFreesound" disabled="@_busy">@L["common.disconnect"]</button>
+            </div>
+        }
+        else
+        {
+            <p class="status">@L["settings.freesound.noKey"]</p>
+        }
+    </div>
     }
     else if (_tab == SettingsTab.Assistant)
     {
@@ -403,6 +428,7 @@ else
     private SpotifyConfigDto _spotify = new();
     private List<SpotifyDeviceDto>? _spotifyDevices;
     private AssistantConfigDto _assistant = new();
+    private FreesoundConfigDto _freesound = new();
 
     // The MCP server is hosted at /mcp on the panel's own origin.
     private string McpEndpoint => $"{Nav.BaseUri}mcp";
@@ -462,6 +488,9 @@ else
         var (assistant, _) = await Api.GetAssistantConfigAsync();
         if (assistant is not null) _assistant = assistant;
 
+        var (freesound, _) = await Api.GetFreesoundConfigAsync();
+        if (freesound is not null) _freesound = freesound;
+
         // Show the result of a just-completed connect attempt (from the OAuth callback redirect).
         switch (QueryValue("spotify"))
         {
@@ -508,6 +537,31 @@ else
             var (assistant, _) = await Api.GetAssistantConfigAsync();
             if (assistant is not null) _assistant = assistant;
             Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
+        }
+    }
+
+    private async Task SaveFreesound()
+    {
+        _busy = true;
+        try
+        {
+            if (await Api.SaveFreesoundConfigAsync(_freesound))
+            {
+                _freesound.ApiKey = ""; // the token is never echoed; blank the field after saving
+                var (freesound, _) = await Api.GetFreesoundConfigAsync();
+                if (freesound is not null) _freesound = freesound;
+                Ui.ReportOk(L["settings.toast.freesoundSaved"]);
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DisconnectFreesound()
+    {
+        if (await Api.DisconnectFreesoundAsync(L["settings.toast.freesoundDisconnected"]))
+        {
+            var (freesound, _) = await Api.GetFreesoundConfigAsync();
+            if (freesound is not null) _freesound = freesound;
         }
     }
 

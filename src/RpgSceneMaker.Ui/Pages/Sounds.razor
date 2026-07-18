@@ -32,6 +32,17 @@
     </div>
 </div>
 
+<div class="btn-row" style="margin:0 0 1rem">
+    <button class="btn" @onclick="ToggleLibrary">
+        <Icon Name="library" /> @L[_showLibrary ? "sounds.hideLibraryBtn" : "sounds.searchLibraryBtn"]
+    </button>
+</div>
+
+@if (_showLibrary)
+{
+    <SoundLibraryBrowser OnImported="RefreshAsync" />
+}
+
 @if (_sounds is null)
 {
     <p class="empty-note">@L["sounds.loading"]</p>
@@ -91,6 +102,9 @@ else
 
     private bool _uploading;
     private string _uploadName = "";
+    private bool _showLibrary;
+
+    private void ToggleLibrary() => _showLibrary = !_showLibrary;
 
     protected override async Task OnInitializedAsync()
     {

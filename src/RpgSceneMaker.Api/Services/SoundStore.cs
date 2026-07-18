@@ -37,6 +37,10 @@ public class SoundStore(IDbContextFactory<AppDbContext> dbFactory)
             existing.Image = sound.Image;
             existing.DurationMs = sound.DurationMs;
             existing.Waveform = sound.Waveform;
+            existing.Author = sound.Author;
+            existing.License = sound.License;
+            existing.LicenseUrl = sound.LicenseUrl;
+            existing.SourceUrl = sound.SourceUrl;
         }
         await db.SaveChangesAsync();
     }

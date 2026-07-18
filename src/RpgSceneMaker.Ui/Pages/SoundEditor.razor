@@ -29,6 +29,33 @@ else
             <Chip On="_edit.Loop" OnClick="() => _edit.Loop = !_edit.Loop"><Icon Name="repeat" /> @L["common.loop"]</Chip>
         </div>
         <ArtField @bind-Image="_edit.Image" />
+        @if (_sound?.HasAttribution == true)
+        {
+            <p class="hint" style="margin-top:0.8rem">
+                @L["soundEditor.attrHeading"]:
+                @if (!string.IsNullOrWhiteSpace(_sound.Author))
+                {
+                    <span>@L.Format("soundEditor.attrBy", _sound.Author)</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(_sound.License))
+                {
+                    <text> — </text>
+                    @if (!string.IsNullOrWhiteSpace(_sound.LicenseUrl))
+                    {
+                        <a href="@_sound.LicenseUrl" target="_blank" rel="noopener noreferrer">@_sound.License</a>
+                    }
+                    else
+                    {
+                        <span>@_sound.License</span>
+                    }
+                }
+                @if (!string.IsNullOrWhiteSpace(_sound.SourceUrl))
+                {
+                    <text> · </text>
+                    <a href="@_sound.SourceUrl" target="_blank" rel="noopener noreferrer">@L["soundEditor.attrSource"]</a>
+                }
+            </p>
+        }
         <div class="btn-row" style="margin-top:1rem">
             <button class="btn btn--primary" @onclick="SaveEdit" disabled="@_busy">@L["common.save"]</button>
             <button class="btn" @onclick="Preview" disabled="@_busy"><Icon Name="play" /> @L["common.preview"]</button>

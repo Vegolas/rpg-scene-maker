@@ -131,6 +131,25 @@ public static class SetupEndpoints
             var c = store.Current;
             return new { provider = c.Provider, configured = c.IsConfigured, model = c.Model };
         });
+
+        // Freesound.org (BYOK, token-only). The API token is write-only: stored server-side and sent to
+        // Freesound to search + download HQ previews, but never returned — only the "configured" flag.
+        setup.MapGet("/freesound/config", (FreesoundStore store) =>
+            new { configured = store.Current.IsConfigured });
+
+        setup.MapPut("/freesound/config", (FreesoundConfigInput input, FreesoundStore store) =>
+        {
+            if (string.IsNullOrWhiteSpace(input.ApiKey))
+                throw new ValidationException("error.setup.freesoundKeyRequired");
+            store.Save(input.ApiKey);
+            return Results.Ok(new { configured = store.Current.IsConfigured });
+        });
+
+        setup.MapMethods("/freesound/disconnect", EndpointHelpers.GetOrPost, (FreesoundStore store) =>
+        {
+            store.Clear();
+            return new { configured = store.Current.IsConfigured };
+        });
     }
 
     // Spotify's dashboard only accepts plain-http redirect URIs on 127.0.0.1 (not "localhost"), and the

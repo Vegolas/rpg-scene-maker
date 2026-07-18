@@ -369,6 +369,38 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     public async Task<List<string>> GetPlayingSoundIdsAsync() =>
         (await GetAsync<SoundStateDto>("sounds/state"))?.Playing ?? [];
 
+    // ---------- sound library (Freesound: BYOK config + search + import) ----------
+
+    /// <summary>Freesound "configured" flag (the token is never echoed). The library browser reads this to
+    /// decide between search and a "connect in Settings" hint.</summary>
+    public Task<(FreesoundConfigDto? Result, string? Error)> GetFreesoundConfigAsync() =>
+        FetchAsync<FreesoundConfigDto>(HttpMethod.Get, "setup/freesound/config");
+
+    public async Task<bool> SaveFreesoundConfigAsync(FreesoundConfigDto config)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Put, "setup/freesound/config", new { apiKey = config.ApiKey });
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<bool> DisconnectFreesoundAsync(string? okMessage = null) =>
+        CommandAsync("setup/freesound/disconnect", okMessage);
+
+    /// <summary>Search the online sound library (Freesound). The browser shows the error inline (503 until
+    /// a token is configured).</summary>
+    public Task<(SoundSearchDto? Result, string? Error)> SearchSoundLibraryAsync(string query, int page) =>
+        FetchAsync<SoundSearchDto>(HttpMethod.Get,
+            $"sounds/library/search?query={Uri.EscapeDataString(query)}&page={page}");
+
+    /// <summary>Import a library sound by its id (the server downloads the HQ MP3 preview and captures
+    /// author/license). Optional name/category override the library title / leave it uncategorized.</summary>
+    public Task<(SoundDto? Result, string? Error)> ImportLibrarySoundAsync(int id, string? name, string? category) =>
+        FetchAsync<SoundDto>(HttpMethod.Post, "sounds/library/import", new { id, name, category });
+
     /// <summary>Import a file as a new sound (multipart upload).</summary>
     public async Task<(SoundDto? Result, string? Error)> UploadSoundAsync(IBrowserFile file, string name, string category)
     {

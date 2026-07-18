@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.AspNetCore.Http.Features;
 using RpgSceneMaker.Api.Contracts;
 using RpgSceneMaker.Api.Errors;
@@ -41,8 +40,9 @@ public static class SoundEndpoints
         sounds.MapGet("/state", (SoundboardPlayer player) => new SoundStateDto(player.PlayingIds));
 
         // Import: multipart upload. The form is read manually (no IFormFile binding → no antiforgery
-        // requirement); the optional API key still guards the route.
-        sounds.MapPost("/import", async (HttpRequest request, SoundStore store, SoundFileStorage files) =>
+        // requirement); the optional API key still guards the route. The unique-id/save/measure/validate/upsert
+        // tail is shared with the library import via SoundImporter.
+        sounds.MapPost("/import", async (HttpRequest request, SoundImporter importer) =>
         {
             // Raise the per-request body cap (Kestrel defaults to 30 MB) before touching the body.
             if (request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } cap)
@@ -63,20 +63,50 @@ public static class SoundEndpoints
 
             var name = Blank(form["name"].ToString()) ?? Path.GetFileNameWithoutExtension(file.FileName);
             var category = Blank(form["category"].ToString()) ?? "";
-            var id = await UniqueIdAsync(name, store);
 
             await using var stream = file.OpenReadStream();
-            var storedName = await files.SaveAsync(id, ext, stream);
-            var sound = new Sound { Id = id, Name = name, Category = category, FileName = storedName };
-            // Measure the file's natural length + waveform preview now (same reader logic as playback); the
-            // "unmeasurable" sentinels (0 / empty array) if it won't decode, so /sounds/list never re-probes it.
-            var fullPath = files.FullPath(sound);
-            sound.DurationMs = SoundboardPlayer.TryMeasureDurationMs(fullPath) ?? 0;
-            sound.Waveform = SoundboardPlayer.TryComputeWaveform(fullPath) ?? [];
-            SoundValidation.Validate(sound);
-            await store.UpsertAsync(sound);
+            var sound = await importer.ImportAsync(name, category, ext, stream);
             return Results.Ok(ToDto(sound));
         }).DisableAntiforgery();
+
+        // ---------- online sound library (Freesound.org) ----------
+
+        // Search the CC-licensed library. GET-only: a panel-only read with query params, not a Stream Deck
+        // command. Requires a Freesound token (503 until configured on the Settings page).
+        sounds.MapGet("/library/search", async (string? query, int? page, FreesoundClient freesound) =>
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                throw new ValidationException("error.freesound.queryRequired");
+            var p = page is { } n && n > 0 ? n : 1;
+            var result = await freesound.SearchAsync(query.Trim(), p);
+            var results = result.Results.Select(s => new SoundSearchResultDto(
+                s.Id, s.Name, s.Author, FreesoundLicense.Label(s.LicenseUrl),
+                Blank(s.LicenseUrl), s.DurationMs, s.PreviewUrl ?? "", s.Tags)).ToList();
+            return new SoundSearchDto(results, result.Page, result.HasMore, result.TotalCount);
+        });
+
+        // Import a library sound: fetch its metadata, download the HQ MP3 preview server-side (the token stays
+        // here) and store it through the same core path as /sounds/import, capturing author + license. POST-only
+        // (a panel-only flow with a JSON body, like /import).
+        sounds.MapPost("/library/import", async (SoundLibraryImportInput input, FreesoundClient freesound, SoundImporter importer) =>
+        {
+            var detail = await freesound.GetSoundAsync(input.Id);
+            if (string.IsNullOrEmpty(detail.PreviewUrl))
+                throw new ValidationException("error.freesound.noPreview", input.Id);
+
+            var bytes = await freesound.DownloadPreviewAsync(detail.PreviewUrl);
+            var name = Blank(input.Name) ?? Blank(detail.Name) ?? "sound";
+            var category = Blank(input.Category) ?? "";
+            var meta = new SoundImportMeta(
+                Author: detail.Author,
+                License: FreesoundLicense.Label(detail.LicenseUrl),
+                LicenseUrl: detail.LicenseUrl,
+                SourceUrl: $"https://freesound.org/s/{detail.Id}/");
+
+            using var stream = new MemoryStream(bytes);
+            var sound = await importer.ImportAsync(name, category, ".mp3", stream, meta);
+            return Results.Ok(ToDto(sound));
+        });
 
         sounds.MapPut("/{id}", async (string id, SoundUpdateInput input, SoundStore store, ImageFileStorage images) =>
         {
@@ -180,30 +210,10 @@ public static class SoundEndpoints
     }
 
     // An empty waveform (the "couldn't decode" sentinel) is sent as null — the UI treats both as "no waveform".
+    // Author/License/LicenseUrl/SourceUrl are attribution for library-imported sounds (null for plain uploads).
     private static SoundDto ToDto(Sound s) =>
-        new(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.Image, s.DurationMs, s.Waveform is { Length: > 0 } ? s.Waveform : null);
+        new(s.Id, s.Name, s.Category, s.Volume, s.Loop, s.Image, s.DurationMs, s.Waveform is { Length: > 0 } ? s.Waveform : null,
+            s.Author, s.License, s.LicenseUrl, s.SourceUrl);
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-    // Slugify the name, then suffix -2, -3, … until it's free (ids are the /sounds/{id}/… URL segment).
-    private static async Task<string> UniqueIdAsync(string name, SoundStore store)
-    {
-        var baseSlug = Slugify(name);
-        if (baseSlug.Length == 0) baseSlug = "sound";
-        var id = baseSlug;
-        for (var n = 2; await store.GetAsync(id) is not null; n++)
-            id = $"{baseSlug}-{n}";
-        return id;
-    }
-
-    private static string Slugify(string s)
-    {
-        var sb = new StringBuilder();
-        foreach (var ch in s.Trim().ToLowerInvariant())
-        {
-            if (char.IsAsciiLetterOrDigit(ch)) sb.Append(ch);
-            else if (sb.Length > 0 && sb[^1] != '-') sb.Append('-');
-        }
-        return sb.ToString().Trim('-');
-    }
 }

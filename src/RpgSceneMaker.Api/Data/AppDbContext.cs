@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
     public DbSet<AssistantConfig> AssistantConfigs => Set<AssistantConfig>();
     public DbSet<AssistantConversation> AssistantConversations => Set<AssistantConversation>();
+    public DbSet<FreesoundConfig> FreesoundConfigs => Set<FreesoundConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -110,6 +111,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             convo.Property(c => c.Id).ValueGeneratedNever();
             // TranscriptJson / HistoryJson are plain string columns — the assistant service serializes the
             // (polymorphic) transcript + history itself, so they are deliberately NOT EF owned-JSON mapped.
+        });
+
+        modelBuilder.Entity<FreesoundConfig>(config =>
+        {
+            config.HasKey(c => c.Id);
+            config.Property(c => c.Id).ValueGeneratedNever();
+            // Computed convenience flag — never stored.
+            config.Ignore(c => c.IsConfigured);
         });
     }
 }

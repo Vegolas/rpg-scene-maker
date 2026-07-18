@@ -53,6 +53,8 @@ builder.Services.AddSingleton<SceneStore>();
 builder.Services.AddSingleton<SoundStore>();
 builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
 builder.Services.AddSingleton<SoundboardPlayer>();
+// Shared import tail (unique id, save, measure, validate, upsert) for /sounds/import + /sounds/library/import.
+builder.Services.AddSingleton<SoundImporter>();
 
 // Full-art tile backgrounds: uploaded via /images, stored on disk, referenced by stored file name.
 builder.Services.AddSingleton(new ImageFileStorage(imagesPath));
@@ -82,6 +84,11 @@ builder.Services.AddSingleton<SpotifyStore>();
 builder.Services.AddSingleton<SpotifyTokenCache>();
 builder.Services.AddSingleton<SpotifyAuthState>();
 builder.Services.AddHttpClient<SpotifyClient>(client => client.Timeout = TimeSpan.FromSeconds(10));
+
+// Freesound: token-only cloud API to search + import CC-licensed sounds into the soundboard. The base URL
+// is configurable (Freesound:BaseUrl, default https://freesound.org) so verification can point at a mock.
+builder.Services.AddSingleton<FreesoundStore>();
+builder.Services.AddHttpClient<FreesoundClient>(client => client.Timeout = TimeSpan.FromSeconds(20));
 
 // Assistant: bring-your-own-key settings for the in-panel AI assistant (provider + key + model, in SQLite).
 builder.Services.AddSingleton<AssistantStore>();

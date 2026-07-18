@@ -19,6 +19,7 @@ public static class ErrorClassifier
         InvalidOperationException => (StatusCodes.Status503ServiceUnavailable, "error.title.notConfigured"),
         HueException => (StatusCodes.Status502BadGateway, "error.title.hue"),
         SpotifyException => (StatusCodes.Status502BadGateway, "error.title.spotify"),
+        FreesoundException => (StatusCodes.Status502BadGateway, "error.title.freesound"),
         SoundboardException => (StatusCodes.Status503ServiceUnavailable, "error.title.soundboard"),
         AiProviderException => (StatusCodes.Status502BadGateway, "error.title.aiProvider"),
         ImageSourceException => (StatusCodes.Status502BadGateway, "error.title.imageSource"),

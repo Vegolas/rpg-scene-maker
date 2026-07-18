@@ -36,4 +36,19 @@ public class Sound
     /// backfilled lazily by <c>/sounds/list</c>); an empty array is the "tried, unmeasurable" sentinel so the
     /// backfill doesn't re-probe a file that won't decode.</summary>
     public byte[]? Waveform { get; set; }
+
+    // ---- Attribution (set only by a library import, e.g. Freesound; null for a plain file upload) ----
+    // These are server-set at import and NOT editable via PUT /sounds/{id}.
+
+    /// <summary>Original author/uploader of an imported sound (Freesound "username"), or null.</summary>
+    public string? Author { get; set; }
+
+    /// <summary>Short license label for an imported sound (e.g. "CC BY 4.0", "CC0 1.0"), or null.</summary>
+    public string? License { get; set; }
+
+    /// <summary>Canonical license deed URL for an imported sound (a Creative Commons link), or null.</summary>
+    public string? LicenseUrl { get; set; }
+
+    /// <summary>Link back to the source page the sound was imported from (e.g. https://freesound.org/s/{id}/), or null.</summary>
+    public string? SourceUrl { get; set; }
 }
