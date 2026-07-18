@@ -43,7 +43,8 @@ else
             var darkText = colored && IsLight(color!);
             <button class="scene-card @(scene.Id == _activeId ? "active" : "") @(_busyId == scene.Id ? "busy" : "") @(hasArt ? "art" : "") @(colored ? "colored" : "") @(darkText ? "dark-text" : "")"
                     style="@(hasArt ? $"--art:url('{artUrl}');" : colored ? $"background:{color};" : "")"
-                    @onclick="() => Activate(scene.Id)">
+                    title='@(scene.Id == _activeId ? L["scenes.stopHint"] : null)'
+                    @onclick="() => OnCardClick(scene.Id)">
                 @if (hasArt)
                 {
                     <span class="scene-art"></span>
@@ -143,6 +144,11 @@ else
 
     private Task Edit(string id) => Vt.NavigateAsync($"editor/{id}");
 
+    // Tapping the live scene stops it (return to default lights, pause music, stop sounds); any other
+    // card activates it.
+    private Task OnCardClick(string id) =>
+        string.Equals(id, _activeId, StringComparison.OrdinalIgnoreCase) ? Stop(id) : Activate(id);
+
     private async Task Activate(string id)
     {
         _busyId = id;
@@ -167,6 +173,33 @@ else
             {
                 Ui.ReportError(L.Format("scenes.toast.partial", result.ProblemSummary(k => L[k])));
             }
+        }
+        finally
+        {
+            _busyId = null;
+        }
+    }
+
+    private async Task Stop(string id)
+    {
+        _busyId = id;
+        try
+        {
+            var result = await Api.StopSceneAsync();
+            if (result is null) return;
+
+            // Fade the highlight off the card, mirroring the activation cross-fade.
+            await Vt.RunAsync(() =>
+            {
+                _busyId = null;
+                _activeId = null;
+                StateHasChanged();
+            }, type: "scene");
+
+            if (result.FullySucceeded)
+                Ui.ReportOk(L["scenes.toast.stopped"]);
+            else
+                Ui.ReportError(L.Format("scenes.toast.stoppedPartial", result.ProblemSummary(k => L[k])));
         }
         finally
         {

@@ -133,6 +133,19 @@ public class SceneLightApplier(
         Effect = effect,
     };
 
+    /// <summary>Return the lights to the configured default state — used when <b>stopping</b> a scene.
+    /// When no default is configured there's no defined neutral to fall back to, so the lights are left
+    /// as-is and this returns <c>false</c> ("skipped"); unlike the reset-lights button
+    /// (<c>/lights/default</c>), which surfaces a missing default as an error. Returns whether a default
+    /// was applied.</summary>
+    public async Task<bool> ResetToDefaultAsync()
+    {
+        if (settings.Current.DefaultLight is not { } def) return false;
+        effects.StopAll();
+        await lights.ApplyAsync(def);
+        return true;
+    }
+
     /// <summary>Restore the lighting after an event's flash/timeline: the live scene if one is active
     /// (re-running its effects), else the configured default light, else leave the lights as-is (there's
     /// nothing known to restore to). Shared by <see cref="EventActivator"/> and <c>EventTimelineRunner</c>.</summary>

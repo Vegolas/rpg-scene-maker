@@ -194,8 +194,15 @@
 .quick .q-btn:active { transform: translateY(1px); }
 .quick .q-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .quick .q-btn.primary:hover { background: #3d74ff; }
+/* shuffle toggled on — mirrors the .chip.on accent tint */
+.quick .q-btn.on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-text); }
+/* stop the live scene — a quiet danger tint, only shown while a scene is running */
+.quick .q-btn.danger { color: var(--danger); border-color: var(--danger-border); }
+.quick .q-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
 .quick .q-vol { flex: 0 0 auto; width: 96px; height: var(--hit-min); }
-/* Below this width the header is too tight for a usable slider — the Music tab keeps the full one. */
+/* Below the tablet width the header is too tight for the full transport row — keep play-pause, stop
+   and reset, and drop the secondary prev/next/shuffle + slider (the Music tab keeps the full set). */
+@media (max-width: 767.98px) { .quick .q-sec { display: none; } }
 @media (max-width: 480px) { .quick .q-vol { display: none; } }
 
 /* ---------- now-running status strip ---------- */

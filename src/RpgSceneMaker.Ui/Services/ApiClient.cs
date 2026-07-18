@@ -176,6 +176,24 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         }
     }
 
+    /// <summary>Stop the live scene (default lights + pause music + stop sounds). Returns the per-part
+    /// result like activation; null on a transport failure.</summary>
+    public async Task<ActivationDto?> StopSceneAsync()
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, "scenes/stop");
+            var result = await response.Content.ReadFromJsonAsync<ActivationDto>(Json);
+            ui.SetConnected(true);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return null;
+        }
+    }
+
     // ---------- fire-and-forget commands (lights, music, sfx) ----------
 
     public async Task<bool> CommandAsync(string path, string? okMessage = null)

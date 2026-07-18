@@ -1,18 +1,32 @@
-@* Always-visible steering in the top bar: play/pause + volume for music, and a reset-lights
-   button that restores the configured default state. Lives in MainLayout, so it stays mounted
+@* Always-visible steering in the top bar: music transport (prev / play-pause / next / shuffle / volume,
+   shown only when Spotify is connected), a stop-scene button (shown only while a scene is live), and a
+   reset-lights button that restores the configured default state. Lives in MainLayout, so it stays mounted
    for the whole session and one poll timer covers every tab. *@
 @implements IDisposable
 @inject ApiClient Api
+@inject UiState Ui
 @inject Localizer L
 
 <div class="quick">
     @if (_musicConnected)
     {
+        @* prev / next / shuffle are secondary — hidden on phones (full transport lives on the Music tab). *@
+        <button class="q-btn q-sec" @onclick='@(() => Send("music/previous"))'
+                title='@L["common.previous"]' aria-label='@L["common.previous"]'><Icon Name="prev" /></button>
         <button class="q-btn primary" @onclick="PlayPause"
                 title='@(Playing ? L["quickControls.pause"] : L["quickControls.play"])'
                 aria-label='@(Playing ? L["quickControls.pause"] : L["quickControls.play"])'><Icon Name="@(Playing ? "pause" : "play")" /></button>
+        <button class="q-btn q-sec" @onclick='@(() => Send("music/next"))'
+                title='@L["common.next"]' aria-label='@L["common.next"]'><Icon Name="next" /></button>
+        <button class="q-btn q-sec @(Shuffling ? "on" : "")" @onclick="ToggleShuffle"
+                title='@L["music.shuffle"]' aria-label='@L["music.shuffle"]' aria-pressed="@Shuffling"><Icon Name="shuffle" /></button>
         <input class="q-vol" type="range" min="0" max="100" value="@_volume"
                @onchange="OnVolumeChanged" title='@L["quickControls.volume"]' aria-label='@L["quickControls.volume"]' />
+    }
+    @if (_activeSceneId is not null)
+    {
+        <button class="q-btn danger" @onclick="StopScene"
+                title='@L["quickControls.stopScene"]' aria-label='@L["quickControls.stopScene"]'><Icon Name="stop" /></button>
     }
     <button class="q-btn" @onclick="ResetLights"
             title='@L["quickControls.resetLights"]' aria-label='@L["quickControls.resetLights"]'><Icon Name="lights" /></button>
@@ -21,34 +35,49 @@
 @code {
     private bool _musicConnected;
     private SpotifyStateDto? _state;
+    private string? _activeSceneId;
     private int _volume = 50;
     private long _volumeTouchedAt;   // Environment.TickCount64 of the last manual drag
     private Timer? _timer;
 
     private bool Playing => _state?.IsPlaying == true;
+    private bool Shuffling => _state?.IsShuffling == true;
 
     protected override async Task OnInitializedAsync()
     {
         var (spotify, _) = await Api.GetSpotifyConfigAsync();
         _musicConnected = spotify?.Connected == true;
-        if (!_musicConnected) return;
 
+        // One timer covers the active-scene highlight (always) and the music state (when connected), so
+        // a scene activated on any tab surfaces the stop button here within a few seconds.
         await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 5000, 5000);
     }
 
     private async Task PollAsync()
     {
-        _state = await Api.GetSpotifyStateAsync();
-        // Don't yank the slider back while the user is dragging it — Spotify's reported volume lags a beat.
-        if (_state?.VolumePercent is { } vp && Environment.TickCount64 - _volumeTouchedAt > 3000)
-            _volume = vp;
+        _activeSceneId = (await Api.GetActiveSceneAsync())?.Id;
+        if (_musicConnected)
+        {
+            _state = await Api.GetSpotifyStateAsync();
+            // Don't yank the slider back while the user is dragging it — Spotify's reported volume lags a beat.
+            if (_state?.VolumePercent is { } vp && Environment.TickCount64 - _volumeTouchedAt > 3000)
+                _volume = vp;
+        }
         StateHasChanged();
     }
 
     private async Task PlayPause()
     {
         if (await Api.CommandAsync(Playing ? "music/pause" : "music/resume"))
+            await PollAsync();
+    }
+
+    private Task ToggleShuffle() => Send($"music/shuffle?value={(Shuffling ? "false" : "true")}");
+
+    private async Task Send(string path)
+    {
+        if (await Api.CommandAsync(path))
             await PollAsync();
     }
 
@@ -59,6 +88,19 @@
         _volumeTouchedAt = Environment.TickCount64;
         var value = (percent / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture);
         await Api.CommandAsync($"music/volume?value={value}");
+    }
+
+    private async Task StopScene()
+    {
+        var result = await Api.StopSceneAsync();
+        if (result is null) return;
+
+        _activeSceneId = null; // hide the button immediately; the poll confirms
+        if (result.FullySucceeded)
+            Ui.ReportOk(L["quickControls.toast.stopped"]);
+        else
+            Ui.ReportError(L.Format("quickControls.toast.stoppedPartial", result.ProblemSummary(k => L[k])));
+        await PollAsync();
     }
 
     private Task ResetLights() => Api.ResetLightsToDefaultAsync(L["toast.lightsReset"]);

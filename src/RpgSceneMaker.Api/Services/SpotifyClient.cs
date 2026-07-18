@@ -33,6 +33,11 @@ public class SpotifyClient(HttpClient http, SpotifyStore store, SpotifyTokenCach
         "track", "playlist", "album", "artist",
     };
 
+    /// <summary>Whether a Spotify account is connected (client id + refresh token present). Callers that
+    /// pause opportunistically (e.g. stopping a scene) check this so an unconnected setup is a silent
+    /// no-op rather than a <see cref="NotConfiguredException"/>.</summary>
+    public bool IsConnected => store.Current.IsConnected;
+
     // ---------- tokens ----------
 
     public async Task<string> GetAccessTokenAsync()

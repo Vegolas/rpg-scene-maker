@@ -32,6 +32,40 @@ public class SceneActivator(
         return new ActivationResult(scene.Id, lightTask.Result, musicTask.Result, sfxTask.Result);
     }
 
+    /// <summary>Stops the live scene: return the lights to their configured default, pause music and stop
+    /// every sound, and clear the "currently showing" highlight. Each part runs concurrently and reports
+    /// ok/skipped/error independently (like activation), so one failing part doesn't block the others.
+    /// Music and lights are best-effort — an unconnected Spotify or a scene left with no default lighting
+    /// is reported "skipped", not an error.</summary>
+    public async Task<ActivationResult> StopAsync()
+    {
+        var stopped = state.ActiveSceneId ?? "";
+        state.ActiveSceneId = null;
+        state.ActivatedAt = null;
+
+        var lightTask = RunAsync("light", () => sceneLights.ResetToDefaultAsync());
+        var musicTask = RunAsync("music", PauseMusicAsync);
+        var sfxTask = RunAsync("sfx", StopSoundsAsync);
+
+        await Task.WhenAll(lightTask, musicTask, sfxTask);
+        return new ActivationResult(stopped, lightTask.Result, musicTask.Result, sfxTask.Result);
+    }
+
+    // Pause the music a scene was playing. Silent no-op when Spotify isn't connected, and a missing
+    // device is tolerated (throwOnNoDevice: false), so stopping never fails just because of the music.
+    private async Task<bool> PauseMusicAsync()
+    {
+        if (!spotify.IsConnected) return false;
+        await spotify.PauseAsync(throwOnNoDevice: false);
+        return true;
+    }
+
+    private Task<bool> StopSoundsAsync()
+    {
+        player.StopAll();
+        return Task.FromResult(true);
+    }
+
     private async Task<bool> ApplyMusicAsync(MusicSettings? music)
     {
         if (music is null) return false;

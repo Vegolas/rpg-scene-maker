@@ -1,7 +1,8 @@
 @* Pure status read-out of the currently running scene, shown at the top of the content area on
-   every page (lives in MainLayout). Nothing here is clickable — play/pause and reset-lights live in
-   QuickControls, and the API has no stop-scene concept. Refreshes on navigation and on a poll timer,
-   so activating a scene (which happens without a page change) surfaces here within a few seconds. *@
+   every page (lives in MainLayout). Nothing here is clickable — the controls (play/pause, stop-scene,
+   reset-lights) live in QuickControls, and the live scene can also be stopped by tapping its card on
+   the Scenes page. Refreshes on navigation and on a poll timer, so activating a scene (which happens
+   without a page change) surfaces here within a few seconds. *@
 @implements IDisposable
 @inject ApiClient Api
 @inject NavigationManager Nav

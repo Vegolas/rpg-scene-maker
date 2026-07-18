@@ -56,5 +56,13 @@ public static class SceneEndpoints
             var result = await activator.ActivateAsync(scene);
             return Results.Json(result, statusCode: result.FullySucceeded ? 200 : 207);
         });
+
+        // Stop the live scene: default lights + pause music + stop sounds, and drop the "showing" highlight.
+        // A literal segment (like /active), so it wins over the /{id} routes. GetOrPost for Stream Deck.
+        scenes.MapMethods("/stop", EndpointHelpers.GetOrPost, async (SceneActivator activator) =>
+        {
+            var result = await activator.StopAsync();
+            return Results.Json(result, statusCode: result.FullySucceeded ? 200 : 207);
+        });
     }
 }
