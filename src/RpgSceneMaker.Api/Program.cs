@@ -68,6 +68,9 @@ builder.Services.AddSingleton(sp => new LocaleService(localesPath, sp.GetRequire
 
 builder.Services.AddSingleton<SettingsStore>();
 builder.Services.AddSingleton<CurrentState>();
+// Ephemeral state of the player-facing "/tv" display (what the GM has pushed); like CurrentState it survives
+// navigation, not a restart.
+builder.Services.AddSingleton<TvState>();
 builder.Services.AddSingleton<LightRegistry>();
 builder.Services.AddSingleton<EffectEngine>();
 builder.Services.AddScoped<SceneLightApplier>();
@@ -224,7 +227,12 @@ app.Use(async (context, next) =>
          path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
          path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp") ||
-         path.StartsWithSegments("/assistant") || path.StartsWithSegments("/i18n"));
+         path.StartsWithSegments("/assistant") || path.StartsWithSegments("/i18n") ||
+         // Player-facing display: only the GM push commands are gated. "/tv/show" also covers
+         // "/tv/show/recent" (the history list). "/tv" (the SPA page), "/tv/state" and
+         // "/tv/content/current" stay OPEN so a shared table screen never needs the admin key — the
+         // only key-free data is the single image the GM deliberately pushed (that exposure is the feature).
+         path.StartsWithSegments("/tv/show") || path.StartsWithSegments("/tv/clear"));
 });
 
 // The Blazor WASM control panel is served from this same process.
@@ -252,6 +260,7 @@ app.MapLogEndpoints();
 app.MapDiagnosticsEndpoints();
 app.MapAssistantEndpoints();
 app.MapLocaleEndpoints();
+app.MapTvEndpoints();
 
 // The in-process MCP server (streamable HTTP) — point Claude Code / Claude Desktop at this.
 app.MapMcp("/mcp");

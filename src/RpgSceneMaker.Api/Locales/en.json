@@ -813,6 +813,7 @@
     "error.imageImport.hostNotAllowed": "That image url isn't on an allowed image-source host.",
     "error.imageImport.unsupportedType": "Unsupported image type '{0}'. Allowed: webp, jpg, png.",
     "error.imageImport.tooLarge": "Image is larger than {0} MB.",
+    "error.tv.imageNotFound": "No uploaded image named '{0}'. Upload it first (POST /images/upload) and pass the returned stored name.",
     "error.light.noDefault": "No default lighting is set — configure it on the Settings page first.",
     "error.light.unknown": "Unknown light '{0}'. See GET /lights/list.",
     "error.music.notSpotifyUri": "Music id is not a Spotify link/URI: '{0}' — Kenku support was removed; use a spotify: URI or open.spotify.com link.",

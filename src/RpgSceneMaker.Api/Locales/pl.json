@@ -825,6 +825,7 @@
     "error.imageImport.hostNotAllowed": "Ten adres URL obrazu nie należy do dozwolonego hosta źródła obrazów.",
     "error.imageImport.unsupportedType": "Nieobsługiwany typ obrazu '{0}'. Dozwolone: webp, jpg, png.",
     "error.imageImport.tooLarge": "Obraz jest większy niż {0} MB.",
+    "error.tv.imageNotFound": "Brak przesłanego obrazu o nazwie '{0}'. Najpierw prześlij go (POST /images/upload) i użyj zwróconej nazwy pliku.",
     "error.light.noDefault": "Nie ustawiono domyślnego oświetlenia — najpierw skonfiguruj je na stronie Ustawień.",
     "error.light.unknown": "Nieznane światło '{0}'. Zobacz GET /lights/list.",
     "error.music.notSpotifyUri": "Identyfikator muzyki nie jest linkiem/URI Spotify: '{0}' — obsługa Kenku została usunięta; użyj URI spotify: lub linku open.spotify.com.",
