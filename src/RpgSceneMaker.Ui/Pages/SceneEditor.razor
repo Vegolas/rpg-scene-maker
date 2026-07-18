@@ -30,6 +30,10 @@ else
         <AssistantDrawer InitialDraft="@AssistantDraft" OnRunCompleted="RefreshFromAssistantAsync" OnClose="() => _drawerOpen = false" />
     }
 
+    <PageTabs TValue="SceneTab" Options="TabOptions" Value="_tab" ValueChanged="@(t => _tab = t)" />
+
+    @if (_tab == SceneTab.Scene)
+    {
     <div class="panel">
         <div class="emoji-row">
             @foreach (var e in Palette.Emojis)
@@ -53,8 +57,16 @@ else
         </p>
         <ArtField @bind-Image="_edit.Image" />
     </div>
-
-    <SectionHeading>@L["sceneEditor.lightsHeading"]</SectionHeading>
+    @* Delete lives here as a quietly separated danger zone at the bottom of the Scene tab. *@
+    @if (!_isNew)
+    {
+        <div class="btn-row" style="margin-top:1.5rem">
+            <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["sceneEditor.deleteBtn"]</ConfirmButton>
+        </div>
+    }
+    }
+    else if (_tab == SceneTab.Lights)
+    {
     <div class="panel">
         <Segmented TValue="LightScope" Options="ScopeOptions" Value="_scope" ValueChanged="SetScope" />
 
@@ -81,7 +93,7 @@ else
         {
             @if (_perLight.Count == 0)
             {
-                <p class="hint" style="margin-top:1rem">@L["sceneEditor.registerLightsPre"]<a href="settings">@L["sceneEditor.settingsLink"]</a>@L["sceneEditor.registerLightsPost"]</p>
+                <p class="hint" style="margin-top:1rem">@L["sceneEditor.registerLightsPre"]<a href="settings?tab=lights">@L["sceneEditor.settingsLink"]</a>@L["sceneEditor.registerLightsPost"]</p>
             }
             else
             {
@@ -187,8 +199,9 @@ else
             }
         }
     </div>
-
-    <SectionHeading>@L["sceneEditor.musicHeading"]</SectionHeading>
+    }
+    else if (_tab == SceneTab.Music)
+    {
     <div class="panel">
         <Segmented TValue="MusicChoice" Options="MusicOptions" Value="_music" ValueChanged="@(m => _music = m)" />
 
@@ -202,7 +215,7 @@ else
 
             <PlaylistPicker Playlists="_playlists" SelectedUri="_playId" OnPick="pl => _playId = pl.Uri" ListStyle="margin-top:1rem">
                 <EmptyContent>
-                    <p class="hint" style="margin-top:0.8rem">@L["sceneEditor.connectSpotifyPre"]<a href="settings">@L["sceneEditor.settingsLink"]</a>@L["sceneEditor.connectSpotifyPost"]</p>
+                    <p class="hint" style="margin-top:0.8rem">@L["sceneEditor.connectSpotifyPre"]<a href="settings?tab=music">@L["sceneEditor.settingsLink"]</a>@L["sceneEditor.connectSpotifyPost"]</p>
                 </EmptyContent>
             </PlaylistPicker>
 
@@ -219,8 +232,9 @@ else
             <p class="hint" style="margin-top:0.8rem">@L["sceneEditor.musicPauseHint"]</p>
         }
     </div>
-
-    <SectionHeading>@L["sceneEditor.soundsHeading"]</SectionHeading>
+    }
+    else if (_tab == SceneTab.Sounds)
+    {
     <div class="panel">
         @if (_sounds is null || _sounds.Count == 0)
         {
@@ -262,18 +276,12 @@ else
             </div>
         }
     </div>
+    }
 
-    <SectionHeading>@L["common.save"]</SectionHeading>
-    <div class="btn-row">
+    <div class="editor-actions">
         <button class="btn btn--primary" @onclick="() => Save(test: false)" disabled="@_busy">@L["common.save"]</button>
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">@L["common.saveAndTest"]</button>
     </div>
-    @if (!_isNew)
-    {
-        <div class="btn-row" style="margin-top:0.7rem">
-            <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["sceneEditor.deleteBtn"]</ConfirmButton>
-        </div>
-    }
 }
 
 @code {
@@ -282,6 +290,12 @@ else
     private enum LightScope { None, All, PerLight }
     private enum LightMode { Color, White, Off }
     private enum MusicChoice { None, Play, Pause }
+    private enum SceneTab { Scene, Lights, Music, Sounds }
+
+    // Tab strip options (value + localized label + chrome icon), rebuilt per render like the segmented ones.
+    private (SceneTab, string, string?)[] TabOptions =>
+        [(SceneTab.Scene, L["sceneEditor.tab.scene"], "scenes"), (SceneTab.Lights, L["sceneEditor.tab.lights"], "lights"),
+         (SceneTab.Music, L["sceneEditor.tab.music"], "music"), (SceneTab.Sounds, L["sceneEditor.tab.sounds"], "sounds")];
 
     // Segmented control options. Labels resolve through the localizer, so these are instance
     // properties rebuilt per render (they can't be static — L is an injected instance member).
@@ -310,6 +324,9 @@ else
     private bool _isNew;
     private SceneEdit _edit = new();
     private List<string> _existingIds = [];
+
+    // Active editor tab. In its own field so LoadFrom / an assistant refresh never resets it.
+    private SceneTab _tab = SceneTab.Scene;
 
     // identity
     private string _emoji = "";
@@ -479,6 +496,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(_label))
         {
+            _tab = SceneTab.Scene; // surface the offending field's tab before toasting
             Ui.ReportError(L["sceneEditor.toast.nameFirst"]);
             return;
         }
@@ -486,6 +504,7 @@ else
         var id = CurrentId;
         if (string.IsNullOrEmpty(id))
         {
+            _tab = SceneTab.Scene;
             Ui.ReportError(L["sceneEditor.toast.noId"]);
             return;
         }
@@ -497,6 +516,7 @@ else
                 r.Edit.Mode is "color" or "white" && r.Edit.Effect.Type == "drift" && r.Edit.Effect.Colors.Count < 2);
             if (badDrift is not null)
             {
+                _tab = SceneTab.Lights;
                 Ui.ReportError(L.Format("sceneEditor.toast.driftColors", badDrift.Name));
                 return;
             }

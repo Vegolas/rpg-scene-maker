@@ -102,7 +102,7 @@ else
             <p class="section-h">@L["screenArrange.playlists"]</p>
             <PlaylistPicker Playlists="_playlists" OnPick="pl => AddMusic(pl.Uri, pl.Name)">
                 <EmptyContent>
-                    <p class="hint" style="margin:0">@L["screenArrange.spotifyHintPre"]<a href="settings">@L["screenArrange.settingsLink"]</a>@L["screenArrange.spotifyHintPost"]</p>
+                    <p class="hint" style="margin:0">@L["screenArrange.spotifyHintPre"]<a href="settings?tab=music">@L["screenArrange.settingsLink"]</a>@L["screenArrange.spotifyHintPost"]</p>
                 </EmptyContent>
             </PlaylistPicker>
         }

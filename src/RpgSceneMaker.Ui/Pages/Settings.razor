@@ -14,6 +14,10 @@ else
 {
     <div class="page-head"><h1>@L["settings.title"]</h1></div>
 
+    <PageTabs TValue="SettingsTab" Options="TabOptions" Value="_tab" ValueChanged="@(t => _tab = t)" />
+
+    @if (_tab == SettingsTab.General)
+    {
     <SectionHeading>@L["settings.language.title"]</SectionHeading>
     <div class="panel">
         <p class="hint" style="margin-top:0">@L["settings.language.hint"]</p>
@@ -28,6 +32,35 @@ else
         </div>
     </div>
 
+    <SectionHeading>@L["settings.menu.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.menu.hint"]</p>
+        <div class="btn-row" style="margin-top:0.6rem">
+            <button class="btn" @onclick="ResetMenuOrder" disabled="@(Ui.TabOrder.Count == 0)">@L["settings.menu.resetBtn"]</button>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.device.title"]</SectionHeading>
+    <div class="panel">
+        <div class="field">
+            <label for="apikey">@L["settings.device.apiKeyLabel"]</label>
+            <input id="apikey" type="password" @bind="_apiKeyInput" placeholder='@L["settings.device.apiKeyPlaceholder"]' />
+        </div>
+        <div class="btn-row">
+            <button class="btn btn--primary" @onclick="SaveApiKey">@L["settings.device.saveBtn"]</button>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.developer.title"]</SectionHeading>
+    <div class="panel">
+        <div class="chip-row" style="margin-top:0">
+            <Chip On="@Ui.DevMode" OnClick="ToggleDevMode">@L["settings.developer.mode"]</Chip>
+        </div>
+        <p class="hint">@L["settings.developer.hint"]</p>
+    </div>
+    }
+    else if (_tab == SettingsTab.Lights)
+    {
     <SectionHeading>@L["settings.lightSystem.title"]</SectionHeading>
     <div class="chip-row">
         <Chip On="@(!IsHue)" OnClick="@(() => SetProvider("tuya"))">@L["settings.lightSystem.tuya"]</Chip>
@@ -240,7 +273,9 @@ else
             <button class="btn" @onclick="TestDefault" disabled="@(_busy || _config.DefaultLight is null)">@L["common.test"]</button>
         </div>
     </div>
-
+    }
+    else if (_tab == SettingsTab.Music)
+    {
     <SectionHeading>@L["settings.spotify.title"]</SectionHeading>
     <div class="panel">
         <div class="field">
@@ -297,6 +332,9 @@ else
             </div>
         }
     </div>
+    }
+    else if (_tab == SettingsTab.Assistant)
+    {
     <SectionHeading>@L["settings.assistant.title"]</SectionHeading>
     <div class="panel">
         <div class="field">
@@ -340,36 +378,19 @@ else
             <p class="hint">@L["settings.assistant.mcpHintA"]<code>X-Api-Key</code>@L["settings.assistant.mcpHintB"]</p>
         </div>
     </div>
-
-    <SectionHeading>@L["settings.menu.title"]</SectionHeading>
-    <div class="panel">
-        <p class="hint" style="margin-top:0">@L["settings.menu.hint"]</p>
-        <div class="btn-row" style="margin-top:0.6rem">
-            <button class="btn" @onclick="ResetMenuOrder" disabled="@(Ui.TabOrder.Count == 0)">@L["settings.menu.resetBtn"]</button>
-        </div>
-    </div>
-
-    <SectionHeading>@L["settings.device.title"]</SectionHeading>
-    <div class="panel">
-        <div class="field">
-            <label for="apikey">@L["settings.device.apiKeyLabel"]</label>
-            <input id="apikey" type="password" @bind="_apiKeyInput" placeholder='@L["settings.device.apiKeyPlaceholder"]' />
-        </div>
-        <div class="btn-row">
-            <button class="btn btn--primary" @onclick="SaveApiKey">@L["settings.device.saveBtn"]</button>
-        </div>
-    </div>
-
-    <SectionHeading>@L["settings.developer.title"]</SectionHeading>
-    <div class="panel">
-        <div class="chip-row" style="margin-top:0">
-            <Chip On="@Ui.DevMode" OnClick="ToggleDevMode">@L["settings.developer.mode"]</Chip>
-        </div>
-        <p class="hint">@L["settings.developer.hint"]</p>
-    </div>
+    }
 }
 
 @code {
+    private enum SettingsTab { General, Lights, Music, Assistant }
+    // Active tab. Set from the ?tab= / ?spotify= query on init (TabFromQuery); per-section save semantics are unchanged.
+    private SettingsTab _tab = SettingsTab.General;
+
+    // Tab strip options (value + localized label + chrome icon), rebuilt per render so labels track the language.
+    private (SettingsTab, string, string?)[] TabOptions =>
+        [(SettingsTab.General, L["settings.tab.general"], "settings"), (SettingsTab.Lights, L["settings.tab.lights"], "lights"),
+         (SettingsTab.Music, L["settings.tab.music"], "music"), (SettingsTab.Assistant, L["settings.tab.assistant"], "assistant")];
+
     private LightingConfigDto? _config;
     private string? _loadError;
     private List<HueLightDto>? _hueLights;
@@ -423,6 +444,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _tab = TabFromQuery();
         _apiKeyInput = await Api.GetApiKeyAsync();
         var (config, error) = await Api.GetConfigAsync();
         if (config is null)
@@ -535,6 +557,20 @@ else
                 return idx >= 0 ? Uri.UnescapeDataString(pair[(idx + 1)..]) : "";
         }
         return null;
+    }
+
+    // Which tab to open on load: ?spotify=… (the OAuth return) forces Music, otherwise honor
+    // ?tab=general|lights|music|assistant (defaulting to General).
+    private SettingsTab TabFromQuery()
+    {
+        if (QueryValue("spotify") is not null) return SettingsTab.Music;
+        return QueryValue("tab") switch
+        {
+            "lights" => SettingsTab.Lights,
+            "music" => SettingsTab.Music,
+            "assistant" => SettingsTab.Assistant,
+            _ => SettingsTab.General,
+        };
     }
 
     private async Task SetProvider(string provider)

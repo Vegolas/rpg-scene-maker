@@ -1,0 +1,22 @@
+@* A page-level section switcher: one tab button per option, the one equal to Value is active.
+   Modelled on Segmented.razor but renders the `.ptabs` primitive with tablist/tab a11y roles
+   and an optional per-tab chrome icon (semantic name from Shared/Icons.cs). Used to split long
+   editor/settings pages into sections; unlike the segmented control it is not sticky. *@
+@typeparam TValue
+
+<div class="ptabs" role="tablist">
+    @foreach (var opt in Options)
+    {
+        var active = Equals(opt.Value, Value);
+        <button type="button" role="tab" aria-selected="@(active ? "true" : "false")"
+                class="ptab @(active ? "ptab--active" : "")"
+                @onclick="() => ValueChanged.InvokeAsync(opt.Value)">@if (opt.Icon is { Length: > 0 } icon) { <Icon Name="@icon" /> }<span>@opt.Label</span></button>
+    }
+</div>
+
+@code {
+    // Each option carries its value, a (localized) label and an optional chrome icon name.
+    [Parameter, EditorRequired] public IReadOnlyList<(TValue Value, string Label, string? Icon)> Options { get; set; } = [];
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+}

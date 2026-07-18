@@ -1,0 +1,66 @@
+/* ============================================================
+   Editor page chrome — section tabs + sticky action bar.
+   The tabs (`.ptabs`, rendered by Components/PageTabs.razor) split
+   a long editor/settings page into sections; the action bar
+   (`.editor-actions`) keeps Save in view while the page scrolls.
+   Solid surfaces, one accent, no glow — per the Control Room guide.
+   ============================================================ */
+
+/* ---------- page tabs (.ptabs / .ptab) ---------- */
+.ptabs {
+  display: flex;
+  flex-wrap: wrap;            /* never overflow the viewport — wrap on narrow screens */
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.ptab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: var(--hit-min);
+  padding: 0 var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-faint);
+  font: var(--text-md);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.ptab:hover { color: var(--text-muted); border-color: var(--border-strong); }
+.ptab:active { transform: translateY(1px); }
+.ptab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ptab .icon { font-size: 18px; line-height: 1; }
+/* Active tab = the accent-soft treatment shared with the nav rail / bottom tab bar. */
+.ptab--active {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+
+/* ---------- sticky editor action bar (.editor-actions) ---------- */
+/* Opaque card-style bar pinned to the bottom of the viewport so Save is always
+   reachable. Sits above the fixed mobile tab bar (--tabbar-h already includes the
+   iOS safe area); z-index below the tab bar (30) and topbar (20). Its top margin keeps
+   it off the last panel, and it holds a slot in normal flow so nothing ends up hidden
+   behind it at the end of the page. */
+.editor-actions {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + var(--s-3));
+  z-index: 15;
+  margin-top: var(--s-5);
+  padding: var(--s-3) var(--s-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+}
+.editor-actions .btn { flex: 1 1 auto; }
+
+/* Wide screens have no bottom tab bar — pin just above the content edge (+ safe area). */
+@media (min-width: 768px) {
+  .editor-actions { bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px)); }
+}

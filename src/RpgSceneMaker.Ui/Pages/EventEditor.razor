@@ -29,6 +29,10 @@ else
         <AssistantDrawer InitialDraft="@AssistantDraft" OnRunCompleted="RefreshFromAssistantAsync" OnClose="() => _drawerOpen = false" />
     }
 
+    <PageTabs TValue="EventTab" Options="TabOptions" Value="_tab" ValueChanged="@(t => _tab = t)" />
+
+    @if (_tab == EventTab.Details)
+    {
     <div class="panel">
         <div class="emoji-row">
             @foreach (var e in Palette.Emojis)
@@ -53,8 +57,16 @@ else
         </p>
         <ArtField @bind-Image="_edit.Image" />
     </div>
-
-    <SectionHeading>@L["eventEditor.timeline"]</SectionHeading>
+    @* Delete lives here as a quietly separated danger zone at the bottom of the Details tab. *@
+    @if (!_isNew)
+    {
+        <div class="btn-row" style="margin-top:1.5rem">
+            <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["eventEditor.deleteBtn"]</ConfirmButton>
+        </div>
+    }
+    }
+    else if (_tab == EventTab.Timeline)
+    {
     <div class="panel">
         <p class="hint" style="margin-top:0">
             @L["eventEditor.timelineHint"]
@@ -93,9 +105,9 @@ else
             <p class="hint" style="margin-top:0.8rem">@L["eventEditor.afterPreviousHint"]</p>
         }
     </div>
+    }
 
-    <SectionHeading>@L["common.save"]</SectionHeading>
-    <div class="btn-row">
+    <div class="editor-actions">
         <button class="btn btn--primary" @onclick="() => Save(test: false)" disabled="@_busy">@L["common.save"]</button>
         <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">@L["common.saveAndTest"]</button>
         @if (!_isNew && _runningId == _edit.Id)
@@ -104,16 +116,12 @@ else
         }
         <button class="btn" @onclick="Cancel" disabled="@_busy">@L["common.cancel"]</button>
     </div>
-    @if (!_isNew)
-    {
-        <div class="btn-row" style="margin-top:0.7rem">
-            <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["eventEditor.deleteBtn"]</ConfirmButton>
-        </div>
-    }
 }
 
 @code {
     [Parameter] public string? EventId { get; set; }
+
+    private enum EventTab { Details, Timeline }
 
     private bool _loading = true;
     private bool _busy;
@@ -124,6 +132,14 @@ else
     private List<RegisteredLightInfo> _lights = [];
     private List<SceneDto> _scenes = [];
     private List<LightFxDto> _fxLibrary = [];
+
+    // Active editor tab. In its own field so LoadFrom / an assistant refresh never resets it; the
+    // starting tab is chosen from _isNew in OnInitializedAsync.
+    private EventTab _tab = EventTab.Details;
+
+    // Tab strip options (value + localized label; no icon — none of the chrome glyphs fit "Timeline").
+    private (EventTab, string, string?)[] TabOptions =>
+        [(EventTab.Details, L["eventEditor.tab.details"], null), (EventTab.Timeline, L["eventEditor.tab.timeline"], null)];
 
     // Endings offered in the "When it ends" segmented control.
     private (string, string)[] AfterOptions =>
@@ -143,6 +159,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         _isNew = string.IsNullOrEmpty(EventId);
+        // Land on Timeline when editing an existing event (that's what you come to tweak), Details when creating one.
+        _tab = _isNew ? EventTab.Details : EventTab.Timeline;
 
         var eventsTask = Api.GetEventsAsync();
         var soundsTask = Api.GetSoundsAsync();
@@ -238,18 +256,22 @@ else
 
     private async Task Save(bool test)
     {
+        // Each validation failure first switches to the tab holding the offending field, so the toast makes sense.
         if (string.IsNullOrWhiteSpace(_label))
         {
+            _tab = EventTab.Details;
             Ui.ReportError(L["eventEditor.toast.nameFirst"]);
             return;
         }
         if (_edit.Timeline.IsEmpty)
         {
+            _tab = EventTab.Timeline;
             Ui.ReportError(L["eventEditor.toast.needClip"]);
             return;
         }
         if (_edit.Timeline.EndMs > TimelineEdit.MaxEndMs)
         {
+            _tab = EventTab.Timeline;
             Ui.ReportError(L["eventEditor.toast.tooLong"]);
             return;
         }
@@ -258,11 +280,13 @@ else
             l.Mode is "color" or "white" && l.Effect.Type == "drift" && l.Effect.Colors.Count < 2);
         if (badDrift is not null)
         {
+            _tab = EventTab.Timeline;
             Ui.ReportError(L["eventEditor.toast.driftColors"]);
             return;
         }
         if (_edit.After.Mode == "scene" && string.IsNullOrWhiteSpace(_edit.After.SceneId))
         {
+            _tab = EventTab.Timeline;
             Ui.ReportError(L["eventEditor.toast.pickSceneEnd"]);
             return;
         }
@@ -270,6 +294,7 @@ else
         var id = CurrentId;
         if (string.IsNullOrEmpty(id))
         {
+            _tab = EventTab.Details;
             Ui.ReportError(L["eventEditor.toast.noId"]);
             return;
         }
