@@ -42,7 +42,7 @@ public sealed class GeminiProvider : IAssistantProvider
         }
         catch (Exception ex)
         {
-            throw new AiProviderException(Id, "Gemini API error: " + ex.Message);
+            throw new AiProviderException(Id, "Gemini API error: " + ex.Message, request.ApiKey);
         }
 
         string? text = null;

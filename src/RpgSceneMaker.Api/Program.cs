@@ -180,6 +180,13 @@ builder.Services.AddSingleton<ILoggerProvider, InMemoryLoggerProvider>();
 builder.Logging.AddFilter<InMemoryLoggerProvider>(null, LogLevel.Warning);
 builder.Logging.AddFilter<InMemoryLoggerProvider>("RpgSceneMaker", LogLevel.Information);
 
+// HttpClient's default request/response logging emits the full request URI at Information — and the Hue
+// AppKey travels in that URI path (http://{bridge}/api/{appKey}/…). Raise the transport categories to
+// Warning+ for ALL log providers (the in-memory buffer already drops them, but the console — the packaged
+// app's UI — would otherwise print the key on every light command, and so would any redirected log file).
+// Genuine transport warnings/errors still surface.
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
 // The configured provider picks which system scenes and /lights control ("tuya" or "hue").
 builder.Services.AddScoped<ILightService>(sp =>
     sp.GetRequiredService<SettingsStore>().Current.Provider

@@ -38,11 +38,12 @@ public sealed class AnthropicProvider : IAssistantProvider
         catch (Anthropic.Exceptions.AnthropicUnauthorizedException ex)
         {
             throw new AiProviderException(Id,
-                "Anthropic rejected the API key (401) — check the key on the Settings page. " + ex.Message);
+                "Anthropic rejected the API key (401) — check the key on the Settings page. " + ex.Message,
+                request.ApiKey);
         }
         catch (Anthropic.Exceptions.AnthropicException ex)
         {
-            throw new AiProviderException(Id, "Anthropic API error: " + ex.Message);
+            throw new AiProviderException(Id, "Anthropic API error: " + ex.Message, request.ApiKey);
         }
 
         var text = new StringBuilder();

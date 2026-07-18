@@ -36,11 +36,12 @@ public sealed class OpenAiProvider : IAssistantProvider
         catch (ClientResultException ex) when (ex.Status == 401)
         {
             throw new AiProviderException(Id,
-                "OpenAI rejected the API key (401) — check the key on the Settings page. " + ex.Message);
+                "OpenAI rejected the API key (401) — check the key on the Settings page. " + ex.Message,
+                request.ApiKey);
         }
         catch (ClientResultException ex)
         {
-            throw new AiProviderException(Id, $"OpenAI API error ({ex.Status}): " + ex.Message);
+            throw new AiProviderException(Id, $"OpenAI API error ({ex.Status}): " + ex.Message, request.ApiKey);
         }
 
         var text = new StringBuilder();
