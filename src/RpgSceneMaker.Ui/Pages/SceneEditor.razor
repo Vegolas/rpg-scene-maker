@@ -207,17 +207,65 @@ else
 
         @if (_music == MusicChoice.Play)
         {
-            <div class="field" style="margin-top:1rem;margin-bottom:0">
-                <label for="music-uri">@L["sceneEditor.musicUriLabel"]</label>
-                <input id="music-uri" type="text" value="@_playId" @oninput="e => _playId = e.Value?.ToString() ?? string.Empty"
-                       placeholder="spotify:playlist:… or https://open.spotify.com/…" />
+            @* Which source this scene's music targets: Spotify (URI / playlist picker) or the local library. *@
+            <div style="margin-top:1rem">
+                <Segmented TValue="string" Options="MusicSourceOptions" Value="_musicSource" ValueChanged="@(s => _musicSource = s)" />
             </div>
 
-            <PlaylistPicker Playlists="_playlists" SelectedUri="_playId" OnPick="pl => _playId = pl.Uri" ListStyle="margin-top:1rem">
-                <EmptyContent>
-                    <p class="hint" style="margin-top:0.8rem">@L["sceneEditor.connectSpotifyPre"]<a href="settings?tab=music">@L["sceneEditor.settingsLink"]</a>@L["sceneEditor.connectSpotifyPost"]</p>
-                </EmptyContent>
-            </PlaylistPicker>
+            @if (_musicSource == "local")
+            {
+                @if (_localTracks is { Count: 0 } && _localPlaylists is { Count: 0 })
+                {
+                    <p class="hint" style="margin-top:0.8rem">@L["sceneEditor.noLocalMusicPre"]<a href="music">@L["sceneEditor.musicLink"]</a>@L["sceneEditor.noLocalMusicPost"]</p>
+                }
+                else
+                {
+                    <div class="field" style="margin-top:1rem;margin-bottom:0">
+                        <label for="local-pick">@L["sceneEditor.localPickLabel"]</label>
+                        <select id="local-pick" value="@(_localPlayId ?? "")"
+                                @onchange="e => _localPlayId = NullIfBlank(e.Value?.ToString())">
+                            <option value="">@L["sceneEditor.localKeepCurrent"]</option>
+                            @if (_localPlayId is { } current && !LocalIdKnown(current))
+                            {
+                                @* A reference the library no longer lists — keep it visible instead of silently blanking. *@
+                                <option value="@current">@current</option>
+                            }
+                            @if (_localTracks is { Count: > 0 })
+                            {
+                                <optgroup label='@L["sceneEditor.localTracksGroup"]'>
+                                    @foreach (var t in _localTracks)
+                                    {
+                                        <option value="@t.PlayId">@t.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                            @if (_localPlaylists is { Count: > 0 })
+                            {
+                                <optgroup label='@L["sceneEditor.localPlaylistsGroup"]'>
+                                    @foreach (var p in _localPlaylists)
+                                    {
+                                        <option value="@p.PlayId">@p.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="field" style="margin-top:1rem;margin-bottom:0">
+                    <label for="music-uri">@L["sceneEditor.musicUriLabel"]</label>
+                    <input id="music-uri" type="text" value="@_playId" @oninput="e => _playId = e.Value?.ToString() ?? string.Empty"
+                           placeholder="spotify:playlist:… or https://open.spotify.com/…" />
+                </div>
+
+                <PlaylistPicker Playlists="_playlists" SelectedUri="_playId" OnPick="pl => _playId = pl.Uri" ListStyle="margin-top:1rem">
+                    <EmptyContent>
+                        <p class="hint" style="margin-top:0.8rem">@L["sceneEditor.connectSpotifyPre"]<a href="settings?tab=music">@L["sceneEditor.settingsLink"]</a>@L["sceneEditor.connectSpotifyPost"]</p>
+                    </EmptyContent>
+                </PlaylistPicker>
+            }
 
             <div class="chip-row" style="margin-top:1rem">
                 <Chip On="_setVolume" OnClick="() => _setVolume = !_setVolume">@L["sceneEditor.setVolume"]</Chip>
@@ -305,6 +353,8 @@ else
         [(LightMode.Color, L["common.modeColor"]), (LightMode.White, L["common.modeWhite"]), (LightMode.Off, L["common.turnOff"])];
     private (MusicChoice, string)[] MusicOptions =>
         [(MusicChoice.None, L["common.none"]), (MusicChoice.Play, L["common.play"]), (MusicChoice.Pause, L["common.pause"])];
+    private (string, string)[] MusicSourceOptions =>
+        [("spotify", L["sceneEditor.musicSource.spotify"]), ("local", L["sceneEditor.musicSource.local"])];
     private (string, string)[] RowModeOptions =>
         [("skip", L["common.skip"]), ("color", L["common.modeColor"]), ("white", L["common.modeWhite"]), ("off", L["common.modeOff"])];
 
@@ -344,10 +394,14 @@ else
 
     // music
     private MusicChoice _music = MusicChoice.None;
-    private string? _playId;
+    private string _musicSource = "spotify";   // "spotify" | "local" — which source the Play choice targets
+    private string? _playId;                   // Spotify URI / link (free text)
+    private string? _localPlayId;              // local:track:{id} / local:playlist:{id} (picked from the library)
     private bool _setVolume;
     private int _volumePercent = 50;
     private List<SpotifyPlaylistDto>? _playlists;
+    private List<MusicTrackDto>? _localTracks;
+    private List<MusicPlaylistDto>? _localPlaylists;
 
     // Ids of soundboard sounds this scene fires; picked from the imported library below.
     private List<string> _soundEffects = [];
@@ -386,6 +440,10 @@ else
         var (playlists, _) = await Api.GetSpotifyPlaylistsAsync();
         _playlists = playlists ?? [];
 
+        // Local music library for the Local source pickers (empty when nothing imported yet).
+        _localTracks = await Api.GetMusicLibraryTracksAsync();
+        _localPlaylists = await Api.GetMusicLibraryPlaylistsAsync();
+
         // Sound library to pick scene sound effects from (empty/silent when none imported yet).
         _sounds = await Api.GetSoundsAsync();
         _loading = false;
@@ -399,7 +457,9 @@ else
         _lightMode = LightMode.Color;
         _perLight = [];
         _music = MusicChoice.None;
+        _musicSource = "spotify";
         _playId = null;
+        _localPlayId = null;
         _setVolume = false;
 
         _edit.Id = scene.Id;
@@ -442,7 +502,11 @@ else
             else if (music.PlayId is { } playId)
             {
                 _music = MusicChoice.Play;
-                _playId = playId;
+                // Legacy scenes have no Source — infer it from the play-id shape, like the server does.
+                _musicSource = music.Source
+                    ?? (playId.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ? "local" : "spotify");
+                if (_musicSource == "local") _localPlayId = playId;
+                else _playId = playId;
                 if (music.Volume is { } vol)
                 {
                     _setVolume = true;
@@ -664,16 +728,23 @@ else
         };
     }
 
+    // Pause deliberately carries no Source — it pauses whatever is playing, whichever source that is.
     private MusicEdit? BuildMusic() => _music switch
     {
         MusicChoice.Pause => new MusicEdit { Pause = true },
         MusicChoice.Play => new MusicEdit
         {
-            PlayId = NullIfBlank(_playId),
+            Source = _musicSource,
+            PlayId = NullIfBlank(_musicSource == "local" ? _localPlayId : _playId),
             Volume = _setVolume ? _volumePercent / 100.0 : null,
         },
         _ => null,
     };
+
+    // Whether a local play id is still in the loaded library (unknown ids stay visible in the picker).
+    private bool LocalIdKnown(string playId) =>
+        (_localTracks?.Any(t => string.Equals(t.PlayId, playId, StringComparison.OrdinalIgnoreCase)) ?? false)
+        || (_localPlaylists?.Any(p => string.Equals(p.PlayId, playId, StringComparison.OrdinalIgnoreCase)) ?? false);
 
     private void ToggleSound(string id)
     {

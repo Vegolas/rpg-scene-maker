@@ -301,7 +301,72 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     public Task<(List<SpotifyTrackDto>? Result, string? Error)> SearchSpotifyTracksAsync(string query) =>
         FetchAsync<List<SpotifyTrackDto>>(HttpMethod.Get, $"music/search?q={Uri.EscapeDataString(query)}");
 
-    public Task<SpotifyStateDto?> GetSpotifyStateAsync() => GetAsync<SpotifyStateDto?>("music/state");
+    /// <summary>Source-aware playback state (active source + available sources + track info). Silent on
+    /// failure like the other pollers.</summary>
+    public Task<MusicStateDto?> GetMusicStateAsync() => GetAsync<MusicStateDto?>("music/state");
+
+    // ---------- local music library (bring-your-own files) ----------
+
+    public async Task<List<MusicTrackDto>> GetMusicLibraryTracksAsync() =>
+        await GetAsync<List<MusicTrackDto>>("music/library/tracks") ?? [];
+
+    public async Task<List<MusicPlaylistDto>> GetMusicLibraryPlaylistsAsync() =>
+        await GetAsync<List<MusicPlaylistDto>>("music/library/playlists") ?? [];
+
+    /// <summary>Import a file as a new local music track (multipart upload, like sounds).</summary>
+    public async Task<(MusicTrackDto? Result, string? Error)> UploadMusicTrackAsync(IBrowserFile file, string name, string artist)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            // 50 MB matches the server's upload cap.
+            content.Add(new StreamContent(file.OpenReadStream(50L * 1024 * 1024)), "file", file.Name);
+            if (!string.IsNullOrWhiteSpace(name)) content.Add(new StringContent(name), "name");
+            if (!string.IsNullOrWhiteSpace(artist)) content.Add(new StringContent(artist), "artist");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "music/library/import") { Content = content };
+            await AddHeadersAsync(request);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode
+                ? (await response.Content.ReadFromJsonAsync<MusicTrackDto>(Json), null)
+                : (null, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    public Task<(MusicTrackDto? Result, string? Error)> UpdateMusicTrackAsync(string id, string name, string artist) =>
+        FetchAsync<MusicTrackDto>(HttpMethod.Put, $"music/library/tracks/{Uri.EscapeDataString(id)}", new { name, artist });
+
+    public Task<(bool Ok, string? Error)> DeleteMusicTrackAsync(string id) =>
+        DeleteAsync($"music/library/tracks/{Uri.EscapeDataString(id)}");
+
+    public Task<(MusicPlaylistDto? Result, string? Error)> SaveMusicPlaylistAsync(string id, string name, List<string> trackIds) =>
+        FetchAsync<MusicPlaylistDto>(HttpMethod.Put, $"music/library/playlists/{Uri.EscapeDataString(id)}", new { name, trackIds });
+
+    public Task<(bool Ok, string? Error)> DeleteMusicPlaylistAsync(string id) =>
+        DeleteAsync($"music/library/playlists/{Uri.EscapeDataString(id)}");
+
+    // DELETE with a 204 (empty) success body — don't try to parse JSON out of it.
+    private async Task<(bool Ok, string? Error)> DeleteAsync(string path)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, path);
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
 
     /// <summary>URL for a full-page redirect to start the Spotify login (with the API key when set).</summary>
     public async Task<string> GetSpotifyLoginUrlAsync()

@@ -3,9 +3,7 @@ namespace RpgSceneMaker.Ui.Contracts;
 public record SpotifyDeviceDto(string Id, string Name, string Type, bool IsActive);
 public record SpotifyPlaylistDto(string Id, string Name, string Uri, string? ImageUrl, int TrackCount);
 public record SpotifyTrackDto(string Id, string Name, string Artist, string Uri, string? ImageUrl);
-public record SpotifyStateDto(bool IsPlaying, string? TrackName, string? ArtistName,
-    string? ContextUri, string? DeviceName, int? VolumePercent,
-    double? ProgressSeconds, double? DurationSeconds, bool IsShuffling, string Repeat);
+// Playback state moved to MusicContracts.MusicStateDto — /music/state is source-aware now.
 
 // Mutable class — the settings form binds the Client ID input straight to it.
 public class SpotifyConfigDto

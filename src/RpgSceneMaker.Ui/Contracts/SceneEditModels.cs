@@ -15,7 +15,7 @@ public class SceneEdit
     public SceneDto ToDto() => new(Id, Name,
         Light is null ? null : new LightDto(Light.Power, Light.Color, Light.Brightness, Light.Temperature),
         Lights.Select(l => l.ToDto()).OfType<SceneLightDto>().ToList(),
-        Music is null ? null : new MusicDto(Music.PlayId, Music.Volume, Music.Pause),
+        Music is null ? null : new MusicDto(Music.Source, Music.PlayId, Music.Volume, Music.Pause),
         SoundEffects,
         Image);
 }
@@ -156,6 +156,8 @@ public class KeyframeEdit
 
 public class MusicEdit
 {
+    // "spotify" | "local" | null (legacy — the server infers from the PlayId shape).
+    public string? Source { get; set; }
     public string? PlayId { get; set; }
     public double? Volume { get; set; }
     public bool Pause { get; set; }

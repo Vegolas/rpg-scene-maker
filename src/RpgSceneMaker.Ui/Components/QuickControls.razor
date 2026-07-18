@@ -1,14 +1,15 @@
 @* Always-visible steering in the top bar: music transport (prev / play-pause / next / shuffle / volume,
-   shown only when Spotify is connected), a stop-scene button (shown only while a scene is live), and a
-   reset-lights button that restores the configured default state. Lives in MainLayout, so it stays mounted
-   for the whole session and one poll timer covers every tab. *@
+   shown when any music source is available — Spotify connected and/or the local library has tracks), a
+   stop-scene button (shown only while a scene is live), and a reset-lights button that restores the
+   configured default state. Lives in MainLayout, so it stays mounted for the whole session and one poll
+   timer covers every tab. *@
 @implements IDisposable
 @inject ApiClient Api
 @inject UiState Ui
 @inject Localizer L
 
 <div class="quick">
-    @if (_musicConnected)
+    @if (MusicAvailable)
     {
         @* prev / next / shuffle are secondary — hidden on phones (full transport lives on the Music tab). *@
         <button class="q-btn q-sec" @onclick='@(() => Send("music/previous"))'
@@ -33,23 +34,22 @@
 </div>
 
 @code {
-    private bool _musicConnected;
-    private SpotifyStateDto? _state;
+    private MusicStateDto? _state;
     private string? _activeSceneId;
     private int _volume = 50;
     private long _volumeTouchedAt;   // Environment.TickCount64 of the last manual drag
     private Timer? _timer;
 
+    // The transport shows when any source is usable (Spotify connected and/or local tracks imported);
+    // the server's "available" list is the truth, so a fresh install shows no dead controls.
+    private bool MusicAvailable => _state?.Available is { Count: > 0 };
     private bool Playing => _state?.IsPlaying == true;
     private bool Shuffling => _state?.IsShuffling == true;
 
     protected override async Task OnInitializedAsync()
     {
-        var (spotify, _) = await Api.GetSpotifyConfigAsync();
-        _musicConnected = spotify?.Connected == true;
-
-        // One timer covers the active-scene highlight (always) and the music state (when connected), so
-        // a scene activated on any tab surfaces the stop button here within a few seconds.
+        // One timer covers the active-scene highlight and the music state, so a scene activated on any
+        // tab (or a first track imported) surfaces here within a few seconds.
         await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 5000, 5000);
     }
@@ -57,13 +57,10 @@
     private async Task PollAsync()
     {
         _activeSceneId = (await Api.GetActiveSceneAsync())?.Id;
-        if (_musicConnected)
-        {
-            _state = await Api.GetSpotifyStateAsync();
-            // Don't yank the slider back while the user is dragging it — Spotify's reported volume lags a beat.
-            if (_state?.VolumePercent is { } vp && Environment.TickCount64 - _volumeTouchedAt > 3000)
-                _volume = vp;
-        }
+        _state = await Api.GetMusicStateAsync();
+        // Don't yank the slider back while the user is dragging it — the reported volume lags a beat.
+        if (_state?.VolumePercent is { } vp && Environment.TickCount64 - _volumeTouchedAt > 3000)
+            _volume = vp;
         StateHasChanged();
     }
 

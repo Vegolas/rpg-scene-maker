@@ -9,7 +9,8 @@ public record EffectDto(string Type, int Speed, int Intensity, List<string>? Col
     List<KeyframeDto>? Keyframes = null, bool Loop = false, int? CycleMs = null, string? FxId = null);
 // One keyframe of a "custom" effect: a light state at a ms offset, with an optional Hue transition.
 public record KeyframeDto(int AtMs, bool? Power, string? Color, int? Brightness, int? Temperature, int? TransitionMs);
-public record MusicDto(string? PlayId, double? Volume, bool Pause);
+// Source is "spotify" | "local" | null (legacy — inferred from the PlayId shape server-side).
+public record MusicDto(string? Source, string? PlayId, double? Volume, bool Pause);
 public record RegisteredLightInfo(string Key, string Name, string Provider);
 // Normalized live bulb state from GET /lights/status (Raw provider payload omitted — the panel only reflects the normalized fields).
 public record LightStatusDto(bool? On, string? Mode, int? Brightness, string? Color, int? Temperature);
