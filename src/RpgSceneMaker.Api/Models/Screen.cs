@@ -1,5 +1,9 @@
 namespace RpgSceneMaker.Api.Models;
 
+// Wire contract: the API serializes Screen/ScreenTile straight to /screens (there is no Contracts/ DTO). The
+// panel mirrors this exact shape by hand in RpgSceneMaker.Ui/Contracts/ScreenContracts.cs (ScreenDto/
+// ScreenTileDto) — keep the two in sync when a field changes.
+
 /// <summary>
 /// A named, user-arranged board that groups <em>shortcuts</em> to things that already exist — scenes,
 /// events, sounds, a Spotify playlist/track, or the reset-lights command — onto one tap-friendly screen

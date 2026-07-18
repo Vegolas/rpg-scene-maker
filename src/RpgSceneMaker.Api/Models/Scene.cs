@@ -1,5 +1,9 @@
 namespace RpgSceneMaker.Api.Models;
 
+// Wire contract: the API serializes these scene types straight to /scenes (there is no Contracts/ DTO for a
+// scene). The panel mirrors this exact shape by hand in RpgSceneMaker.Ui/Contracts/SceneContracts.cs
+// (SceneDto/LightDto/SceneLightDto/EffectDto/KeyframeDto/MusicDto) — keep the two in sync when a field changes.
+
 /// <summary>A named table state: lighting + music + one-shot sound effects.</summary>
 public class Scene
 {

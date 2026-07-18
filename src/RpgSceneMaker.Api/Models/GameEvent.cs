@@ -1,5 +1,9 @@
 namespace RpgSceneMaker.Api.Models;
 
+// Wire contract: the API serializes these event types straight to /events (there is no Contracts/ DTO for an
+// event; Contracts/EventContracts.cs only holds the state/stop shapes). The panel mirrors this exact shape by
+// hand in RpgSceneMaker.Ui/Contracts/EventContracts.cs (EventDto + flash/after/timeline clips) — keep in sync.
+
 /// <summary>
 /// A one-shot triggered effect: a brief light flash and/or one or more sound effects (e.g. thunder =
 /// a white flash + a thunderclap). Unlike a scene it isn't a persistent state — it fires <em>over</em>

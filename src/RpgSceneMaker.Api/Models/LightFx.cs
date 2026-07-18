@@ -1,5 +1,8 @@
 namespace RpgSceneMaker.Api.Models;
 
+// Wire contract: the API serializes LightFx straight to /lightfx (there is no Contracts/ DTO). The panel
+// mirrors this exact shape by hand in RpgSceneMaker.Ui/Contracts/LightFxContracts.cs (LightFxDto) — keep in sync.
+
 /// <summary>
 /// A named, reusable "Light FX" in the library: a hand-authored keyframe sequence (identical in shape to a
 /// "custom" <see cref="LightEffect"/>) that scene lights and event-timeline light clips reference by id
