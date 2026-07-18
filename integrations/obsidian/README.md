@@ -90,9 +90,10 @@ The toolbar has **Reload** (after restarting the server) and **Open in browser**
 system browser). On the first load, enter your API key in the embedded panel's own ⚙ button if the
 server has one set — it's remembered per device, just like on the iPad.
 
-This is a **desktop** convenience (it uses an Electron web view). On mobile Obsidian it falls back to
-an `<iframe>`, which may not load a LAN http server reliably — on the iPad, run the panel as its
-[installed PWA](../../README.md#using-it-from-an-ipad-or-any-tabletphone) instead.
+It embeds the app in an `<iframe>`. This works great when the server runs on **this machine**
+(`http://localhost:5252`). A **remote LAN-IP http server** (e.g. `http://192.168.1.20:5252`) may be
+blocked by the browser's mixed-content policy — there, use **Open in browser**, or on the iPad run
+the panel as its [installed PWA](../../README.md#using-it-from-an-ipad-or-any-tabletphone).
 
 ## Notes
 

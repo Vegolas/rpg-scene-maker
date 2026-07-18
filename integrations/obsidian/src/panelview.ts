@@ -1,4 +1,4 @@
-import { ItemView, Platform, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type SceneMakerPlugin from "./main";
 
 export const PANEL_VIEW_TYPE = "rpg-scene-maker-panel";
@@ -6,17 +6,17 @@ export const PANEL_VIEW_TYPE = "rpg-scene-maker-panel";
 /** Height of the little toolbar above the embedded panel, in px. */
 const BAR_HEIGHT = 34;
 
-/** Element that behaves like both an <iframe> and an Electron <webview> for our purposes. */
-type EmbedEl = HTMLElement & { src?: string; reload?: () => void };
-
 /**
  * Hosts the full control panel inside an Obsidian pane, so scenes can be driven from the same
- * window as the session notes (handy on a laptop). On desktop it uses an Electron <webview>
- * (bypasses mixed-content / frame restrictions for the LAN http server); on mobile it falls back
- * to an <iframe>. A small toolbar can reload it or pop it out to the system browser.
+ * window as the session notes (handy on a laptop). It embeds the app in an <iframe> pointed at the
+ * configured server address. A small toolbar can reload it or pop it out to the system browser.
+ *
+ * An <iframe> (rather than an Electron <webview>) is used deliberately: it sizes reliably and, for a
+ * localhost / same-machine server, isn't blocked by mixed-content policy. A remote LAN-IP http server
+ * may be refused by the browser — see the "Open in browser" button and the PWA note in the README.
  */
 export class PanelView extends ItemView {
-  private frame: EmbedEl | null = null;
+  private frame: HTMLIFrameElement | null = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -77,35 +77,17 @@ export class PanelView extends ItemView {
 
     const host = root.createDiv({ cls: "sm-panel-frame" });
     Object.assign(host.style, { position: "absolute", top: `${BAR_HEIGHT}px`, left: "0", right: "0", bottom: "0" });
-    this.frame = this.buildEmbed(host, base);
-  }
 
-  private buildEmbed(host: HTMLElement, url: string): EmbedEl {
-    // NB: do NOT set `display` here. A <webview>'s shadow root uses `:host { display: flex }` to
-    // stretch its internal <iframe> to full height; setting display:block on the host kills that
-    // and the inner iframe collapses to its 150px intrinsic default. position:absolute already
-    // block-ifies the element for us.
-    const fill = { position: "absolute", inset: "0", width: "100%", height: "100%", border: "0" };
-    if (Platform.isDesktopApp) {
-      // <webview> isn't in the DOM typings; create it manually and treat it as an EmbedEl.
-      const webview = document.createElement("webview") as EmbedEl;
-      webview.addClass("sm-panel-embed");
-      webview.setAttribute("src", url);
-      webview.setAttribute("allowpopups", "");
-      Object.assign(webview.style, fill);
-      host.appendChild(webview);
-      return webview;
-    }
     const iframe = host.createEl("iframe", { cls: "sm-panel-embed" });
-    Object.assign(iframe.style, fill);
-    iframe.src = url;
-    return iframe;
+    Object.assign(iframe.style, { position: "absolute", inset: "0", width: "100%", height: "100%", border: "0" });
+    iframe.setAttribute("allow", "autoplay; clipboard-write");
+    iframe.src = base;
+    this.frame = iframe;
   }
 
   private reload(): void {
     const base = this.plugin.settings.baseUrl?.trim();
     if (!base || !this.frame) return;
-    if (typeof this.frame.reload === "function") this.frame.reload();
-    else this.frame.src = base; // iframe: reassigning src reloads it
+    this.frame.src = base; // reassigning src reloads the iframe
   }
 }

@@ -195,9 +195,6 @@
 
 /* <webview>/<iframe> are replaced elements: a percentage height that can't resolve falls back
    to their 150px intrinsic default. Fill the (flex-sized) frame by positioning absolutely. */
-/* No `display` here on purpose: a <webview>'s shadow root sets `:host { display: flex }` to stretch
-   its internal iframe to full height, and display:block would override it (collapsing to 150px).
-   position:absolute already block-ifies the element. */
 .sm-panel-embed {
   position: absolute;
   inset: 0;
