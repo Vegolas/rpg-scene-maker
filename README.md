@@ -10,6 +10,37 @@ A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
 
+## Download & run (Windows)
+
+The easiest way to run RPG Scene Maker — no .NET SDK, no terminal:
+
+1. Download **`rpg-scene-maker-win-x64.zip`** from the [latest release](https://github.com/Vegolas/rpg-scene-maker/releases/latest).
+2. Unzip it anywhere (your Desktop or Documents is fine).
+3. Double-click **`RpgSceneMaker.Api.exe`**.
+
+A small console window opens and shows where the panel is running:
+
+```
+RPG Scene Maker is running.
+  On this PC:      http://localhost:5252
+  On your network: http://192.168.1.20:5252
+  Close this window to stop the server.
+```
+
+Your browser opens the panel automatically, and a **guided first-run setup** walks you through picking your
+lights, connecting music, and a couple of optional extras — every step is skippable, so the app is usable
+straight away with the starter scenes. To control it from an iPad or phone, open the *On your network*
+address there (see [Using it from an iPad](#using-it-from-an-ipad-or-any-tabletphone)).
+
+- **Your data** (scenes, settings, imported sounds/music) lives under `%LocalAppData%\RpgSceneMaker\`,
+  separate from the app folder — so you can drop a newer build in place and keep everything.
+- **Keep the window open** while you play; closing it stops the server. On first run Windows may ask to allow
+  network access — allow it for **private networks** so tablets on your Wi-Fi can reach the panel.
+- Running it headless and don't want the browser to pop up? Set `"Launch": { "OpenBrowser": false }` in the
+  `appsettings.json` next to the exe (or pass `--Launch:OpenBrowser=false`).
+
+Prefer to run from source, or on Linux/macOS? See **[Running](#running)** below.
+
 ## Running
 
 ```powershell

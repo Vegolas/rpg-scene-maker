@@ -27,6 +27,13 @@ public class LightingConfig
     /// e.g. bright white "house lights up" for a break. Null = not configured (the reset button then 400s).
     /// </summary>
     public LightSettings? DefaultLight { get; set; }
+
+    /// <summary>
+    /// When the guided first-run onboarding wizard was completed (or auto-completed for an existing install).
+    /// Null = never done, so the panel shows the wizard on first load. Lives on this single-row config as the
+    /// natural home for a one-per-install flag (see GET /setup/onboarding).
+    /// </summary>
+    public DateTimeOffset? OnboardingDoneUtc { get; set; }
 }
 
 /// <summary>One addressable light in the registry. Key is a stable slug used by scenes and endpoints.</summary>

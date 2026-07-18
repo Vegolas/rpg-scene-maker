@@ -57,6 +57,18 @@ public class UiState
         Changed?.Invoke();
     }
 
+    /// <summary>Whether the first-run onboarding wizard overlay is open. Opened by the layout when
+    /// GET /setup/onboarding says show (or a mid-flight step marker survives a reload), and by the
+    /// Settings page's "Run setup wizard" re-entry button; closed by the wizard itself.</summary>
+    public bool WizardOpen { get; private set; }
+
+    public void SetWizardOpen(bool open)
+    {
+        if (WizardOpen == open) return;
+        WizardOpen = open;
+        Changed?.Invoke();
+    }
+
     public void SetSearchQuery(string? query)
     {
         query ??= "";

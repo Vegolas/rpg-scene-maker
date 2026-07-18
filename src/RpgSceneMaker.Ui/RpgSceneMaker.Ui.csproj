@@ -4,7 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- The panel is served by the API host through classic UseStaticFiles + MapFallbackToFile (see the
+         installable Windows build, issue #75): index.html is served from disk as-is. That path does NOT
+         resolve Blazor's .NET 9+ fingerprint placeholders / import map the way `dotnet run`'s dev middleware
+         or MapStaticAssets do, so a fingerprinted boot script (blazor.webassembly#[.{fingerprint}].js) 404s
+         and the published panel never boots. Disable asset fingerprinting so every framework file keeps its
+         plain name and index.html can reference the boot script directly — boot resources still carry
+         integrity hashes, and for a LAN app the lost immutable-caching hint is immaterial. -->
+    <StaticWebAssetsFingerprintContent>false</StaticWebAssetsFingerprintContent>
+    <BlazorFingerprintBlazorJs>false</BlazorFingerprintBlazorJs>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,76 @@
+name: release-win
+
+# Build the installable Windows artifact (issue #75) and publish it as a GitHub release.
+# Triggers: pushing a v* tag (the real release), or a manual run (build + artifact, and a release too
+# if you supply a tag). The everyday PR build lives in build.yml and is left untouched.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create (e.g. v1.0.0). Leave blank to just build the zip artifact.'
+        required: false
+        default: ''
+
+# The release step needs to create a release + upload assets.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-win-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # A self-contained win-x64 single-file build cross-publishes fine from Linux (the win-x64 runtime pack
+    # + native libs are restored from NuGet and bundled), so no Windows runner is needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Publishing the API project also builds + trims the referenced Blazor WASM UI into wwwroot.
+      - name: Publish (win-x64, single-file, self-contained)
+        run: dotnet publish src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj -p:PublishProfile=win-x64 -o publish/win-x64
+
+      # Smoke-check the artifact actually built before packaging/releasing (the brief's Test-Path check).
+      - name: Verify artifact
+        run: |
+          test -f publish/win-x64/RpgSceneMaker.Api.exe || { echo "::error::RpgSceneMaker.Api.exe missing"; exit 1; }
+          test -f publish/win-x64/wwwroot/index.html    || { echo "::error::wwwroot/index.html missing"; exit 1; }
+          test -f publish/win-x64/scenes.json           || { echo "::error::scenes.json missing"; exit 1; }
+          echo "Artifact contents:"; ls -la publish/win-x64
+
+      - name: Package zip
+        run: |
+          cd publish/win-x64
+          zip -r ../../rpg-scene-maker-win-x64.zip .
+          cd ../..
+          ls -la rpg-scene-maker-win-x64.zip
+
+      # Always keep the zip on the run so a manual (tagless) build is still downloadable.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpg-scene-maker-win-x64
+          path: rpg-scene-maker-win-x64.zip
+
+      # Create the GitHub release on a v* tag push, or on a manual run that supplied a tag.
+      - name: Create GitHub release
+        if: github.ref_type == 'tag' || inputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: RPG Scene Maker ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          files: rpg-scene-maker-win-x64.zip
+          body: |
+            Windows build of RPG Scene Maker. Download **rpg-scene-maker-win-x64.zip**, unzip it anywhere,
+            and double-click **RpgSceneMaker.Api.exe** — the panel opens in your browser and a guided first-run
+            setup walks you through lights, music and the rest. No .NET install required.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

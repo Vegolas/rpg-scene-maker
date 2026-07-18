@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using RpgSceneMaker.Api;
@@ -8,7 +11,23 @@ using RpgSceneMaker.Api.Logging;
 using RpgSceneMaker.Api.Services;
 using RpgSceneMaker.Api.Services.Images;
 
-var builder = WebApplication.CreateBuilder(args);
+// The installable Windows build (issue #75) is a self-contained single-file exe, which reports an EMPTY
+// entry-assembly location; `dotnet run` and the test host report a real .dll path. That distinguishes "the
+// double-clickable app" from development/tests without relying on the environment name.
+// IL3000 warns that Location is empty in a single-file app — that empty value is exactly the signal here.
+#pragma warning disable IL3000
+var isPublishedExe = string.IsNullOrEmpty(System.Reflection.Assembly.GetEntryAssembly()?.Location);
+#pragma warning restore IL3000
+
+// The installable build must resolve its content root (the hosted panel's wwwroot and the starter
+// scenes.json) from the exe's own folder, so it works no matter which directory it is launched from — a
+// double-click sets the cwd to the exe folder, but a Start-menu shortcut, a terminal or an auto-start may
+// not. `dotnet run` and tests keep the default content root, so those are unchanged.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = isPublishedExe ? AppContext.BaseDirectory : null,
+});
 
 // Scenes and lighting settings live in SQLite; Database:Path overrides the default location.
 var dbPath = builder.Configuration["Database:Path"] ?? Path.Combine(
@@ -290,6 +309,44 @@ app.MapMcp("/mcp");
 app.MapFallbackToFile("index.html");
 
 app.Logger.LogInformation("RPG Scene Maker started.");
+
+// Once Kestrel is listening, print a friendly banner (the console IS the UI for a double-clicked build)
+// and — for the installable Windows build — open the panel in the default browser so the app "just works".
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses;
+    var (localUrl, lanUrl) = StartupInfo.PanelUrls(addresses, app.Configuration["Urls"]);
+
+    app.Logger.LogInformation(
+        "RPG Scene Maker is running.\n" +
+        "  On this PC:      {LocalUrl}\n" +
+        "  On your network: {LanUrl}\n" +
+        "  Close this window to stop the server.",
+        localUrl, lanUrl ?? "(no LAN address found — localhost only)");
+
+    // Auto-open the panel in the default browser for the double-click experience. Default ON only for the
+    // installable single-file build, OFF under `dotnet run` and tests so they never pop a tab; an explicit
+    // Launch:OpenBrowser (appsettings or Launch__OpenBrowser env var / --Launch:OpenBrowser) overrides either way.
+    var openBrowser = app.Configuration.GetValue<bool?>("Launch:OpenBrowser") ?? isPublishedExe;
+    if (openBrowser)
+    {
+        app.Logger.LogInformation("Launch:OpenBrowser is on — opening {Url} in your default browser.", localUrl);
+        try
+        {
+            Process.Start(new ProcessStartInfo(localUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning("Could not open a browser automatically ({Message}). Open {Url} yourself.",
+                ex.Message, localUrl);
+        }
+    }
+    else
+    {
+        app.Logger.LogInformation("Launch:OpenBrowser is off — open {Url} in your browser to use the panel.", localUrl);
+    }
+});
+
 app.Run();
 
 // Exposed so the test project's WebApplicationFactory<Program> can boot the real app.

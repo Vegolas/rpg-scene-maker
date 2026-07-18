@@ -1,0 +1,121 @@
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject Localizer L
+
+@* The BYOK AI-assistant panel (provider pick, API key, model, save/disconnect, MCP endpoint helper),
+   extracted from the Settings page so the first-run onboarding wizard reuses the exact same flow.
+   Owns its own config state (loaded on init); the key is write-only (never echoed back). *@
+
+<SectionHeading>@L["settings.assistant.title"]</SectionHeading>
+<div class="panel">
+    <div class="field">
+        <label for="assistant-provider">@L["settings.assistant.provider"]</label>
+        <select id="assistant-provider" @bind="_assistant.Provider">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI (GPT)</option>
+            <option value="gemini">Google Gemini</option>
+        </select>
+        <p class="hint">@L["settings.assistant.providerHint"]</p>
+    </div>
+    <div class="field">
+        <label for="assistant-key">@L["settings.assistant.apiKey"]</label>
+        <input id="assistant-key" type="password" @bind="_assistant.ApiKey" placeholder="@ProviderKeyPlaceholder" />
+        <p class="hint">@L["settings.assistant.keyHint"]</p>
+    </div>
+    <div class="field">
+        <label for="assistant-model">@L["settings.assistant.model"]</label>
+        <input id="assistant-model" type="text" @bind="_assistant.Model" placeholder="@ProviderModelPlaceholder" />
+        <p class="hint">@L[ProviderModelHint]</p>
+    </div>
+    <div class="btn-row">
+        <button class="btn btn--primary" @onclick="SaveAssistant" disabled="@_busy">@L["settings.assistant.saveBtn"]</button>
+    </div>
+
+    @if (_assistant.Configured)
+    {
+        <p class="status ok">✓ @L["settings.assistant.configured"]</p>
+        <div class="btn-row">
+            <button class="btn btn--danger" @onclick="DisconnectAssistant" disabled="@_busy">@L["common.disconnect"]</button>
+        </div>
+    }
+    else
+    {
+        <p class="status">@L["settings.assistant.noKey"]</p>
+    }
+
+    @if (ShowMcpEndpoint)
+    {
+        <div class="field" style="margin-top:1rem">
+            <label for="mcp-endpoint">@L["settings.assistant.mcpEndpoint"]</label>
+            <input id="mcp-endpoint" type="text" readonly value="@McpEndpoint" />
+            <p class="hint">@L["settings.assistant.mcpHintA"]<code>X-Api-Key</code>@L["settings.assistant.mcpHintB"]</p>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Show the MCP endpoint helper field (Settings does; the onboarding wizard keeps it compact).</summary>
+    [Parameter] public bool ShowMcpEndpoint { get; set; } = true;
+
+    private AssistantConfigDto _assistant = new();
+    private bool _busy;
+
+    // The MCP server is hosted at /mcp on the panel's own origin.
+    private string McpEndpoint => $"{Nav.BaseUri}mcp";
+
+    // Provider-specific hints for the AI Assistant key/model fields.
+    private string ProviderKeyPlaceholder => _assistant.Provider switch
+    {
+        "openai" => "sk-…",
+        "gemini" => "AIza…",
+        _ => "sk-ant-…",
+    };
+
+    private string ProviderModelPlaceholder => _assistant.Provider switch
+    {
+        "openai" => "gpt-4o",
+        "gemini" => "gemini-2.0-flash",
+        _ => "claude-opus-4-8",
+    };
+
+    private string ProviderModelHint => _assistant.Provider switch
+    {
+        "openai" => "settings.assistant.modelHint.openai",
+        "gemini" => "settings.assistant.modelHint.gemini",
+        _ => "settings.assistant.modelHint.anthropic",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (assistant, _) = await Api.GetAssistantConfigAsync();
+        if (assistant is not null) _assistant = assistant;
+    }
+
+    private async Task SaveAssistant()
+    {
+        _busy = true;
+        try
+        {
+            if (await Api.SaveAssistantConfigAsync(_assistant))
+            {
+                _assistant.ApiKey = ""; // the key is never echoed; blank the field after saving
+                var (assistant, _) = await Api.GetAssistantConfigAsync();
+                if (assistant is not null) _assistant = assistant;
+                Ui.ReportOk(L["settings.toast.assistantSaved"]);
+                Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DisconnectAssistant()
+    {
+        if (await Api.DisconnectAssistantAsync(L["settings.toast.assistantDisconnected"]))
+        {
+            var (assistant, _) = await Api.GetAssistantConfigAsync();
+            if (assistant is not null) _assistant = assistant;
+            Ui.SetAssistantConfigured(_assistant.Configured); // toggle the Assistant nav tab live
+        }
+    }
+}

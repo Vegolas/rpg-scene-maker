@@ -1,0 +1,122 @@
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject Localizer L
+
+@* The Spotify connect panel (Client ID, redirect-URI helper, the OAuth connect button, device pick,
+   disconnect), extracted from the Settings page so the first-run onboarding wizard reuses the exact
+   same flow. Owns its own config state (loaded on init). Connect is a full-page navigation to the
+   server's /setup/spotify/login, which round-trips through Spotify back to /settings?spotify=…. *@
+
+<SectionHeading>@L["settings.spotify.title"]</SectionHeading>
+<div class="panel">
+    <div class="field">
+        <label for="spotify-client-id">@L["settings.spotify.clientId"]</label>
+        <input id="spotify-client-id" type="text" @bind="_spotify.ClientId" placeholder='@L["settings.spotify.clientIdPlaceholder"]' />
+    </div>
+    <div class="btn-row">
+        <button class="btn btn--primary" @onclick="SaveSpotify">@L["settings.spotify.saveClientId"]</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_spotify.RedirectUri))
+    {
+        <div class="field" style="margin-top:1rem">
+            <label for="spotify-redirect">@L["settings.spotify.redirectUri"]</label>
+            <input id="spotify-redirect" type="text" readonly value="@_spotify.RedirectUri" />
+        </div>
+    }
+    <p class="hint">@L["settings.spotify.redirectHintA"]<code>http://localhost:5252</code>@L["settings.spotify.redirectHintB"]<code>http://127.0.0.1:5252</code>@L["settings.spotify.redirectHintC"]</p>
+
+    @if (_spotify.Connected)
+    {
+        <p class="status ok"><Icon Name="ok" /> @L["settings.spotify.connected"]</p>
+        <div class="field" style="margin-top:1rem">
+            <label for="spotify-device">@L["settings.spotify.deviceLabel"]</label>
+            <div class="field-row">
+                <select id="spotify-device" @onchange="OnSpotifyDeviceChanged">
+                    <option value="" selected="@string.IsNullOrEmpty(_spotify.PreferredDeviceId)">@L["settings.spotify.deviceAuto"]</option>
+                    @if (_spotifyDevices is not null)
+                    {
+                        @foreach (var d in _spotifyDevices)
+                        {
+                            <option value="@d.Id" selected="@(d.Id == _spotify.PreferredDeviceId)">@d.Name (@d.Type)@(d.IsActive ? L["settings.spotify.activeSuffix"] : "")</option>
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(_spotify.PreferredDeviceId) &&
+                         (_spotifyDevices is null || !_spotifyDevices.Any(d => d.Id == _spotify.PreferredDeviceId)))
+                    {
+                        <option value="@_spotify.PreferredDeviceId" selected>@_spotify.PreferredDeviceName @L["settings.spotify.offline"]</option>
+                    }
+                </select>
+                <button class="btn" @onclick="RefreshSpotifyDevices">@L["common.refresh"]</button>
+            </div>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn--danger" @onclick="DisconnectSpotify">@L["settings.spotify.disconnectBtn"]</button>
+        </div>
+    }
+    else
+    {
+        <p class="status">@L["settings.spotify.notConnected"]</p>
+        <div class="btn-row">
+            <button class="btn btn--primary btn--big" @onclick="ConnectSpotify"
+                    disabled="@(string.IsNullOrWhiteSpace(_spotify.ClientId))">@L["settings.spotify.connectBtn"]</button>
+        </div>
+    }
+</div>
+
+@code {
+    private SpotifyConfigDto _spotify = new();
+    private List<SpotifyDeviceDto>? _spotifyDevices;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var (spotify, _) = await Api.GetSpotifyConfigAsync();
+        if (spotify is not null) _spotify = spotify;
+        if (_spotify.Connected) await RefreshSpotifyDevices();
+    }
+
+    private async Task SaveSpotify()
+    {
+        if (await Api.SaveSpotifyConfigAsync(_spotify))
+        {
+            Ui.ReportOk(L["settings.toast.clientIdSaved"]);
+            var (spotify, _) = await Api.GetSpotifyConfigAsync();
+            if (spotify is not null) _spotify = spotify;
+        }
+    }
+
+    private async Task ConnectSpotify()
+    {
+        // Full-page navigation: the login endpoint redirects the browser to Spotify's consent screen.
+        var url = await Api.GetSpotifyLoginUrlAsync();
+        Nav.NavigateTo(url, forceLoad: true);
+    }
+
+    private async Task RefreshSpotifyDevices()
+    {
+        var (devices, error) = await Api.GetSpotifyDevicesAsync();
+        if (devices is not null) _spotifyDevices = devices;
+        else if (error is not null) Ui.ReportError(error);
+    }
+
+    private async Task OnSpotifyDeviceChanged(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString() ?? "";
+        _spotify.PreferredDeviceId = id;
+        _spotify.PreferredDeviceName = _spotifyDevices?.FirstOrDefault(d => d.Id == id)?.Name ?? "";
+        if (await Api.SaveSpotifyConfigAsync(_spotify))
+            Ui.ReportOk(id == "" ? L["settings.toast.deviceAuto"] : L.Format("settings.toast.deviceSet", _spotify.PreferredDeviceName));
+    }
+
+    private async Task DisconnectSpotify()
+    {
+        if (await Api.DisconnectSpotifyAsync(L["settings.toast.spotifyDisconnected"]))
+        {
+            _spotify.Connected = false;
+            _spotify.PreferredDeviceId = "";
+            _spotify.PreferredDeviceName = "";
+            _spotifyDevices = null;
+        }
+    }
+}

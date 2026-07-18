@@ -24,7 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RpgSceneMaker.Ui\RpgSceneMaker.Ui.csproj" />
+    <!-- UndefineProperties: don't flow this project's PublishProfile (win-x64, used for the installable
+         Windows build) into the referenced WASM UI, which has no such profile — it would only emit a
+         spurious NETSDK1198 "publish profile not found" warning during `dotnet publish`. -->
+    <ProjectReference Include="..\RpgSceneMaker.Ui\RpgSceneMaker.Ui.csproj" UndefineProperties="PublishProfile" />
   </ItemGroup>
 
   <ItemGroup>

@@ -73,6 +73,29 @@ public class SettingsStore(IDbContextFactory<AppDbContext> dbFactory)
         }
     }
 
+    /// <summary>
+    /// Stamp the first-run onboarding as done (now), persisted on the single-row config. Idempotent enough —
+    /// re-stamping just moves the timestamp. Called when the wizard finishes and by the auto-complete path in
+    /// GET /setup/onboarding for existing installs. Preserves the rest of the lighting config.
+    /// </summary>
+    public void MarkOnboardingDone()
+    {
+        lock (_lock)
+        {
+            using var db = dbFactory.CreateDbContext();
+            var entity = db.LightingConfigs.SingleOrDefault(c => c.Id == LightingConfig.SingletonId);
+            if (entity is null)
+            {
+                entity = new LightingConfig();
+                db.LightingConfigs.Add(entity);
+            }
+
+            entity.OnboardingDoneUtc = DateTimeOffset.UtcNow;
+            db.SaveChanges();
+            _current = entity;
+        }
+    }
+
     private LightingConfig Load()
     {
         using var db = dbFactory.CreateDbContext();

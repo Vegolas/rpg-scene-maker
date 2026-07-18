@@ -150,6 +150,46 @@ public static class SetupEndpoints
             store.Clear();
             return new { configured = store.Current.IsConfigured };
         });
+
+        // First-run onboarding wizard state (issue #75). `show` drives whether the panel pops the guided
+        // setup overlay; the extra flags let the wizard pre-mark steps already done (e.g. an existing install
+        // that already connected Spotify). Reading also AUTO-COMPLETES for existing installs: if lights or
+        // music are already set up but the flag is still null (an upgrade), stamp it now so long-time users
+        // never see the wizard — only a genuinely fresh, unconfigured install gets show=true.
+        setup.MapGet("/onboarding", async (SettingsStore settings, SpotifyStore spotify,
+            MusicTrackStore musicTracks, AssistantStore assistant, FreesoundStore freesound) =>
+        {
+            var cfg = settings.Current;
+            var lightsConfigured = cfg.Provider.Equals("hue", StringComparison.OrdinalIgnoreCase)
+                ? !string.IsNullOrWhiteSpace(cfg.Hue.BridgeIp) && !string.IsNullOrWhiteSpace(cfg.Hue.AppKey)
+                : cfg.Tuya.IsConfigured;
+            var spotifyConnected = spotify.Current.IsConnected;
+            var localMusicAvailable = await musicTracks.AnyAsync();
+            var assistantConfigured = assistant.Current.IsConfigured;
+            var freesoundConfigured = freesound.Current.IsConfigured;
+
+            if (cfg.OnboardingDoneUtc is null && (lightsConfigured || spotifyConnected || localMusicAvailable))
+                settings.MarkOnboardingDone();
+
+            return new
+            {
+                show = settings.Current.OnboardingDoneUtc is null,
+                lightsConfigured,
+                spotifyConnected,
+                localMusicAvailable,
+                assistantConfigured,
+                freesoundConfigured,
+            };
+        });
+
+        // Finish (or skip) the wizard: stamp onboarding done so it never shows again. GET+POST like the other
+        // command endpoints. The "Run setup wizard" re-entry button reopens the overlay locally and does NOT
+        // hit this — the flag stays set once done.
+        setup.MapMethods("/onboarding/done", EndpointHelpers.GetOrPost, (SettingsStore settings) =>
+        {
+            settings.MarkOnboardingDone();
+            return new { show = false };
+        });
     }
 
     // Spotify's dashboard only accepts plain-http redirect URIs on 127.0.0.1 (not "localhost"), and the
