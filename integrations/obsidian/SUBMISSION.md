@@ -195,6 +195,16 @@ git push origin 0.1.0
 The workflow builds and creates a **draft** release with the three assets attached. Then **Releases →
 edit the draft → Publish** — the directory can only fetch assets from a *published* release.
 
+> **Trap — two releases on one tag (bit us on 2026-07-19):** if you hand-create a release in the GitHub
+> UI (or a workflow run fails and you retry), you can end up with BOTH an empty *published* release and
+> the workflow's asset-carrying *draft* on tag `0.1.0`. The Obsidian bot only sees published releases,
+> so it reports "release 0.1.0 is missing the main.js file" even though the draft has everything.
+> Fix: list them (`gh api repos/<owner>/<repo>/releases -q '.[] | "\(.id) draft=\(.draft)
+> assets=\(.assets|length)"'`), DELETE the empty published one by id (`gh api -X DELETE
+> repos/<owner>/<repo>/releases/<id>` — the git tag survives), then publish the draft
+> (`gh api -X PATCH repos/<owner>/<repo>/releases/<draft-id> -F draft=false -f tag_name=0.1.0`),
+> and re-request the review. Never fix it by committing `main.js` — the review rejects that.
+
 **Option B — by hand (no workflow):**
 
 ```bash
