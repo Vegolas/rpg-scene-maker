@@ -100,8 +100,8 @@ public partial class LocaleService(string directory, ILogger<LocaleService> logg
     {
         if (!CodePattern().IsMatch(code)) return null;
 
-        var path = Path.Combine(directory, code + ".json");
-        var disk = File.Exists(path) ? ReadFile(path) : null;
+        var path = ResolveDiskPath(code);
+        var disk = path is not null ? ReadFile(path) : null;
 
         var embedded = EmbeddedResources().FirstOrDefault(r =>
             r.Code.Equals(code, StringComparison.OrdinalIgnoreCase)) is { Resource: { } res }
@@ -164,6 +164,23 @@ public partial class LocaleService(string directory, ILogger<LocaleService> logg
         !string.IsNullOrWhiteSpace(disk) ? disk
         : !string.IsNullOrWhiteSpace(embedded) ? embedded
         : code;
+
+    /// <summary>
+    /// The on-disk path of <paramref name="code"/>'s JSON file, or null if none exists. Tries the exact
+    /// <c>&lt;code&gt;.json</c> first (the fast path, and the only match on a case-insensitive filesystem),
+    /// then falls back to a case-insensitive directory scan so a request for <c>PL</c> still finds
+    /// <c>pl.json</c> on a case-sensitive filesystem (Linux/macOS) — matching how the embedded-resource
+    /// lookup and <see cref="List"/> already compare codes case-insensitively. <paramref name="code"/> is
+    /// validated by <see cref="CodePattern"/> (a bare, separator-free name) before we get here.
+    /// </summary>
+    private string? ResolveDiskPath(string code)
+    {
+        var exact = Path.Combine(directory, code + ".json");
+        if (File.Exists(exact)) return exact;
+        if (!Directory.Exists(directory)) return null;
+        return Directory.EnumerateFiles(directory, "*.json").FirstOrDefault(p =>
+            Path.GetFileNameWithoutExtension(p).Equals(code, StringComparison.OrdinalIgnoreCase));
+    }
 
     private LocaleFile? ReadFile(string path)
     {
