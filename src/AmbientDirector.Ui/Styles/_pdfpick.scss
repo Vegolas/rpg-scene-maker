@@ -1,0 +1,89 @@
+/* ============================================================
+   PDF page picker (PdfPagePicker)
+   Reuses the image-search overlay shell (.imgsearch-overlay /
+   -head / -body / -foot / -note); only the page-choose control,
+   the page-thumbnail grid, the "Page N" badge and the selected
+   outline are new here. Same Control-Room tokens, ≥44px targets.
+   ============================================================ */
+
+/* ---- state 1/2: choose a PDF (the button doubles as the busy indicator) ---- */
+.pdfpick-choose {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-8) var(--s-4);
+  text-align: center;
+}
+
+/* Styled label wrapping a hidden file input, so the whole button is the picker (like .tv-upload). */
+.pdfpick-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+
+  input[type="file"] { display: none; }
+}
+.pdfpick-upload.is-busy { opacity: .7; pointer-events: none; }
+
+/* ---- state 3: page-thumbnail grid ---- */
+.pdfpick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s-3);
+  padding-bottom: var(--s-4);
+}
+@media (min-width: 900px) {
+  .pdfpick-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
+
+.pdfpick-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--hit-min);
+  padding: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--t-fast), transform var(--t-fast);
+}
+.pdfpick-tile:hover { border-color: var(--accent); }
+.pdfpick-tile:active { transform: translateY(1px); }
+.pdfpick-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pdfpick-tile:disabled { cursor: default; }
+
+/* Selected page: a clear accent ring (border + inset outline) that reads at a glance on a touch screen. */
+.pdfpick-tile.is-selected {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Pages are usually portrait; a fixed 3:4 box with contain keeps landscape pages tidy too (letterboxed
+   over the well) so the grid stays even. */
+.pdfpick-thumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  display: block;
+  background: var(--well);
+}
+
+/* "Page N" caption strip under the thumbnail. */
+.pdfpick-badge {
+  padding: var(--s-2) var(--s-3);
+  text-align: center;
+  color: var(--text);
+  font: var(--text-sm);
+}
+.pdfpick-tile.is-selected .pdfpick-badge { color: var(--accent); }
+
+/* ---- footer: the import action, right-aligned over the attribution-footer border ---- */
+.pdfpick-foot {
+  display: flex;
+  justify-content: flex-end;
+}

@@ -12,6 +12,12 @@ public static class ImageEndpoints
     // tile art, and imported card art (Scryfall art_crop) is small.
     private const long MaxUploadBytes = 10 * 1024 * 1024;
 
+    // A source PDF may be a whole handout/rulebook, so it gets a larger cap than a tile image. 25 MB is the
+    // validated limit (→ error.pdf.tooLarge); the per-request body cap is a touch higher so multipart framing
+    // overhead can't trip Kestrel's 413 before our own check runs.
+    private const long MaxPdfBytes = 25 * 1024 * 1024;
+    private const long MaxPdfRequestBytes = 26 * 1024 * 1024;
+
     public static void MapImageEndpoints(this WebApplication app)
     {
         var images = app.MapGroup("/images");
@@ -103,6 +109,50 @@ public static class ImageEndpoints
                 storage.Delete(id + ext);   // drop any partially written file on a cap breach / read error
                 throw;
             }
+        });
+
+        // ---- PDF page → image import (issue #88) ----
+        // Upload a PDF (held only as a short-lived temp), browse page thumbnails, then import a picked page as
+        // an ordinary stored image. No PDF is ever persisted; imported pages then work everywhere images do.
+
+        // Upload: multipart 'file' part like /upload, but PDF-sized. PDFium parsing IS the validity check, so
+        // we don't gate on extension/content-type — only the size cap. Returns { id, pages }.
+        images.MapPost("/pdf/upload", async (HttpRequest request, PdfImporter pdf, CancellationToken ct) =>
+        {
+            if (request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } cap)
+                cap.MaxRequestBodySize = MaxPdfRequestBytes;
+
+            if (!request.HasFormContentType)
+                throw new ValidationException("error.upload.multipartRequired");
+
+            var form = await request.ReadFormAsync(ct);
+            var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+                throw new ValidationException("error.upload.noFile");
+            if (file.Length > MaxPdfBytes)
+                throw new ValidationException("error.pdf.tooLarge", "25");
+
+            await using var stream = file.OpenReadStream();
+            var (id, pages) = await pdf.SaveTempAsync(stream, ct);
+            return Results.Ok(new PdfUploadResultDto(id, pages));
+        }).DisableAntiforgery();
+
+        // Thumbnail for one page (1-based). A literal multi-segment route, so it can't collide with the
+        // GET /{name} byte server below. Temp ids are unique per upload, so the rendered thumb is safe to
+        // cache privately for the temp's lifetime.
+        images.MapGet("/pdf/{id}/thumb/{page:int}", (string id, int page, PdfImporter pdf, HttpResponse response) =>
+        {
+            var bytes = pdf.RenderThumb(id, page);
+            response.Headers.CacheControl = "private, max-age=3600";
+            return Results.Bytes(bytes, "image/jpeg");
+        });
+
+        // Import picked pages (1-based) into stored images; returns one { page, id } per page. POST-only (not a
+        // Stream-Deck command endpoint, same rationale as /images/import).
+        images.MapPost("/pdf/{id}/import", async (string id, PdfImportRequest? body, PdfImporter pdf, CancellationToken ct) =>
+        {
+            var saved = await pdf.ImportPagesAsync(id, body?.Pages ?? [], ct);
+            return Results.Ok(saved.Select(p => new PdfImportedPageDto(p.Page, p.StoredName)).ToList());
         });
 
         // Serve raw bytes with the right content-type. GET only (upload is POST-only, like /sounds/import).

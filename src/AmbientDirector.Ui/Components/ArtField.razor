@@ -23,6 +23,7 @@
             @(_busy ? L["artField.uploading"] : HasImage ? L["artField.replace"] : L["artField.upload"])
         </button>
         <button class="btn btn--small" @onclick="OpenSearch" disabled="@_busy">@L["artField.search"]</button>
+        <button class="btn btn--small" @onclick="OpenPdf" disabled="@_busy">@L["artField.pdf"]</button>
         @if (HasImage)
         {
             <button class="btn btn--small btn--danger" @onclick="Remove" disabled="@_busy">@L["common.remove"]</button>
@@ -35,12 +36,18 @@
     <ImageSearchPicker OnPicked="OnSearchPicked" OnClose="CloseSearch" />
 }
 
+@if (_pdfOpen)
+{
+    <PdfPagePicker OnPicked="OnPdfPicked" OnClose="ClosePdf" />
+}
+
 @code {
     [Parameter] public string? Image { get; set; }
     [Parameter] public EventCallback<string?> ImageChanged { get; set; }
 
     private bool _busy;
     private bool _searchOpen;
+    private bool _pdfOpen;
 
     private bool HasImage => !string.IsNullOrEmpty(Image);
 
@@ -54,6 +61,18 @@
         Image = id;
         await ImageChanged.InvokeAsync(id);
         _searchOpen = false;
+    }
+
+    private void OpenPdf() => _pdfOpen = true;
+
+    private void ClosePdf() => _pdfOpen = false;
+
+    // A picked PDF page was rendered + stored server-side; store its id exactly like a search import.
+    private async Task OnPdfPicked(string? id)
+    {
+        Image = id;
+        await ImageChanged.InvokeAsync(id);
+        _pdfOpen = false;
     }
 
     // Ensure the API key is cached so ImageUrl() builds the correct (key-bearing) src synchronously.

@@ -616,6 +616,48 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         return string.IsNullOrEmpty(id) ? (null, "Import succeeded but no image id was returned.") : (id, null);
     }
 
+    // ---------- pdf page → image import (PdfPagePicker) ----------
+
+    /// <summary>Upload a PDF (multipart) as a short-lived temp; returns its id + page count so the picker can
+    /// render page thumbnails. 25 MB matches the server cap. No PDF is ever persisted.</summary>
+    public async Task<(PdfUploadResultDto? Result, string? Error)> UploadPdfFileAsync(IBrowserFile file)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var part = new StreamContent(file.OpenReadStream(25L * 1024 * 1024));
+            part.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+            content.Add(part, "file", file.Name);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "images/pdf/upload") { Content = content };
+            await AddHeadersAsync(request);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+                return (null, await ExtractProblemAsync(response));
+            return (await response.Content.ReadFromJsonAsync<PdfUploadResultDto>(Json), null);
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Key-bearing url for a temp PDF's page thumbnail (1-based page); like ImageUrl, an &lt;img&gt;
+    /// can't send the key header so it rides as a query param. Leading slash → resolves against the origin.</summary>
+    public string PdfThumbUrl(string id, int page)
+    {
+        var url = $"/images/pdf/{Uri.EscapeDataString(id)}/thumb/{page}";
+        return _apiKey is { } key ? $"{url}?apiKey={Uri.EscapeDataString(key)}" : url;
+    }
+
+    /// <summary>Import picked pages (1-based) into stored images; returns one { page, id } per page. The
+    /// picker uses the first returned id, same as a fresh upload / search import.</summary>
+    public Task<(List<PdfImportedPageDto>? Result, string? Error)> ImportPdfPagesAsync(string id, List<int> pages) =>
+        FetchAsync<List<PdfImportedPageDto>>(HttpMethod.Post, $"images/pdf/{Uri.EscapeDataString(id)}/import", new { pages });
+
     // ---------- tv (player-facing shared display) ----------
 
     /// <summary>Poll what the shared table screen is showing; silent on failure like the other pollers.

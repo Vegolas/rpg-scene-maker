@@ -1,0 +1,137 @@
+@* Full-screen PDF page picker: choose a PDF → grid of rendered page thumbnails → tap one → the server
+   renders that page full-quality and OnPicked fires with the stored image id (the same id the upload/search
+   flows return). Modeled on ImageSearchPicker — a fixed-inset overlay (the app has no modal primitive). The
+   server takes an array of pages (Phase 2 will import several onto a board at once); this phase picks one. *@
+@inject ApiClient Api
+@inject UiState Ui
+@inject Localizer L
+
+<div class="imgsearch-overlay" role="dialog" aria-modal="true" aria-label="@L["pdfPick.title"]">
+    <div class="imgsearch-head">
+        <h2 class="imgsearch-title">@L["pdfPick.title"]</h2>
+        <button type="button" class="btn btn--icon imgsearch-close" @onclick="Close"
+                disabled="@Busy" aria-label="@L["pdfPick.close"]">
+            <Icon Name="close" />
+        </button>
+    </div>
+
+    <div class="imgsearch-body">
+        @if (_upload is null)
+        {
+            @* No PDF yet (and the uploading state): the picker button doubles as the busy indicator. *@
+            <div class="pdfpick-choose">
+                <label class="btn btn--primary pdfpick-upload@(_uploading ? " is-busy" : "")">
+                    <InputFile OnChange="OnFileChosen" accept="application/pdf,.pdf" disabled="@_uploading" />
+                    <Icon Name="pdf" /> @(_uploading ? L["pdfPick.uploading"] : L["pdfPick.choose"])
+                </label>
+                <p class="imgsearch-note">@L["pdfPick.hint"]</p>
+            </div>
+        }
+        else
+        {
+            @* Loaded: one thumbnail per page, single-select. *@
+            <div class="pdfpick-grid">
+                @for (var n = 1; n <= _upload.Pages; n++)
+                {
+                    var page = n; // capture per iteration for the click closure
+                    <button type="button" class="pdfpick-tile@(_selected == page ? " is-selected" : "")"
+                            @onclick="() => Select(page)" disabled="@_importing">
+                        <img class="pdfpick-thumb" loading="lazy" src="@Api.PdfThumbUrl(_upload.Id, page)"
+                             alt="@L.Format("pdfPick.page", page)" />
+                        <span class="pdfpick-badge">@L.Format("pdfPick.page", page)</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_upload is not null)
+    {
+        <div class="imgsearch-foot pdfpick-foot">
+            <button type="button" class="btn btn--primary" @onclick="ImportAsync"
+                    disabled="@(_selected is null || _importing)">
+                @(_importing ? L["pdfPick.importing"] : L["pdfPick.import"])
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    // Fires with the stored image id (the file name) once a picked page is imported — same shape as
+    // ImageSearchPicker/ArtField, so consumers store it exactly like a fresh upload.
+    [Parameter] public EventCallback<string?> OnPicked { get; set; }
+
+    // Fires when the picker should close (close button, or right after a successful pick).
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private PdfUploadResultDto? _upload;   // null until a PDF is uploaded
+    private int? _selected;                // the picked page (1-based); single-select this phase
+    private bool _uploading;
+    private bool _importing;
+
+    private bool Busy => _uploading || _importing;
+
+    // Cache the API key so the thumbnail <img> src carries it (the /images/pdf routes are gated).
+    protected override Task OnInitializedAsync() => Api.GetApiKeyAsync();
+
+    private async Task OnFileChosen(InputFileChangeEventArgs e)
+    {
+        if (_uploading || e.FileCount == 0) return;
+        var file = e.File;
+        if (file.Size > 25L * 1024 * 1024)
+        {
+            Ui.ReportError(L.Format("pdfPick.tooLarge", 25));
+            return;
+        }
+        _uploading = true;
+        try
+        {
+            var (result, error) = await Api.UploadPdfFileAsync(file);
+            if (result is not null)
+            {
+                _upload = result;
+                _selected = null;
+            }
+            else
+            {
+                Ui.ReportError(error ?? L["pdfPick.toast.uploadFailed"]);
+            }
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private void Select(int page)
+    {
+        if (!_importing) _selected = page;
+    }
+
+    private async Task ImportAsync()
+    {
+        if (_importing || _selected is null || _upload is null) return;
+        _importing = true;
+        try
+        {
+            var (pages, error) = await Api.ImportPdfPagesAsync(_upload.Id, [_selected.Value]);
+            if (pages is { Count: > 0 })
+            {
+                await OnPicked.InvokeAsync(pages[0].Id);
+                await OnClose.InvokeAsync();
+            }
+            else
+            {
+                Ui.ReportError(error ?? L["pdfPick.toast.importFailed"]);
+                _importing = false; // keep the overlay open so the user can retry / pick another page
+            }
+        }
+        catch (Exception ex)
+        {
+            Ui.ReportError(L.Format("pdfPick.toast.importFailedDetail", ex.Message));
+            _importing = false;
+        }
+    }
+
+    private Task Close() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+}

@@ -155,6 +155,9 @@ builder.Services.AddScoped<AmbientDirector.Api.Services.Music.MusicRouter>();
 
 // Full-art tile backgrounds: uploaded via /images, stored on disk, referenced by stored file name.
 builder.Services.AddSingleton(new ImageFileStorage(imagesPath));
+// PDF page → image import (issue #88): renders a picked PDF page into an ordinary stored image. Temp PDFs
+// live under <images>/.pdf-tmp and are discarded after import; PDFium's per-instance lock lives in the service.
+builder.Services.AddSingleton(sp => new PdfImporter(imagesPath, sp.GetRequiredService<ImageFileStorage>()));
 
 builder.Services.AddSingleton<EventStore>();
 builder.Services.AddSingleton<ScreenStore>();

@@ -203,6 +203,15 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   (URL-ext fallback), enforces the 10 MB cap on both `Content-Length` and the streamed copy, then saves via
   `ImageFileStorage.SaveAsync`). Upstream Scryfall/CDN failures throw **`ImageSourceException`** → 502
   (`error.title.imageSource`), classified in `ErrorClassifier` like Hue/Spotify/AiProvider.
+  **PDF page import (`PdfImporter`, issue #88)**: the GM uploads a PDF (`POST /images/pdf/upload`, 25 MB cap),
+  the server renders per-page thumbnails (`GET /images/pdf/{id}/thumb/{page}`) and, for the picked page(s),
+  full-quality images (`POST /images/pdf/{id}/import`) saved as ordinary `ImageFileStorage` files — so an
+  imported page then works everywhere images do (tile art, `/tv/show`). Rendering is PDFium + SkiaSharp via the
+  **PDFtoImage** package (all through one lock — PDFium isn't guaranteed thread-safe). Pages are **1-based** on
+  the whole surface; no PDF is ever persisted — the upload is a temp under `<images>/.pdf-tmp` (1 h TTL, swept
+  on the next upload, deleted after import), guarded by a `^[a-z0-9]{12}$` id check before any path use. No new
+  `TvContent` kind and no EF schema change. The panel side is `PdfPagePicker.razor`, opened from `ArtField` and
+  the TV remote.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
   (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single image/handout the GM

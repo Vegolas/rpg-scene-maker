@@ -48,11 +48,21 @@
                @oninput="e => _label = e.Value?.ToString() ?? string.Empty"
                placeholder='@L["tv.labelPlaceholder"]' />
     </div>
-    <label class="btn btn--primary tv-upload">
-        <InputFile OnChange="OnFileChosen" accept="image/png,image/jpeg,image/webp" disabled="@_busy" />
-        @(_busy ? L["tv.uploading"] : L["tv.chooseAndPush"])
-    </label>
+    <div class="btn-row" style="margin-top:0.6rem">
+        <label class="btn btn--primary tv-upload">
+            <InputFile OnChange="OnFileChosen" accept="image/png,image/jpeg,image/webp" disabled="@_busy" />
+            @(_busy ? L["tv.uploading"] : L["tv.chooseAndPush"])
+        </label>
+        <button class="btn" @onclick="OpenPdf" disabled="@_busy">
+            <Icon Name="pdf" /> @L["tv.pushPdf"]
+        </button>
+    </div>
 </div>
+
+@if (_pdfOpen)
+{
+    <PdfPagePicker OnPicked="OnPdfPicked" OnClose="ClosePdf" />
+}
 
 <div class="panel" style="margin-top:1rem">
     <SectionHeading>@L["tv.recent"]</SectionHeading>
@@ -84,6 +94,7 @@
     private long _rev;
     private string _label = "";
     private bool _busy;
+    private bool _pdfOpen;
     private Timer? _timer;
 
     // What to open on the table screen — absolute, so the GM can read it straight off the panel.
@@ -124,6 +135,30 @@
                 Ui.ReportError(error ?? L["tv.toast.uploadFailed"]);
                 return;
             }
+            if (await Api.ShowOnTvAsync(id, _label, L["tv.toast.shown"]))
+            {
+                _label = "";
+                await ForcePollAsync();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OpenPdf() => _pdfOpen = true;
+
+    private void ClosePdf() => _pdfOpen = false;
+
+    // A picked PDF page was rendered + stored server-side; push that stored image just like a fresh upload.
+    private async Task OnPdfPicked(string? id)
+    {
+        _pdfOpen = false;
+        if (id is null || _busy) return;
+        _busy = true;
+        try
+        {
             if (await Api.ShowOnTvAsync(id, _label, L["tv.toast.shown"]))
             {
                 _label = "";
