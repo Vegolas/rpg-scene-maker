@@ -200,6 +200,11 @@ on your server (with their art) and fires them in the background over the same G
 install it from [`integrations/obsidian/`](integrations/obsidian/README.md); set your server address (and
 API key, if any) in its settings.
 
+**[It's now available in the official Obsidian community plugins list](https://community.obsidian.md/plugins/rpg-scene-maker)**
+
+
+https://github.com/user-attachments/assets/38f4f217-9fa5-43f2-8306-23a74364a963
+
 ## Scenes
 
 Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
