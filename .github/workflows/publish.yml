@@ -1,0 +1,84 @@
+name: publish
+
+# Compile + package self-contained artifacts for every supported OS (issue #83). This is a
+# build/regression guard, NOT the release mechanism — cutting a real GitHub release is release-win.yml
+# on a v* tag. Artifacts here are downloadable from the run's summary and expire with normal retention.
+#
+# On a pull request only the linux-x64 leg runs, as a cheap guard against a new Windows-only dependency
+# sneaking in (the app is cross-platform since #82). On push to main / manual dispatch the full
+# linux-x64 + osx-arm64 + win-x64 matrix builds so all three artifacts are available.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Decide which RIDs to build for this event: just linux-x64 on PRs, all three otherwise.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      rids: ${{ steps.pick.outputs.rids }}
+    steps:
+      - id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo 'rids=["linux-x64"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'rids=["linux-x64","osx-arm64","win-x64"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: plan
+    # Self-contained single-file builds for all three RIDs cross-publish fine from Linux (each runtime pack
+    # + native libs — incl. the bundled OpenAL Soft — is restored from NuGet and bundled), so one runner
+    # covers the whole matrix.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: ${{ fromJSON(needs.plan.outputs.rids) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Publishing the API project also builds + trims the referenced Blazor WASM UI into wwwroot. Each RID
+      # has a matching publish profile under src/AmbientDirector.Api/Properties/PublishProfiles/.
+      - name: Publish (${{ matrix.rid }}, single-file, self-contained)
+        run: dotnet publish src/AmbientDirector.Api/AmbientDirector.Api.csproj -p:PublishProfile=${{ matrix.rid }} -o publish/${{ matrix.rid }}
+
+      # Smoke-check the artifact actually built before packaging (the win-x64 host names the exe .exe).
+      - name: Verify artifact
+        run: |
+          exe=AmbientDirector.Api
+          [ "${{ matrix.rid }}" = "win-x64" ] && exe=AmbientDirector.Api.exe
+          dir="publish/${{ matrix.rid }}"
+          test -f "$dir/$exe"               || { echo "::error::$exe missing";               exit 1; }
+          test -f "$dir/wwwroot/index.html" || { echo "::error::wwwroot/index.html missing"; exit 1; }
+          test -f "$dir/scenes.json"        || { echo "::error::scenes.json missing";        exit 1; }
+          echo "Artifact contents:"; ls -la "$dir"
+
+      # win-x64 → .zip (Windows-friendly), the unix RIDs → .tar.gz (preserves the executable bit).
+      - name: Package
+        run: |
+          cd publish/${{ matrix.rid }}
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            zip -r "../../ambient-director-${{ matrix.rid }}.zip" .
+          else
+            tar -czf "../../ambient-director-${{ matrix.rid }}.tar.gz" .
+          fi
+          cd ../..
+          ls -la ambient-director-${{ matrix.rid }}.*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ambient-director-${{ matrix.rid }}
+          path: ambient-director-${{ matrix.rid }}.*

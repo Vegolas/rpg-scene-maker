@@ -10,6 +10,28 @@ A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
 
+## Platform support
+
+Ambient Director runs on **Windows, Linux and macOS** — every feature is cross-platform.
+
+| Feature | Windows | Linux | macOS |
+|---|:---:|:---:|:---:|
+| Control panel (Blazor WASM) | ✅ | ✅ | ✅ |
+| Lights — Tuya bulb (LAN) | ✅ | ✅ | ✅ |
+| Lights — Philips Hue (LAN) | ✅ | ✅ | ✅ |
+| Music — Spotify | ✅ | ✅ | ✅ |
+| Music — local library | ✅ | ✅ | ✅ |
+| Soundboard | ✅ | ✅ | ✅ |
+| AI assistant + MCP server | ✅ | ✅ | ✅ |
+| Double-click packaged build | ✅ | — | — |
+
+Lights, Spotify and the panel are plain HTTP/TCP, so they were always portable. The soundboard and the
+local-music library play on the machine running the app through NAudio's managed mixing graph, with the audio
+**output** device coming from a pluggable sink — NAudio's `WaveOutEvent` on Windows and a bundled OpenAL Soft
+sink on Linux/macOS (#82). A host with no audio device just degrades that one feature (a 503) instead of
+crashing. On Linux/macOS run from source or grab a self-contained build — see [Running](#running); the
+one-file **double-click** experience is Windows-only for now.
+
 ## Download & run (Windows)
 
 The easiest way to run Ambient Director — no .NET SDK, no terminal:
@@ -43,16 +65,44 @@ Prefer to run from source, or on Linux/macOS? See **[Running](#running)** below.
 
 ## Running
 
+Any OS with the [.NET 10 SDK](https://dotnet.microsoft.com/download) installed:
+
 ```powershell
 dotnet run --project src/AmbientDirector.Api
 ```
 
 This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify plus a local music library — now-playing, transport, volume, shuffle/repeat, playlists and track search), **Lights** (mood colors, brightness, white temperature, per-light targeting), **Sounds** (import your own or search Freesound + soundboard), **Events** (one-shot light flash + sound stingers), **Effects** (reusable Light FX library), **Screens** (custom shortcut boards), **TV** (push an image or handout to a shared table screen), **Assistant** (an optional bring-your-own-key AI chat that appears once you configure a provider key under ⚙), and **Logs**.
 
+### Self-contained build (Linux / macOS, no SDK)
+
+Prefer a build with no .NET install on the target machine? Publish a self-contained single file for your OS
+(the panel's `wwwroot` and starter `scenes.json` land next to it):
+
+```bash
+# Linux (x64)
+dotnet publish src/AmbientDirector.Api -p:PublishProfile=linux-x64 -o publish/linux-x64
+# macOS (Apple Silicon)
+dotnet publish src/AmbientDirector.Api -p:PublishProfile=osx-arm64 -o publish/osx-arm64
+```
+
+Then `cd publish/<rid>` and run `./AmbientDirector.Api`. These same self-contained artifacts (plus `win-x64`)
+are also produced by the [`publish` CI workflow](.github/workflows/publish.yml) on every push to `main`, so
+you can download a ready-made `.tar.gz` from a run's summary instead of building it yourself.
+
+> **macOS Gatekeeper:** the binary isn't signed/notarized, so first-run may be blocked. Clear the quarantine
+> flag with `xattr -dr com.apple.quarantine AmbientDirector.Api` (or right-click → Open once).
+
+> **Building in a slim/Alpine container?** The SCSS is compiled by `AspNetCore.SassCompiler`, whose `sass`
+> binary is glibc-linked. On Alpine (musl) add the `gcompat` package (`apk add gcompat`) or the build fails
+> with a "not found" error running `sass`. The regular Debian-based .NET SDK images need nothing extra.
+
 ## Using it from an iPad (or any tablet/phone)
 
-1. Run the API on your PC. The first `dotnet run` after this change makes Windows ask about network access — **allow it for private networks**. (If you skipped the prompt: `netsh advfirewall firewall add rule name="Ambient Director" dir=in action=allow protocol=TCP localport=5252`.)
-2. Find your PC's LAN address: `ipconfig` → IPv4, e.g. `192.168.1.20`. A DHCP reservation for the PC keeps the address stable.
+1. Run the API on the host machine, and make sure its firewall allows inbound TCP on port **5252** for your local network (the app already binds all interfaces — see `Urls` under [Configuration](#configuration-appsettingsjson)):
+   - **Windows** — the first `dotnet run` pops a prompt; **allow it for private networks**. If you skipped it: `netsh advfirewall firewall add rule name="Ambient Director" dir=in action=allow protocol=TCP localport=5252`
+   - **macOS** — the application firewall is off by default; if you've turned it on (System Settings → Network → Firewall), allow `AmbientDirector.Api` (or `dotnet`) when macOS prompts on first launch.
+   - **Linux** — most desktop distros ship with no firewall enabled. If yours is on, open the port: `sudo ufw allow 5252/tcp` (ufw) or `sudo firewall-cmd --add-port=5252/tcp --permanent && sudo firewall-cmd --reload` (firewalld).
+2. Find the host's LAN address — `ipconfig` on Windows, `ip addr` (or `ifconfig`) on macOS/Linux → the IPv4 like `192.168.1.20`. A DHCP reservation for the machine keeps the address stable.
 3. On the iPad open Safari → `http://192.168.1.20:5252`, then **Share → Add to Home Screen**. The panel is an installable PWA — it gets its own icon and launches fullscreen like a native app, with no Safari chrome.
 4. Recommended: set an API key (see Security below), then enter the same key on the iPad via the ⚙ button — it is stored on the device.
 5. Table tip: Settings → Display & Brightness → Auto-Lock → Never (or use Guided Access) so the panel doesn't sleep mid-session.
@@ -134,7 +184,7 @@ http://localhost:5252/music/play?id=spotify:playlist:37i9dQZF1DX8NTLI2TtZa6
 
 **Local music library (no account needed)**
 
-Prefer your own files, or don't have Spotify? Import audio straight into the app on the **Music** tab → *Import audio* (MP3/WAV/OGG). Tracks play on the **machine running the app** via NAudio (**Windows-only**, like the soundboard — Spotify and lighting stay cross-platform), on their own output device independent of the soundboard mixer. Group tracks into **local playlists**, and point a scene at one with a `local:track:…` or `local:playlist:…` id — the Music tab and scene editor fill these in for you. `/music/play?id=…` accepts the same ids, and the shared transport (pause/resume/next/volume/shuffle/repeat) targets whichever source is currently playing.
+Prefer your own files, or don't have Spotify? Import audio straight into the app on the **Music** tab → *Import audio* (MP3/WAV/OGG). Tracks play on the **machine running the app** via NAudio (cross-platform, like the soundboard), on their own output device independent of the soundboard mixer. Group tracks into **local playlists**, and point a scene at one with a `local:track:…` or `local:playlist:…` id — the Music tab and scene editor fill these in for you. `/music/play?id=…` accepts the same ids, and the shared transport (pause/resume/next/volume/shuffle/repeat) targets whichever source is currently playing.
 
 ### 3. Stream Deck
 
@@ -233,7 +283,7 @@ Import your own sound effects and fire them from the panel's **Sounds** tab or f
 - **From scenes** — in the scene editor's *Sound Effects* section, pick which sounds a scene fires. Activating the scene stops current playback, then plays the picked sounds with their own volume/loop.
 - **Freesound library** — no files of your own? Tap *Search library* on the Sounds tab to search [Freesound](https://freesound.org)'s Creative-Commons library and import a result in one tap (the author/licence attribution is kept on the sound). It needs a free Freesound API token — create one at [freesound.org/apiv2/apply](https://freesound.org/apiv2/apply) and paste it under **⚙ Settings → Sound library (Freesound)**.
 
-> Sound and local-music playback use NAudio and are **Windows-only** (lighting and Spotify work cross-platform).
+> Sound and local-music playback use NAudio and run on **Windows, Linux and macOS** — the mixing graph is managed NAudio and the audio output device comes from a pluggable sink (`WaveOutEvent` on Windows, a bundled OpenAL Soft sink elsewhere). A host with no audio device degrades this one feature (a 503) rather than crashing.
 
 ## Events
 
