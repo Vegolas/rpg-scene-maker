@@ -94,10 +94,11 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `MusicFileStorage` / `MusicImporter` mirror the `Sound*` trio (files at
   `%LocalAppData%\AmbientDirector\music\`, override `Music:Path`) and back `/music/library/*` (tracks +
   playlists CRUD and a multipart `import`). [`LocalMusicPlayer`](src/AmbientDirector.Api/Services/Music/LocalMusicPlayer.cs)
-  (singleton, NAudio, **Windows-only** like `SoundboardPlayer` — its own output device, one stream at a
-  time, *not* the soundboard mixer) plays a queue with shuffle + repeat off/track/playlist, advancing at
-  each track's natural end. **All output-device creation is one lazy method wrapped in
-  `SoundboardException` → 503**, so a non-Windows host (#76/#81/#82) degrades cleanly instead of crashing.
+  (singleton, NAudio, **cross-platform** like `SoundboardPlayer` — its own output device via the shared
+  `IWavePlayerFactory` seam, one stream at a time, *not* the soundboard mixer) plays a queue with shuffle +
+  repeat off/track/playlist, advancing at each track's natural end. **All output-device creation is one lazy
+  method wrapped in `SoundboardException` → 503**, so a host with no audio device degrades cleanly instead of
+  crashing.
   Deleting a track releases its file if it's playing, scrubs the id from every playlist, and nulls any
   scene `Music.PlayId` that pointed at it (keeping volume) — like the sound-delete scrub.
 - **`SceneActivator` / `SceneLightApplier`** — `SceneActivator` applies a scene's light/music/sound effects
@@ -144,19 +145,27 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   covers `list` and put/delete only — there is deliberately **no** `GET /screens/{id}` (and nothing at the
   bare `/screens`) so full-page loads of the panel's `/screens` and `/screens/{id}` pages fall through to
   `index.html` (the panel reads `/screens/list` and picks a board by id client-side).
-- **`ISoundboardPlayer` / `SoundboardPlayer` / `NullSoundboardPlayer` / `SoundStore` / `SoundFileStorage`** —
+- **`ISoundboardPlayer` / `SoundboardPlayer` / `IWavePlayerFactory` / `SoundDecoder` / `SoundStore` / `SoundFileStorage`** —
   the soundboard, behind the `ISoundboardPlayer` seam ([ISoundboardPlayer.cs](src/AmbientDirector.Api/Services/ISoundboardPlayer.cs):
   `Play`/`Stop`/`StopVoice`/`StopAll`/`PlayingIds`, mirroring how `ILightService` abstracts Tuya/Hue).
-  `SoundboardPlayer` (the Windows impl) plays sound effects on the **server's own audio device** via NAudio (a
+  `SoundboardPlayer` plays sound effects on the **server's own audio device** via NAudio (a
   `MixingSampleProvider` mixes any number of overlapping "voices", each with its own volume and optional
-  looping) — this is what Kenku FM used to do. **Playback is Windows-only** (`WaveOutEvent`), so Program.cs
-  registers the impl **per-OS**: Windows → `SoundboardPlayer`; otherwise → `NullSoundboardPlayer`, whose `Play`
-  throws the localized `SoundboardException` (→ 503 / a 207 on scene activation) and whose stop/state members
-  are no-ops, so the soundboard is *intentionally* disabled rather than crashing (#81/#76 Phase 1). The panel's
-  Sounds tab shows an explicit "unavailable on this OS" banner off `DiagnosticsDto.SoundboardSupported` so a tap
-  explains itself. The **static** decode helpers (`TryMeasureDurationMs`/`TryComputeWaveform`, called by type
-  name — never injected) stay on `SoundboardPlayer` and run on every OS (managed WAV/OGG decode; MP3 relies on
-  Windows codecs and degrades to `null`; managed MP3 is deferred to Phase 2, #82). `SoundStore` persists
+  looping) — this is what Kenku FM used to do. The **whole mixing graph is managed NAudio and cross-platform
+  (#82)**; the only platform-specific piece is the output device, taken from the injected
+  [`IWavePlayerFactory`](src/AmbientDirector.Api/Services/Audio/IWavePlayerFactory.cs) — `WaveOutPlayerFactory`
+  (NAudio `WaveOutEvent`, Windows) or `OpenAlPlayerFactory` (a Silk.NET OpenAL sink over the bundled OpenAL
+  Soft, everywhere else). Program.cs picks the backend from **`Audio:Backend`** (`auto` = WaveOut on Windows /
+  OpenAL elsewhere; `waveout`/`openal` force one on any OS — `openal`-on-Windows is how the cross-platform path
+  is smoke-tested). The OpenAL sink shares one process-wide device/context ([`OpenAlContext`](src/AmbientDirector.Api/Services/Audio/OpenAlContext.cs))
+  and each [`OpenAlWavePlayer`](src/AmbientDirector.Api/Services/Audio/OpenAlWavePlayer.cs) runs a background
+  pump thread feeding one source from a rotating buffer queue. A host with no output device surfaces the
+  localized `SoundboardException` (→ 503 / a 207 on scene activation) at play time, so it degrades cleanly
+  rather than crashing. `DiagnosticsDto.SoundboardSupported` is now always true (the panel's old "unavailable
+  on this OS" banner no longer shows). File decoding lives in the shared, platform-agnostic
+  [`SoundDecoder`](src/AmbientDirector.Api/Services/Audio/SoundDecoder.cs) (`CreateReader`/`Normalize` +
+  `TryMeasureDurationMs`/`TryComputeWaveform`, called by type name — never injected): **managed WAV/OGG/MP3
+  decode on every OS** (MP3 via NLayer, not the Windows ACM codec — routed to NLayer on all OSes so a Windows
+  run exercises the exact Linux path). `SoundStore` persists
   per-sound metadata (name/category/volume/loop, plus `DurationMs` — measured at import, lazily backfilled on
   `list`; the timeline editor uses it to size clips) in SQLite; `SoundFileStorage` keeps the audio files on
   disk. `/sounds/*` ([SoundEndpoints.cs](src/AmbientDirector.Api/Endpoints/SoundEndpoints.cs)) covers `list`,
@@ -345,7 +354,8 @@ Local **music files** live alongside at `%LocalAppData%\AmbientDirector\music\` 
 one file per `MusicTrack` via `MusicFileStorage`.
 
 `appsettings.json` holds deployment config only: `Urls`, `Security:ApiKey`, `Database:Path`, `Sounds:Path`,
-`Music:Path`, `Images:Path`, `Locales:Path`, and `Launch:OpenBrowser` (auto-open the panel at startup — default
+`Music:Path`, `Images:Path`, `Locales:Path`, `Audio:Backend` (audio sink: `auto` (default) / `waveout` /
+`openal` — see the soundboard notes), and `Launch:OpenBrowser` (auto-open the panel at startup — default
 on for the installable exe, off under `dotnet run`).
 
 ### Changing the schema — create a migration

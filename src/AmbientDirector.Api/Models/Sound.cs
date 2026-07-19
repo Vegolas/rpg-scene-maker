@@ -30,7 +30,7 @@ public class Sound
     /// re-probe it forever — consumers treat any value <c>&lt;= 0</c> as an unknown length.</summary>
     public int? DurationMs { get; set; }
 
-    /// <summary>Compact amplitude preview of the file (<see cref="SoundboardPlayer.WaveformBuckets"/> peaks,
+    /// <summary>Compact amplitude preview of the file (<see cref="Services.Audio.SoundDecoder.WaveformBuckets"/> peaks,
     /// each 0–255, normalized to the loudest sample), drawn as the waveform on timeline sound clips. Measured
     /// at import alongside <see cref="DurationMs"/>. Null means "not computed yet" (predates the feature;
     /// backfilled lazily by <c>/sounds/list</c>); an empty array is the "tried, unmeasurable" sentinel so the

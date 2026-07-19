@@ -3,6 +3,7 @@ using AmbientDirector.Api.Contracts;
 using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
+using AmbientDirector.Api.Services.Audio;
 using AmbientDirector.Api.Validation;
 
 namespace AmbientDirector.Api.Endpoints;
@@ -29,8 +30,8 @@ public static class SoundEndpoints
             foreach (var sound in all.Where(s => s.DurationMs is null || s.Waveform is null))
             {
                 var path = files.FullPath(sound);
-                sound.DurationMs ??= SoundboardPlayer.TryMeasureDurationMs(path) ?? 0;
-                sound.Waveform ??= SoundboardPlayer.TryComputeWaveform(path) ?? [];
+                sound.DurationMs ??= SoundDecoder.TryMeasureDurationMs(path) ?? 0;
+                sound.Waveform ??= SoundDecoder.TryComputeWaveform(path) ?? [];
                 try { await store.UpsertAsync(sound); } catch { /* leave for next list; not worth failing this one */ }
             }
             return all.Select(ToDto);

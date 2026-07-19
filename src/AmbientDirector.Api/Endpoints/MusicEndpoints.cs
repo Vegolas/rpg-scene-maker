@@ -3,6 +3,7 @@ using AmbientDirector.Api.Contracts;
 using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
+using AmbientDirector.Api.Services.Audio;
 using AmbientDirector.Api.Services.Music;
 using AmbientDirector.Api.Validation;
 
@@ -96,7 +97,7 @@ public static class MusicEndpoints
             // pattern as /sounds/list); a file that won't decode persists 0 so we don't re-probe it every list.
             foreach (var track in all.Where(t => t.DurationMs is null))
             {
-                track.DurationMs = SoundboardPlayer.TryMeasureDurationMs(files.FullPath(track)) ?? 0;
+                track.DurationMs = SoundDecoder.TryMeasureDurationMs(files.FullPath(track)) ?? 0;
                 try { await store.UpsertAsync(track); } catch { /* leave for next list; not worth failing this one */ }
             }
             return all.Select(ToTrackDto);

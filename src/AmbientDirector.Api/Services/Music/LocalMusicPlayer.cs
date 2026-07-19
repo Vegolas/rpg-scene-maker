@@ -1,7 +1,7 @@
-using NAudio.Vorbis;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using AmbientDirector.Api.Services;
+using AmbientDirector.Api.Services.Audio;
 
 namespace AmbientDirector.Api.Services.Music;
 
@@ -19,27 +19,27 @@ public record LocalPlaybackState(
 /// not the soundboard mixer). A play builds a queue (a single track, or a playlist in order); shuffle and
 /// repeat off/track/playlist are honoured at each track's natural end.
 ///
-/// <para>Structured exactly like <see cref="SoundboardPlayer"/> so the future Linux/macOS port (#81/#82) has
-/// one place to swap the sink: the player <em>is</em> the <see cref="ISampleProvider"/> feeding the device,
-/// always returning a full buffer (silence when idle/paused) so the device stays open — advancing to the next
-/// track happens inside <see cref="Read"/> on the audio thread, so there is no <c>PlaybackStopped</c>
-/// stop-vs-dispose race to get wrong. Pause is simply "emit silence", never a device stop. All output-device
-/// creation lives in the one lazy <see cref="EnsureOutputLocked"/> (first play only, never at construction/DI
-/// time) and wraps failures in <see cref="SoundboardException"/>, so a host with no audio device (e.g. a
-/// non-Windows box until #76 lands a cross-platform sink) degrades to a clean localized 503 — never a crash.
-/// Decoding uses the same reader style as the soundboard (Vorbis for .ogg, else <see cref="AudioFileReader"/>).
-/// Thread-safe via a single lock, like the soundboard.</para>
+/// <para>Structured exactly like <see cref="SoundboardPlayer"/>, sharing its one place to swap the sink: the
+/// player <em>is</em> the <see cref="ISampleProvider"/> feeding the device, always returning a full buffer
+/// (silence when idle/paused) so the device stays open — advancing to the next track happens inside
+/// <see cref="Read"/> on the audio thread, so there is no <c>PlaybackStopped</c> stop-vs-dispose race to get
+/// wrong. Pause is simply "emit silence", never a device stop. All output-device creation lives in the one
+/// lazy <see cref="EnsureOutputLocked"/> (first play only, never at construction/DI time), takes the device
+/// from the injected <see cref="IWavePlayerFactory"/> (WaveOut on Windows, OpenAL elsewhere — issue #82), and
+/// wraps failures in <see cref="SoundboardException"/>, so a host with no audio device degrades to a clean
+/// localized 503 — never a crash. Decoding + normalization use the shared <see cref="SoundDecoder"/> (managed
+/// WAV/OGG/MP3, cross-platform). Thread-safe via a single lock, like the soundboard.</para>
 /// </summary>
 public sealed class LocalMusicPlayer : ISampleProvider, IDisposable
 {
-    // Everything is produced in this common format; per-track readers are resampled / up-mixed to match.
-    private const int SampleRate = 44100;
-    private const int ChannelCount = 2;
+    private readonly IWavePlayerFactory _playerFactory;
 
-    public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, ChannelCount);
+    public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SoundDecoder.SampleRate, SoundDecoder.Channels);
 
     private readonly object _lock = new();
     private readonly Random _rng = new();
+
+    public LocalMusicPlayer(IWavePlayerFactory playerFactory) => _playerFactory = playerFactory;
 
     private IWavePlayer? _output;
     private WaveStream? _readerStream;          // the current decoded file (disposed on track change)
@@ -267,8 +267,8 @@ public sealed class LocalMusicPlayer : ISampleProvider, IDisposable
         WaveStream? reader = null;
         try
         {
-            reader = CreateReader(item.FilePath);
-            var volume = new VolumeSampleProvider(Normalize(reader.ToSampleProvider())) { Volume = _volume };
+            reader = SoundDecoder.CreateReader(item.FilePath);
+            var volume = new VolumeSampleProvider(SoundDecoder.Normalize(reader.ToSampleProvider())) { Volume = _volume };
             DisposeReaderLocked();
             _readerStream = reader;
             _volumeProvider = volume;
@@ -337,33 +337,15 @@ public sealed class LocalMusicPlayer : ISampleProvider, IDisposable
         if (_output is not null) return;
         try
         {
-            var output = new WaveOutEvent { DesiredLatency = 200 };
+            var output = _playerFactory.Create(200);
             output.Init(this); // this player is the sample provider (silence until a track is loaded)
             output.Play();
             _output = output;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not SoundboardException)
         {
             throw new SoundboardException($"No audio output device is available on the server: {ex.Message}", ex);
         }
-    }
-
-    private static WaveStream CreateReader(string path) =>
-        Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase)
-            ? new VorbisWaveReader(path)
-            : new AudioFileReader(path);
-
-    // Bring any reader to the device's 44.1 kHz / stereo float format (same logic as the soundboard).
-    private static ISampleProvider Normalize(ISampleProvider source)
-    {
-        if (source.WaveFormat.SampleRate != SampleRate)
-            source = new WdlResamplingSampleProvider(source, SampleRate);
-        return source.WaveFormat.Channels switch
-        {
-            2 => source,
-            1 => new MonoToStereoSampleProvider(source),
-            var n => throw new SoundboardException($"Unsupported channel count ({n}); only mono and stereo are supported."),
-        };
     }
 
     public void Dispose()

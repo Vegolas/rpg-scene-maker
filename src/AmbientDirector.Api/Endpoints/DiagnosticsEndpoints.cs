@@ -33,7 +33,8 @@ public static class DiagnosticsEndpoints
                 StartedAt: info.StartedAt,
                 LightProvider: settings.Current.Provider,
                 SpotifyConnected: spotify.Current.IsConnected,
-                SoundboardSupported: OperatingSystem.IsWindows(),
+                // Cross-platform since #82 (WaveOut on Windows, OpenAL elsewhere) — supported on every OS now.
+                SoundboardSupported: true,
                 PlayingSoundCount: soundboard.PlayingIds.Count,
                 SceneCount: sceneCount,
                 SoundCount: soundCount,

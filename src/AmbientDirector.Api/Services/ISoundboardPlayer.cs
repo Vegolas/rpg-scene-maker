@@ -2,13 +2,11 @@ namespace AmbientDirector.Api.Services;
 
 /// <summary>
 /// The soundboard's playback surface — overlapping "voices" on the server's own audio device (this is what
-/// Kenku FM used to do). Two implementations, chosen per-OS in Program.cs: the Windows one
-/// (<see cref="SoundboardPlayer"/>) drives NAudio's <c>WaveOutEvent</c>; on Linux/macOS
-/// <see cref="NullSoundboardPlayer"/> stands in and playback is <b>gracefully disabled</b> (issue #81) — its
-/// <see cref="Play"/> throws the localized <see cref="SoundboardException"/> and the panel's Sounds tab shows
-/// an "unavailable on this OS" banner. The static file-decode helpers used at import time (duration +
-/// waveform) stay on the concrete <see cref="SoundboardPlayer"/>: they're platform-agnostic and called by
-/// type name, not injected, so they keep working everywhere.
+/// Kenku FM used to do). The single implementation, <see cref="SoundboardPlayer"/>, is cross-platform: its
+/// managed NAudio mixing graph runs everywhere and it takes the actual output device from an
+/// <c>IWavePlayerFactory</c> (NAudio's <c>WaveOutEvent</c> on Windows, an OpenAL sink elsewhere — issue #82).
+/// File decoding used at import time (duration + waveform) lives in the shared, platform-agnostic
+/// <c>SoundDecoder</c>.
 /// </summary>
 public interface ISoundboardPlayer
 {

@@ -6,7 +6,7 @@ namespace AmbientDirector.Api.Services;
 /// Sits next to the SQLite database under <c>%LocalAppData%\AmbientDirector\sounds</c> by default.</summary>
 public class SoundFileStorage
 {
-    /// <summary>File types we can decode (see <c>SoundboardPlayer</c>: WAV/MP3 natively, OGG via NAudio.Vorbis).</summary>
+    /// <summary>File types we can decode (see <c>SoundDecoder</c>: managed WAV, MP3 via NLayer, OGG via NVorbis — all cross-platform).</summary>
     public static readonly string[] AllowedExtensions = [".mp3", ".wav", ".ogg"];
 
     private readonly string _directory;

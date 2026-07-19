@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Silk.NET.OpenAL exposes the device/context as unsafe pointers (see OpenAlContext). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,7 +20,14 @@
     <PackageReference Include="Mscc.GenerativeAI" Version="3.1.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
+    <!-- Managed MP3 decode (no Windows ACM), so .mp3 imports + playback work on Linux/macOS (#82). -->
+    <PackageReference Include="NLayer" Version="1.16.0" />
+    <PackageReference Include="NLayer.NAudioSupport" Version="1.4.0" />
     <PackageReference Include="OpenAI" Version="2.12.0" />
+    <!-- Cross-platform audio output sink (#82): OpenAL bindings + the bundled OpenAL Soft native
+         (win/linux/osx incl. arm64), used off-Windows in place of NAudio's Windows-only WaveOutEvent. -->
+    <PackageReference Include="Silk.NET.OpenAL" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.OpenAL.Soft.Native" Version="1.23.1" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
     <PackageReference Include="TuyaNet" Version="1.0.3" />
   </ItemGroup>

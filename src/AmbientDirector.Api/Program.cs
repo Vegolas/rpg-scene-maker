@@ -9,6 +9,7 @@ using AmbientDirector.Api.Endpoints;
 using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Logging;
 using AmbientDirector.Api.Services;
+using AmbientDirector.Api.Services.Audio;
 using AmbientDirector.Api.Services.Images;
 
 // The installable Windows build (issue #75) is a self-contained single-file exe, which reports an EMPTY
@@ -111,17 +112,28 @@ builder.Services.AddTransient<IImageSearchSource>(sp => sp.GetRequiredService<Sc
 
 builder.Services.AddSingleton<SceneStore>();
 
-// Soundboard: metadata in SQLite, audio files on disk, playback on the server's own audio device.
+// Audio output sink (issue #82): the soundboard + local-music players keep their managed NAudio mixing graph
+// and only swap the device through IWavePlayerFactory. Pick the backend from Audio:Backend — "auto" (default)
+// is NAudio's Windows-only WaveOutEvent on Windows and the cross-platform OpenAL sink elsewhere; "waveout" /
+// "openal" force one on any OS (openal-on-Windows is how the cross-platform path is smoke-tested). The OpenAL
+// factory owns a process-shared device/context, opened lazily on the first sound played.
+var audioBackend = builder.Configuration["Audio:Backend"]?.Trim().ToLowerInvariant();
+var useOpenAl = audioBackend switch
+{
+    "openal" => true,
+    "waveout" => false,
+    _ => !OperatingSystem.IsWindows(),
+};
+if (useOpenAl)
+    builder.Services.AddSingleton<IWavePlayerFactory, OpenAlPlayerFactory>();
+else
+    builder.Services.AddSingleton<IWavePlayerFactory, WaveOutPlayerFactory>();
+
+// Soundboard: metadata in SQLite, audio files on disk, playback on the server's own audio device. Now
+// cross-platform (the sink comes from the factory above), so the single implementation is registered on every OS.
 builder.Services.AddSingleton<SoundStore>();
 builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
-// Playback is Windows-only (NAudio's WaveOutEvent). On Linux/macOS register a no-op stand-in whose Play
-// throws the localized SoundboardException, so the soundboard is *intentionally* disabled rather than
-// crashing (issue #81); the panel's Sounds tab shows an "unavailable on this OS" banner. The static
-// decode helpers stay on SoundboardPlayer and are used (by type name) on every OS.
-if (OperatingSystem.IsWindows())
-    builder.Services.AddSingleton<ISoundboardPlayer, SoundboardPlayer>();
-else
-    builder.Services.AddSingleton<ISoundboardPlayer, NullSoundboardPlayer>();
+builder.Services.AddSingleton<ISoundboardPlayer, SoundboardPlayer>();
 // Shared import tail (unique id, save, measure, validate, upsert) for /sounds/import + /sounds/library/import.
 builder.Services.AddSingleton<SoundImporter>();
 

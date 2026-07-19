@@ -1,34 +1,30 @@
-using NAudio.Vorbis;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
-using AmbientDirector.Api.Models;
+using AmbientDirector.Api.Services.Audio;
 
 namespace AmbientDirector.Api.Services;
 
 /// <summary>
-/// The Windows soundboard: plays sound effects on the server's own audio device via NAudio's
-/// <c>WaveOutEvent</c> (this is what Kenku FM used to do). A single output device is fed by a
-/// <see cref="MixingSampleProvider"/> so any number of sounds can overlap (polyphony); each playing sound is
-/// one "voice" with its own volume and optional looping. One-shots clean themselves up when they finish;
-/// loops run until stopped. The <see cref="ISoundboardPlayer"/> playback surface is registered per-OS
-/// (Program.cs); on Linux/macOS <see cref="NullSoundboardPlayer"/> stands in instead (issue #81). The static
-/// decode helpers below (<see cref="TryMeasureDurationMs"/> / <see cref="TryComputeWaveform"/>) are
-/// platform-agnostic and stay here regardless of which implementation is registered.
+/// The soundboard: plays sound effects on the server's own audio device (this is what Kenku FM used to do). A
+/// single output device is fed by a <see cref="MixingSampleProvider"/> so any number of sounds can overlap
+/// (polyphony); each playing sound is one "voice" with its own volume and optional looping. One-shots clean
+/// themselves up when they finish; loops run until stopped.
+///
+/// <para>The whole mixing graph is managed NAudio and runs on every OS; the only platform-specific piece is the
+/// output device, which comes from the injected <see cref="IWavePlayerFactory"/> — NAudio's
+/// <c>WaveOutEvent</c> on Windows, the cross-platform OpenAL sink elsewhere (issue #82). File decoding
+/// (including duration + waveform measurement) lives in the shared <see cref="SoundDecoder"/>.</para>
 /// </summary>
 public sealed class SoundboardPlayer : ISoundboardPlayer, IDisposable
 {
-    // Everything is mixed to this common format; per-sound readers are resampled / up-mixed to match.
-    private const int SampleRate = 44100;
-    private const int Channels = 2;
-
-    /// <summary>Number of amplitude buckets in a stored waveform preview (one byte each, 0–255). Small
-    /// enough to ride along in <c>SoundDto</c>, dense enough to draw a recognizable shape on a timeline clip.</summary>
-    public const int WaveformBuckets = 120;
+    private readonly IWavePlayerFactory _playerFactory;
 
     private readonly object _lock = new();
     private readonly List<Voice> _voices = [];
     private IWavePlayer? _output;
     private MixingSampleProvider? _mixer;
+
+    public SoundboardPlayer(IWavePlayerFactory playerFactory) => _playerFactory = playerFactory;
 
     /// <summary>Ids of the sounds currently playing (deduped), for the panel's live highlight.</summary>
     public IReadOnlyList<string> PlayingIds
@@ -54,7 +50,7 @@ public sealed class SoundboardPlayer : ISoundboardPlayer, IDisposable
             WaveStream source;
             try
             {
-                var reader = CreateReader(filePath);
+                var reader = SoundDecoder.CreateReader(filePath);
                 source = loop ? new LoopStream(reader) : reader;
             }
             catch (Exception ex) when (ex is not SoundboardException)
@@ -65,7 +61,7 @@ public sealed class SoundboardPlayer : ISoundboardPlayer, IDisposable
             ISampleProvider chain;
             try
             {
-                chain = new VolumeSampleProvider(Normalize(source.ToSampleProvider()))
+                chain = new VolumeSampleProvider(SoundDecoder.Normalize(source.ToSampleProvider()))
                 {
                     Volume = (float)Math.Clamp(volume, 0.0, 1.0),
                 };
@@ -122,19 +118,19 @@ public sealed class SoundboardPlayer : ISoundboardPlayer, IDisposable
         if (_output is not null) return;
         try
         {
-            var mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels))
+            var mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(SoundDecoder.SampleRate, SoundDecoder.Channels))
             {
                 // Keep producing (silence when idle) so the device stays open and later sounds start instantly.
                 ReadFully = true,
             };
             mixer.MixerInputEnded += OnMixerInputEnded;
-            var output = new WaveOutEvent { DesiredLatency = 150 };
+            var output = _playerFactory.Create(150);
             output.Init(mixer);
             output.Play();
             _mixer = mixer;
             _output = output;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not SoundboardException)
         {
             throw new SoundboardException($"No audio output device is available on the server: {ex.Message}", ex);
         }
@@ -161,92 +157,6 @@ public sealed class SoundboardPlayer : ISoundboardPlayer, IDisposable
         _mixer?.RemoveMixerInput(voice.Root);
         _voices.Remove(voice);
         voice.Source.Dispose();
-    }
-
-    private static WaveStream CreateReader(string path) =>
-        Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase)
-            ? new VorbisWaveReader(path)
-            : new AudioFileReader(path);
-
-    /// <summary>Measure a file's natural length using the same reader logic as playback. Returns null when
-    /// the file is missing or can't be decoded (callers persist/skip accordingly, never failing on it).</summary>
-    public static int? TryMeasureDurationMs(string filePath)
-    {
-        if (!File.Exists(filePath)) return null;
-        try
-        {
-            using var reader = CreateReader(filePath);
-            return (int)reader.TotalTime.TotalMilliseconds;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Compute a compact amplitude preview (<see cref="WaveformBuckets"/> peaks, each 0–255 and
-    /// normalized so the loudest sample is full-scale) for the timeline editor's waveform display, using the
-    /// same reader as playback. Streams the file in one pass (bucketing on the fly, never buffering the whole
-    /// decoded audio). Returns null when the file is missing or won't decode — callers persist the empty-array
-    /// "tried, unmeasurable" sentinel so the backfill doesn't re-probe it.</summary>
-    public static byte[]? TryComputeWaveform(string filePath, int buckets = WaveformBuckets)
-    {
-        if (!File.Exists(filePath) || buckets < 1) return null;
-        try
-        {
-            using var reader = CreateReader(filePath);
-            var samples = reader.ToSampleProvider();
-            var channels = Math.Max(1, samples.WaveFormat.Channels);
-
-            // Size the buckets from the reported length so each frame lands in the right one in a single pass;
-            // a slightly-off total just over/underfills the final bucket, which is imperceptible at this scale.
-            var totalFrames = (long)(reader.TotalTime.TotalSeconds * samples.WaveFormat.SampleRate);
-            var framesPerBucket = Math.Max(1, totalFrames / buckets);
-
-            var peaks = new float[buckets];
-            var buffer = new float[samples.WaveFormat.SampleRate * channels]; // ~1s chunks
-            var maxPeak = 0f;
-            long frame = 0;
-            int read;
-            while ((read = samples.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                for (var i = 0; i + channels <= read; i += channels)
-                {
-                    // Peak (max abs) across this frame's channels.
-                    var amp = 0f;
-                    for (var c = 0; c < channels; c++)
-                        amp = Math.Max(amp, Math.Abs(buffer[i + c]));
-
-                    var bucket = (int)Math.Min(buckets - 1, frame / framesPerBucket);
-                    if (amp > peaks[bucket]) peaks[bucket] = amp;
-                    if (amp > maxPeak) maxPeak = amp;
-                    frame++;
-                }
-            }
-
-            var result = new byte[buckets];
-            if (maxPeak > 0)
-                for (var i = 0; i < buckets; i++)
-                    result[i] = (byte)Math.Clamp((int)Math.Round(peaks[i] / maxPeak * 255f), 0, 255);
-            return result;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    // Bring any reader to the mixer's 44.1 kHz / stereo float format.
-    private static ISampleProvider Normalize(ISampleProvider source)
-    {
-        if (source.WaveFormat.SampleRate != SampleRate)
-            source = new WdlResamplingSampleProvider(source, SampleRate);
-        return source.WaveFormat.Channels switch
-        {
-            2 => source,
-            1 => new MonoToStereoSampleProvider(source),
-            var n => throw new SoundboardException($"Unsupported channel count ({n}); only mono and stereo are supported."),
-        };
     }
 
     public void Dispose()

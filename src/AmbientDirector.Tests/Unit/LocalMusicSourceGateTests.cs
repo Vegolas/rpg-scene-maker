@@ -1,7 +1,9 @@
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
+using AmbientDirector.Api.Services.Audio;
 using AmbientDirector.Api.Services.Music;
 using AmbientDirector.Tests.Store;
+using NAudio.Wave;
 using Xunit;
 
 namespace AmbientDirector.Tests.Unit;
@@ -24,7 +26,7 @@ public class LocalMusicSourceGateTests
     public async Task Not_advertised_with_an_empty_library_and_idle_player()
     {
         using var db = new SqliteTestDb();
-        using var player = new LocalMusicPlayer(); // never played -> no device, null state
+        using var player = new LocalMusicPlayer(new NoopWavePlayerFactory()); // never played -> no device, null state
         var source = Build(db, player);
 
         Assert.True(source.IsAvailable);               // routing stays always-true
@@ -35,9 +37,32 @@ public class LocalMusicSourceGateTests
     public async Task Advertised_once_the_library_has_a_track()
     {
         using var db = new SqliteTestDb();
-        using var player = new LocalMusicPlayer();
+        using var player = new LocalMusicPlayer(new NoopWavePlayerFactory());
         await new MusicTrackStore(db).UpsertAsync(new MusicTrack { Id = "tavern", Name = "Tavern" });
 
         Assert.True(await Build(db, player).IsAdvertisedAsync());
     }
+}
+
+/// <summary>A sink factory whose players do nothing — these tests build a <see cref="LocalMusicPlayer"/> but
+/// never play, so the factory is never actually invoked; it just satisfies the constructor without opening any
+/// real audio device.</summary>
+file sealed class NoopWavePlayerFactory : IWavePlayerFactory
+{
+    public IWavePlayer Create(int desiredLatencyMs) => new NoopWavePlayer();
+}
+
+file sealed class NoopWavePlayer : IWavePlayer
+{
+    public PlaybackState PlaybackState => PlaybackState.Stopped;
+    public WaveFormat OutputWaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);
+    public float Volume { get; set; } = 1f;
+#pragma warning disable CS0067 // required by the interface; never raised by this no-op
+    public event EventHandler<StoppedEventArgs>? PlaybackStopped;
+#pragma warning restore CS0067
+    public void Init(IWaveProvider waveProvider) { }
+    public void Play() { }
+    public void Pause() { }
+    public void Stop() { }
+    public void Dispose() { }
 }

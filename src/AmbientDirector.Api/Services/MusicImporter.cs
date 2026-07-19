@@ -1,5 +1,6 @@
 using System.Text;
 using AmbientDirector.Api.Models;
+using AmbientDirector.Api.Services.Audio;
 using AmbientDirector.Api.Validation;
 
 namespace AmbientDirector.Api.Services;
@@ -8,8 +9,8 @@ namespace AmbientDirector.Api.Services;
 /// The shared tail of importing a local music track (used by <c>POST /music/library/import</c>): pick a
 /// unique slug id, save the audio file, measure its natural length, validate and upsert. The music sibling of
 /// <see cref="SoundImporter"/>; it stays separate because a track is a different entity/store (and needs no
-/// waveform), but it reuses the soundboard's static duration measurement so a track and a sound are timed the
-/// same way.
+/// waveform), but it reuses the shared <see cref="SoundDecoder"/> duration measurement so a track and a sound
+/// are timed the same way.
 /// </summary>
 public class MusicImporter(MusicTrackStore store, MusicFileStorage files)
 {
@@ -24,7 +25,7 @@ public class MusicImporter(MusicTrackStore store, MusicFileStorage files)
 
         // Measure the file's natural length now (same reader logic as playback); the "unmeasurable" sentinel
         // (0) if it won't decode, so the tracks list never re-probes it.
-        track.DurationMs = SoundboardPlayer.TryMeasureDurationMs(files.FullPath(track)) ?? 0;
+        track.DurationMs = SoundDecoder.TryMeasureDurationMs(files.FullPath(track)) ?? 0;
 
         MusicValidation.ValidateTrack(track);
         await store.UpsertAsync(track);

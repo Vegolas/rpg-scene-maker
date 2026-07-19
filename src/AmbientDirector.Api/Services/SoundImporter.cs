@@ -1,5 +1,6 @@
 using System.Text;
 using AmbientDirector.Api.Models;
+using AmbientDirector.Api.Services.Audio;
 using AmbientDirector.Api.Validation;
 
 namespace AmbientDirector.Api.Services;
@@ -29,8 +30,8 @@ public class SoundImporter(SoundStore store, SoundFileStorage files)
         // Measure the file's natural length + waveform preview now (same reader logic as playback); the
         // "unmeasurable" sentinels (0 / empty array) if it won't decode, so /sounds/list never re-probes it.
         var fullPath = files.FullPath(sound);
-        sound.DurationMs = SoundboardPlayer.TryMeasureDurationMs(fullPath) ?? 0;
-        sound.Waveform = SoundboardPlayer.TryComputeWaveform(fullPath) ?? [];
+        sound.DurationMs = SoundDecoder.TryMeasureDurationMs(fullPath) ?? 0;
+        sound.Waveform = SoundDecoder.TryComputeWaveform(fullPath) ?? [];
 
         // Server-set attribution for library imports (never editable via PUT /sounds/{id}).
         if (meta is not null)
