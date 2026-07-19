@@ -26,12 +26,18 @@ a:hover { color: var(--text); }
   gap: var(--s-4);
   background: var(--bg);
 }
-.boot-die { color: var(--accent-text); animation: bootPulse 1.4s ease-in-out infinite; }
-.boot-die svg { width: 3.25rem; height: 3.25rem; display: block; }
-.boot-text { font: 600 14px/1 var(--font); color: var(--text-muted); }
+/* The brand logo already carries the "Ambient Director" wordmark, so it stands in for the
+   old die glyph + title. It breathes gently while the WASM runtime downloads. */
+.boot-logo {
+  width: min(70vw, 360px);
+  height: auto;
+  animation: bootPulse 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 4px 28px rgba(0, 0, 0, .55));
+}
+.boot-text { font: 600 14px/1 var(--font); color: var(--text-muted); letter-spacing: .2px; }
 @keyframes bootPulse {
-  0%, 100% { transform: scale(1); opacity: .7; }
-  50%      { transform: scale(1.12); opacity: 1; }
+  0%, 100% { transform: scale(1);     opacity: .82; }
+  50%      { transform: scale(1.035); opacity: 1;   }
 }
 
 /* ---------- shared page bits ---------- */

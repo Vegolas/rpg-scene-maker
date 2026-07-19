@@ -38,6 +38,14 @@
   text-transform: uppercase;
   color: var(--text-muted);
 }
+/* Brand hero on the welcome step. align-self overrides the frame's stretch so the image keeps its
+   own aspect instead of filling the column width; the wordmark is already part of the artwork. */
+.onboarding__logo {
+  align-self: center;
+  width: min(60%, 240px);
+  height: auto;
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, .5));
+}
 .onboarding__title {
   font: var(--text-2xl);
   margin: 0;

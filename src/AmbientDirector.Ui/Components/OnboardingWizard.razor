@@ -13,7 +13,7 @@
 <div class="onboarding" role="dialog" aria-modal="true" aria-label='@L["onboarding.title"]'>
     <div class="onboarding__frame">
         <header class="onboarding__head">
-            <span class="onboarding__brand">SCENE MAKER</span>
+            <span class="onboarding__brand">AMBIENT DIRECTOR</span>
             <span class="onboarding__step">@L.Format("onboarding.stepOf", (int)_step, StepCount)</span>
             @if (_step != Step.Done)
             {
@@ -27,6 +27,7 @@
         }
         else if (_step == Step.Welcome)
         {
+            <img class="onboarding__logo" src="logo.webp" width="783" height="734" alt="Ambient Director" />
             <h1 class="onboarding__title">@L["onboarding.welcome.title"]</h1>
             <p class="onboarding__blurb">@L["onboarding.welcome.blurb"]</p>
             <div class="panel">
