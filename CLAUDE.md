@@ -144,17 +144,27 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   covers `list` and put/delete only — there is deliberately **no** `GET /screens/{id}` (and nothing at the
   bare `/screens`) so full-page loads of the panel's `/screens` and `/screens/{id}` pages fall through to
   `index.html` (the panel reads `/screens/list` and picks a board by id client-side).
-- **`SoundboardPlayer` / `SoundStore` / `SoundFileStorage`** — the soundboard. `SoundboardPlayer` plays
-  sound effects on the **server's own audio device** via NAudio (a `MixingSampleProvider` mixes any number
-  of overlapping "voices", each with its own volume and optional looping) — this is what Kenku FM used to
-  do. `SoundStore` persists per-sound metadata (name/category/volume/loop, plus `DurationMs` — measured at
-  import, lazily backfilled on `list`; the timeline editor uses it to size clips) in SQLite; `SoundFileStorage`
-  keeps the audio files on disk. `/sounds/*` ([SoundEndpoints.cs](src/AmbientDirector.Api/Endpoints/SoundEndpoints.cs))
-  covers `list`, `import` (multipart), update, delete, play/stop/stop-all, and `state` (playing ids); a scene
-  fires its `SoundEffects` (sound ids) on activation. Deleting a sound also scrubs its id from every scene's
-  and event's `SoundEffects` and from event timeline clips, so activations/triggers never warn about a
-  dangling reference. Nothing is mapped at the bare `/sounds` path so the
-  panel's Sounds tab can live there (same reason `/lights` uses `/lights/list`). **NAudio output is Windows-only.**
+- **`ISoundboardPlayer` / `SoundboardPlayer` / `NullSoundboardPlayer` / `SoundStore` / `SoundFileStorage`** —
+  the soundboard, behind the `ISoundboardPlayer` seam ([ISoundboardPlayer.cs](src/AmbientDirector.Api/Services/ISoundboardPlayer.cs):
+  `Play`/`Stop`/`StopVoice`/`StopAll`/`PlayingIds`, mirroring how `ILightService` abstracts Tuya/Hue).
+  `SoundboardPlayer` (the Windows impl) plays sound effects on the **server's own audio device** via NAudio (a
+  `MixingSampleProvider` mixes any number of overlapping "voices", each with its own volume and optional
+  looping) — this is what Kenku FM used to do. **Playback is Windows-only** (`WaveOutEvent`), so Program.cs
+  registers the impl **per-OS**: Windows → `SoundboardPlayer`; otherwise → `NullSoundboardPlayer`, whose `Play`
+  throws the localized `SoundboardException` (→ 503 / a 207 on scene activation) and whose stop/state members
+  are no-ops, so the soundboard is *intentionally* disabled rather than crashing (#81/#76 Phase 1). The panel's
+  Sounds tab shows an explicit "unavailable on this OS" banner off `DiagnosticsDto.SoundboardSupported` so a tap
+  explains itself. The **static** decode helpers (`TryMeasureDurationMs`/`TryComputeWaveform`, called by type
+  name — never injected) stay on `SoundboardPlayer` and run on every OS (managed WAV/OGG decode; MP3 relies on
+  Windows codecs and degrades to `null`; managed MP3 is deferred to Phase 2, #82). `SoundStore` persists
+  per-sound metadata (name/category/volume/loop, plus `DurationMs` — measured at import, lazily backfilled on
+  `list`; the timeline editor uses it to size clips) in SQLite; `SoundFileStorage` keeps the audio files on
+  disk. `/sounds/*` ([SoundEndpoints.cs](src/AmbientDirector.Api/Endpoints/SoundEndpoints.cs)) covers `list`,
+  `import` (multipart), update, delete, play/stop/stop-all, and `state` (playing ids); a scene fires its
+  `SoundEffects` (sound ids) on activation. Deleting a sound also scrubs its id from every scene's and event's
+  `SoundEffects` and from event timeline clips, so activations/triggers never warn about a dangling reference.
+  Nothing is mapped at the bare `/sounds` path so the panel's Sounds tab can live there (same reason `/lights`
+  uses `/lights/list`).
 - **`FreesoundStore` / `FreesoundClient` / `SoundImporter`** — the **Freesound** sound-library integration
   (issue #73): search + import CC-licensed effects straight into the soundboard. `FreesoundClient` is a typed
   `HttpClient` (base URL `Freesound:BaseUrl`, default `https://freesound.org`, so verification can point at a

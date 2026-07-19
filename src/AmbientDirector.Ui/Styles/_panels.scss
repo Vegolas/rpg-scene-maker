@@ -51,6 +51,27 @@
 .transport .btn { flex: 0 0 auto; min-width: 64px; font-size: 20px; }
 .transport .btn.play { min-width: 84px; min-height: 60px; font-size: 24px; }
 
+/* ---------- inline notice banner (e.g. "soundboard unavailable on this OS") ---------- */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--well);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font: var(--text-sm);
+}
+.notice .notice-ico { flex: 0 0 auto; margin-top: 1px; color: var(--text-muted); }
+.notice p { margin: 0; }
+.notice strong { display: block; margin-bottom: 2px; color: var(--text); font: var(--text-md); }
+
+/* Warning variant: subtle amber tint (mirrors the warning log-row), amber icon. */
+.notice--warn { background: rgba(255, 210, 26, .06); border-color: var(--border-strong); }
+.notice--warn .notice-ico { color: var(--warning); }
+
 /* ---------- diagnostics (developer mode) ---------- */
 .diag {
   display: grid;

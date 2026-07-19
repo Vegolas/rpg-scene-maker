@@ -26,7 +26,7 @@ public class EventActivator(
     EventTimelineRunner runner,
     SoundStore soundStore,
     SoundFileStorage soundFiles,
-    SoundboardPlayer player,
+    ISoundboardPlayer player,
     ILogger<EventActivator> logger)
 {
     public async Task<EventResult> TriggerAsync(GameEvent evt)

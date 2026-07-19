@@ -37,7 +37,7 @@ public static class SoundEndpoints
         });
 
         // Live playback state for the panel poll. Declared before "/{id}" routes; the literal wins anyway.
-        sounds.MapGet("/state", (SoundboardPlayer player) => new SoundStateDto(player.PlayingIds));
+        sounds.MapGet("/state", (ISoundboardPlayer player) => new SoundStateDto(player.PlayingIds));
 
         // Import: multipart upload. The form is read manually (no IFormFile binding → no antiforgery
         // requirement); the optional API key still guards the route. The unique-id/save/measure/validate/upsert
@@ -127,7 +127,7 @@ public static class SoundEndpoints
             return Results.Ok(ToDto(sound));
         });
 
-        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, ImageFileStorage images, SoundboardPlayer player, SceneStore scenes, EventStore events, ScreenStore screens) =>
+        sounds.MapDelete("/{id}", async (string id, SoundStore store, SoundFileStorage files, ImageFileStorage images, ISoundboardPlayer player, SceneStore scenes, EventStore events, ScreenStore screens) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 return Results.NotFound();
@@ -180,7 +180,7 @@ public static class SoundEndpoints
 
         // /sounds/{id}/play?volume=0.8 — volume optional, defaults to the sound's stored volume.
         sounds.MapMethods("/{id}/play", EndpointHelpers.GetOrPost,
-            async (string id, double? volume, SoundStore store, SoundFileStorage files, SoundboardPlayer player) =>
+            async (string id, double? volume, SoundStore store, SoundFileStorage files, ISoundboardPlayer player) =>
         {
             if (await store.GetAsync(id) is not { } sound)
                 throw new NotFoundException("error.sound.notFound", id);
@@ -188,13 +188,13 @@ public static class SoundEndpoints
             return Results.Ok(new { playing = sound.Id });
         });
 
-        sounds.MapMethods("/{id}/stop", EndpointHelpers.GetOrPost, (string id, SoundboardPlayer player) =>
+        sounds.MapMethods("/{id}/stop", EndpointHelpers.GetOrPost, (string id, ISoundboardPlayer player) =>
         {
             player.Stop(id);
             return new { stopped = id };
         });
 
-        sounds.MapMethods("/stop", EndpointHelpers.GetOrPost, (SoundboardPlayer player) =>
+        sounds.MapMethods("/stop", EndpointHelpers.GetOrPost, (ISoundboardPlayer player) =>
         {
             player.StopAll();
             return new { stopped = "all" };

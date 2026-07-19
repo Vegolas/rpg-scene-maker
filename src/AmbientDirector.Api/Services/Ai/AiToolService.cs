@@ -26,7 +26,7 @@ public record LightFxTestInfo(string Testing, int Seconds);
 /// / <see cref="SpotifyClient"/> are scoped (the light provider is chosen per-scope from settings), so each
 /// activation/trigger/reset/Spotify/lights-status call creates its own service scope for the operation (the
 /// pattern used by <see cref="EventTimelineRunner"/>); <see cref="LightFxTester"/> owns its own scope per test
-/// run. The soundboard (<see cref="SoundboardPlayer"/>) is a singleton, so live sound control needs no scope.
+/// run. The soundboard (<see cref="ISoundboardPlayer"/>) is a singleton, so live sound control needs no scope.
 /// </summary>
 public sealed class AiToolService(
     IServiceScopeFactory scopeFactory,
@@ -42,7 +42,7 @@ public sealed class AiToolService(
     LightFxTester fxTester,
     ImageFileStorage images,
     EffectEngine effects,
-    SoundboardPlayer player,
+    ISoundboardPlayer player,
     SoundFileStorage soundFiles)
 {
     // ---- Scenes ----

@@ -18,7 +18,7 @@ public static class DiagnosticsEndpoints
             DiagnosticsInfo info,
             SettingsStore settings,
             SpotifyStore spotify,
-            SoundboardPlayer soundboard,
+            ISoundboardPlayer soundboard,
             SceneStore scenes,
             SoundStore sounds,
             EventStore events) =>

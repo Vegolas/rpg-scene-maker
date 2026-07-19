@@ -6,12 +6,16 @@ using AmbientDirector.Api.Models;
 namespace AmbientDirector.Api.Services;
 
 /// <summary>
-/// Plays sound effects on the server's own audio device (this is what Kenku FM used to do).
-/// A single output device is fed by a <see cref="MixingSampleProvider"/> so any number of sounds can
-/// overlap (polyphony); each playing sound is one "voice" with its own volume and optional looping.
-/// One-shots clean themselves up when they finish; loops run until stopped.
+/// The Windows soundboard: plays sound effects on the server's own audio device via NAudio's
+/// <c>WaveOutEvent</c> (this is what Kenku FM used to do). A single output device is fed by a
+/// <see cref="MixingSampleProvider"/> so any number of sounds can overlap (polyphony); each playing sound is
+/// one "voice" with its own volume and optional looping. One-shots clean themselves up when they finish;
+/// loops run until stopped. The <see cref="ISoundboardPlayer"/> playback surface is registered per-OS
+/// (Program.cs); on Linux/macOS <see cref="NullSoundboardPlayer"/> stands in instead (issue #81). The static
+/// decode helpers below (<see cref="TryMeasureDurationMs"/> / <see cref="TryComputeWaveform"/>) are
+/// platform-agnostic and stay here regardless of which implementation is registered.
 /// </summary>
-public sealed class SoundboardPlayer : IDisposable
+public sealed class SoundboardPlayer : ISoundboardPlayer, IDisposable
 {
     // Everything is mixed to this common format; per-sound readers are resampled / up-mixed to match.
     private const int SampleRate = 44100;

@@ -15,6 +15,14 @@
     }
 </div>
 
+@if (_soundboardSupported == false)
+{
+    <div class="notice notice--warn" role="note">
+        <span class="notice-ico"><Icon Name="warn" /></span>
+        <p><strong>@L["sounds.unsupportedTitle"]</strong>@L["sounds.unsupportedBody"]</p>
+    </div>
+}
+
 <div class="panel">
     <div class="field" style="margin-bottom:0">
         <label for="snd-import">@L["sounds.importLabel"]</label>
@@ -104,6 +112,9 @@ else
     private string _uploadName = "";
     private bool _showLibrary;
 
+    // null = unknown (assume OK, no banner); false = this server's OS can't play sounds (issue #81).
+    private bool? _soundboardSupported;
+
     private void ToggleLibrary() => _showLibrary = !_showLibrary;
 
     protected override async Task OnInitializedAsync()
@@ -111,6 +122,9 @@ else
         Ui.SearchChanged += OnSearchChanged;
         await RefreshAsync();
         await PollAsync();
+        // Surface a banner when playback is disabled on this OS. Read the existing diagnostics flag; a null
+        // response (endpoint unavailable) leaves it unknown so we never show a false alarm.
+        _soundboardSupported = (await Api.GetDiagnosticsAsync())?.SoundboardSupported;
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
     }
 

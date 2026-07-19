@@ -114,7 +114,14 @@ builder.Services.AddSingleton<SceneStore>();
 // Soundboard: metadata in SQLite, audio files on disk, playback on the server's own audio device.
 builder.Services.AddSingleton<SoundStore>();
 builder.Services.AddSingleton(new SoundFileStorage(soundsPath));
-builder.Services.AddSingleton<SoundboardPlayer>();
+// Playback is Windows-only (NAudio's WaveOutEvent). On Linux/macOS register a no-op stand-in whose Play
+// throws the localized SoundboardException, so the soundboard is *intentionally* disabled rather than
+// crashing (issue #81); the panel's Sounds tab shows an "unavailable on this OS" banner. The static
+// decode helpers stay on SoundboardPlayer and are used (by type name) on every OS.
+if (OperatingSystem.IsWindows())
+    builder.Services.AddSingleton<ISoundboardPlayer, SoundboardPlayer>();
+else
+    builder.Services.AddSingleton<ISoundboardPlayer, NullSoundboardPlayer>();
 // Shared import tail (unique id, save, measure, validate, upsert) for /sounds/import + /sounds/library/import.
 builder.Services.AddSingleton<SoundImporter>();
 

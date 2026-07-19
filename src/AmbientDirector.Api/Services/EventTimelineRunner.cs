@@ -20,7 +20,7 @@ public sealed class EventTimelineRunner(
     IServiceScopeFactory scopeFactory,
     SoundStore soundStore,
     SoundFileStorage soundFiles,
-    SoundboardPlayer player,
+    ISoundboardPlayer player,
     LightFxStore fxStore,
     ILogger<EventTimelineRunner> logger)
 {

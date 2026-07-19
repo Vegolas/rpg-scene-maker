@@ -16,7 +16,7 @@ public class SceneActivator(
     MusicRouter router,
     SoundStore soundStore,
     SoundFileStorage soundFiles,
-    SoundboardPlayer player,
+    ISoundboardPlayer player,
     CurrentState state,
     ILogger<SceneActivator> logger)
 {

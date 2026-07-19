@@ -100,6 +100,8 @@
     "sounds.importLabel": "Import a sound",
     "sounds.importing": "Importing {0}…",
     "sounds.importHint": "MP3, WAV or OGG. Plays through the server's speakers.",
+    "sounds.unsupportedTitle": "Soundboard unavailable on this server",
+    "sounds.unsupportedBody": "Sound playback needs Windows, and this server is running on a different operating system. You can still import and organize sounds — they just won't play from here.",
     "sounds.loading": "Uncorking the sound vials…",
     "sounds.empty": "No sounds yet — import one above.",
     "sounds.stopAll": "Stop all ({0})",

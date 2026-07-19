@@ -102,6 +102,8 @@
     "sounds.importLabel": "Zaimportuj dźwięk",
     "sounds.importing": "Importowanie {0}…",
     "sounds.importHint": "MP3, WAV lub OGG. Odtwarzane przez głośniki serwera.",
+    "sounds.unsupportedTitle": "Tablica dźwięków niedostępna na tym serwerze",
+    "sounds.unsupportedBody": "Odtwarzanie dźwięków wymaga systemu Windows, a ten serwer działa na innym systemie operacyjnym. Nadal możesz importować i porządkować dźwięki — po prostu nie zostaną tu odtworzone.",
     "sounds.loading": "Odkorkowywanie fiolek z dźwiękiem…",
     "sounds.empty": "Nie ma jeszcze dźwięków — zaimportuj jeden powyżej.",
     "sounds.stopAll": "Zatrzymaj wszystkie ({0})",
