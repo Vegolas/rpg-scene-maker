@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
+- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Boards, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; **Boards** (pl "Tablice") is the composable-TV-content editor, see `BoardStore`; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
   through [ApiClient.cs](src/AmbientDirector.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
@@ -145,6 +145,25 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   covers `list` and put/delete only — there is deliberately **no** `GET /screens/{id}` (and nothing at the
   bare `/screens`) so full-page loads of the panel's `/screens` and `/screens/{id}` pages fall through to
   `index.html` (the panel reads `/screens/list` and picks a board by id client-side).
+- **`BoardStore` / `BoardEndpoints`** — persistence + CRUD for **boards** (`Board`, [Board.cs](src/AmbientDirector.Api/Models/Board.cs)):
+  persisted, composable player-facing TV content — a fixed **16:9 stage** described entirely in percent
+  coordinates (background solid colour or stored image, plus positioned `image`/`text` elements; **element
+  list order is the z-order**, there is deliberately no Z field). Not to be confused with `Screens`
+  (panel-side shortcut launchers): a board is *content pushed to* the `/tv` display via
+  `/tv/show?board={id}`. `/boards/*` ([BoardEndpoints.cs](src/AmbientDirector.Api/Endpoints/BoardEndpoints.cs))
+  follows the `/screens` house pattern exactly — `list`, put and delete only, deliberately **no**
+  `GET /boards/{id}` and nothing at the bare `/boards` path (the panel's `/boards` + `/boards/{id}` pages
+  fall through to index.html), and `/boards` is in `IsProtectedPath`. Board images follow the entity-art
+  ownership pattern generalized to a **file set** (`Board.ReferencedFiles()` = background + image elements):
+  upsert diffs the old vs new set and deletes dropped files, delete releases them all. Upserting the
+  currently-shown board calls `TvState.TouchBoard` (rev bump → an open TV re-renders within one 2 s poll —
+  the codebase's real-time idiom, no SSE); deleting it calls `TvState.ForgetBoard` (clears the display and
+  scrubs it from Recent, like the sound-delete scrub). Board AI ops are deferred to #89 (adding them to only
+  one AI surface would fail `AiToolSurfaceParityTests`). The panel side is the **Boards** tab (pl "Tablice"):
+  `/boards` list + `/boards/{id}` editor (numeric controls + a live 16:9 preview; on-canvas drag/resize is a
+  follow-up), with [`BoardCanvas.razor`](src/AmbientDirector.Ui/Components/BoardCanvas.razor) as the one
+  shared renderer (TV, editor preview, list cards, remote rail — text sizes in `cqh` container units so it
+  scales identically everywhere).
 - **`ISoundboardPlayer` / `SoundboardPlayer` / `IWavePlayerFactory` / `SoundDecoder` / `SoundStore` / `SoundFileStorage`** —
   the soundboard, behind the `ISoundboardPlayer` seam ([ISoundboardPlayer.cs](src/AmbientDirector.Api/Services/ISoundboardPlayer.cs):
   `Play`/`Stop`/`StopVoice`/`StopAll`/`PlayingIds`, mirroring how `ILightService` abstracts Tuya/Hue).
@@ -214,14 +233,21 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   the TV remote.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
-  (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single image/handout the GM
-  has pushed to a shared table screen, a small recent-history list, and a monotonic `rev` for the panel's
-  `/tv/state?rev=` poll. `/tv/*` ([TvEndpoints.cs](src/AmbientDirector.Api/Endpoints/TvEndpoints.cs)) covers
-  `state`, `content/current` (streams the current image's bytes via `Results.File`; 404 once cleared/missing),
-  `show`/`clear` (GET+POST push commands) and `show/recent`. **Gate split**: only `/tv/show*` + `/tv/clear` are
-  in `IsProtectedPath`; `/tv`, `/tv/state` and `/tv/content/current` stay OPEN so a shared player screen never
-  needs the admin key — the only key-free data is the one image the GM deliberately pushed. Nothing is mapped at
-  bare `/tv` (like `/screens`) so the panel's `/tv` page falls through to `index.html`.
+  (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single piece of content the
+  GM has pushed to a shared table screen — an image/handout or a **board** (`TvContent.Kind` = `"image"` |
+  `"board"`, `Ref` = stored file name or board id; see `BoardStore`) — plus a small recent-history list and a
+  monotonic `rev` for the panel's `/tv/state?rev=` poll (bumped on show/clear and on a live edit of the shown
+  board). `/tv/*` ([TvEndpoints.cs](src/AmbientDirector.Api/Endpoints/TvEndpoints.cs)) covers `state` (for a
+  board it inlines the render model, image refs pre-resolved to `/tv/content/board/{name}?rev=`),
+  `content/current` (streams the current image's bytes via `Results.File`; 404 once cleared/missing/board),
+  `content/board/{name}` (streams one image of the currently-shown board), `show`/`clear` (GET+POST push
+  commands; `?image=` or `?board=`, exactly one) and `show/recent`. **Gate split**: only `/tv/show*` +
+  `/tv/clear` are in `IsProtectedPath`; `/tv`, `/tv/state` and `/tv/content/*` stay OPEN so a shared player
+  screen never needs the admin key — the only key-free data is what the GM deliberately pushed:
+  `/tv/content/board/{name}` serves **only file names the currently-shown board references** (membership
+  checked before any disk access, so it is never a file-existence oracle; the general `/images` route stays
+  gated). Nothing is mapped at bare `/tv` (like `/screens`) so the panel's `/tv` page falls through to
+  `index.html`.
 - **First-run onboarding (#75)** — a guided setup overlay the panel shows on a fresh install. State lives in a
   nullable `OnboardingDoneUtc` column on the single-row `LightingConfig`: `GET /setup/onboarding` returns `show`
   (= the flag is still null) plus per-step "already configured" hints, and **auto-completes for upgrades** (if
@@ -332,7 +358,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   than returning ad-hoc error bodies; for a new exception *type*, add a `switch` arm to `ErrorClassifier`. See
   the error-localization notes under `LocaleService` above.
 - **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /sounds /events /screens
-  /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` — plus the TV **push** commands
+  /boards /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` — plus the TV **push** commands
   `/tv/show*` and `/tv/clear` (the rest of the player-facing `/tv` surface stays open, see `TvState`) — require it
   (`X-Api-Key` header or `?apiKey=`; the Spotify OAuth callback is exempt). The panel stores it in browser
   localStorage. Keep new protected prefixes in `IsProtectedPath` in [Program.cs](src/AmbientDirector.Api/Program.cs).
@@ -348,7 +374,8 @@ Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.jso
 as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`),
 `MusicTracks`/`MusicPlaylists` (local music library; playlist `TrackIds` a JSON column; ids `NOCASE`), `Events`
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
-`Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
+`Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `Boards` (player-facing TV layouts;
+background colour/image plus an `Elements` JSON column; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
 `NOCASE`), a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`, plus a nullable
 `OnboardingDoneUtc` stamp for the first-run wizard), a single-row `FreesoundConfig` (the Freesound API token)
