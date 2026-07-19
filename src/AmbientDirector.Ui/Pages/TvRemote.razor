@@ -1,0 +1,177 @@
+@page "/tv-remote"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject Localizer L
+
+@* The GM's remote for the player-facing /tv display: shows what's on the TV now (with a prominent
+   Clear), uploads-and-pushes a new image (full resolution — no tile-art crop), and re-pushes recent
+   content. Polls the same /tv/state as the TV so two GM tabs stay in sync. *@
+
+<PageTitle>Ambient Director — @L["tv.title"]</PageTitle>
+
+<div class="page-head">
+    <h1>@L["tv.title"]</h1>
+</div>
+
+<div class="panel">
+    <SectionHeading>@L["tv.nowShowing"]</SectionHeading>
+    <div class="tv-now">
+        <div class="tv-now__preview">
+            @if (_state?.Content is { } content)
+            {
+                <img src="@content.Url" alt='@L["tv.nowShowingAlt"]' />
+            }
+            else
+            {
+                <span class="tv-now__empty">@L["tv.nothing"]</span>
+            }
+        </div>
+        <div class="tv-now__meta">
+            @if (_state?.Content?.Label is { Length: > 0 } label)
+            {
+                <span class="tv-now__label">@label</span>
+            }
+            <button class="btn btn--danger" @onclick="ClearTv"
+                    disabled="@(_state?.Content is null || _busy)">@L["tv.clear"]</button>
+        </div>
+    </div>
+    <p class="hint" style="margin-top:0.8rem">@L.Format("tv.openHint", TvUrl)</p>
+</div>
+
+<div class="panel" style="margin-top:1rem">
+    <SectionHeading>@L["tv.pushNew"]</SectionHeading>
+    <div class="field">
+        <label for="tv-label">@L["tv.labelLabel"]</label>
+        <input id="tv-label" type="text" value="@_label" maxlength="60"
+               @oninput="e => _label = e.Value?.ToString() ?? string.Empty"
+               placeholder='@L["tv.labelPlaceholder"]' />
+    </div>
+    <label class="btn btn--primary tv-upload">
+        <InputFile OnChange="OnFileChosen" accept="image/png,image/jpeg,image/webp" disabled="@_busy" />
+        @(_busy ? L["tv.uploading"] : L["tv.chooseAndPush"])
+    </label>
+</div>
+
+<div class="panel" style="margin-top:1rem">
+    <SectionHeading>@L["tv.recent"]</SectionHeading>
+    @if (_recent.Count == 0)
+    {
+        <p class="empty-note">@L["tv.recentEmpty"]</p>
+    }
+    else
+    {
+        <div class="tv-recent">
+            @foreach (var item in _recent)
+            {
+                <button class="tv-tile" title='@L["tv.repush"]' disabled="@_busy"
+                        @onclick="() => Push(item.File, item.Label)">
+                    <img src="@Api.ImageUrl(item.File)" alt="" loading="lazy" />
+                    @if (!string.IsNullOrEmpty(item.Label))
+                    {
+                        <span>@item.Label</span>
+                    }
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private TvStateDto? _state;
+    private List<TvRecentItemDto> _recent = [];
+    private long _rev;
+    private string _label = "";
+    private bool _busy;
+    private Timer? _timer;
+
+    // What to open on the table screen — absolute, so the GM can read it straight off the panel.
+    private string TvUrl => $"{Nav.BaseUri}tv";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.GetApiKeyAsync(); // cache the key so the recent tiles' /images urls carry it
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 2000, 2000);
+    }
+
+    private async Task PollAsync()
+    {
+        var state = await Api.GetTvStateAsync(_rev);
+        if (state is null || state.Rev == _rev) return; // offline blip or unchanged
+        _rev = state.Rev;
+        _state = state;
+        _recent = await Api.GetTvRecentAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnFileChosen(InputFileChangeEventArgs e)
+    {
+        if (_busy || e.FileCount == 0) return;
+        var file = e.File;
+        if (file.Size > 10L * 1024 * 1024)
+        {
+            Ui.ReportError(L.Format("tv.fileTooLarge", 10));
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var (id, error) = await Api.UploadImageFileAsync(file);
+            if (id is null)
+            {
+                Ui.ReportError(error ?? L["tv.toast.uploadFailed"]);
+                return;
+            }
+            if (await Api.ShowOnTvAsync(id, _label, L["tv.toast.shown"]))
+            {
+                _label = "";
+                await ForcePollAsync();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Push(string file, string? label)
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (await Api.ShowOnTvAsync(file, label, L["tv.toast.shown"]))
+                await ForcePollAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ClearTv()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (await Api.ClearTvAsync(L["tv.toast.cleared"]))
+                await ForcePollAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // Refresh right after our own command instead of waiting out the 2 s poll tick.
+    private Task ForcePollAsync()
+    {
+        _rev = 0;
+        return PollAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

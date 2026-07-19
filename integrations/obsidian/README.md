@@ -1,6 +1,6 @@
-# RPG Scene Maker — Obsidian plugin
+# Ambient Director — Obsidian plugin
 
-Fire [RPG Scene Maker](../../README.md) scenes, events and sounds straight from your session
+Fire [Ambient Director](../../README.md) scenes, events and sounds straight from your session
 notes. Write an inline token and it renders as a clickable button — tap it while you read to
 switch the table's lights + music, without leaving the note.
 
@@ -54,7 +54,7 @@ npm run build          # produces main.js
 ```
 
 Then copy `main.js`, `manifest.json` and `styles.css` into your vault at
-`<vault>/.obsidian/plugins/rpg-scene-maker/`, and enable **RPG Scene Maker** under
+`<vault>/.obsidian/plugins/ambient-director/`, and enable **Ambient Director** under
 *Settings → Community plugins*. (On mobile, copy the same three files into that folder via your
 sync of choice.)
 
@@ -63,7 +63,7 @@ For iterating on the plugin, `npm run dev` rebuilds on change; use the
 
 ## Configure
 
-Open *Settings → RPG Scene Maker* and set:
+Open *Settings → Ambient Director* and set:
 
 - **Server address** — your API's base URL, e.g. `http://192.168.1.20:5252` (the same address you
   open the panel at). On the same machine as the server, `http://localhost:5252` works.

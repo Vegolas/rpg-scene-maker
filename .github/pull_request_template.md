@@ -8,8 +8,8 @@
 
 ## Testing
 
-- [ ] `dotnet build src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj`
-- [ ] Ran the panel and verified the change (`dotnet run --project src/RpgSceneMaker.Api`)
+- [ ] `dotnet build src/AmbientDirector.Api/AmbientDirector.Api.csproj`
+- [ ] Ran the panel and verified the change (`dotnet run --project src/AmbientDirector.Api`)
 
 ## Notes
 

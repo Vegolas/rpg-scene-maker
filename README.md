@@ -1,4 +1,4 @@
-# 🎲 RPG Scene Maker
+# 🎲 Ambient Director
 
 A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor WASM)** that switches your whole table mood with one tap — from a Stream Deck, an iPad, or any browser:
 
@@ -12,16 +12,16 @@ Every command endpoint accepts **both GET and POST**, so the built-in Stream Dec
 
 ## Download & run (Windows)
 
-The easiest way to run RPG Scene Maker — no .NET SDK, no terminal:
+The easiest way to run Ambient Director — no .NET SDK, no terminal:
 
-1. Download **`rpg-scene-maker-win-x64.zip`** from the [latest release](https://github.com/Vegolas/rpg-scene-maker/releases/latest).
+1. Download **`ambient-director-win-x64.zip`** from the [latest release](https://github.com/Vegolas/ambient-director/releases/latest).
 2. Unzip it anywhere (your Desktop or Documents is fine).
-3. Double-click **`RpgSceneMaker.Api.exe`**.
+3. Double-click **`AmbientDirector.Api.exe`**.
 
 A small console window opens and shows where the panel is running:
 
 ```
-RPG Scene Maker is running.
+Ambient Director is running.
   On this PC:      http://localhost:5252
   On your network: http://192.168.1.20:5252
   Close this window to stop the server.
@@ -32,7 +32,7 @@ lights, connecting music, and a couple of optional extras — every step is skip
 straight away with the starter scenes. To control it from an iPad or phone, open the *On your network*
 address there (see [Using it from an iPad](#using-it-from-an-ipad-or-any-tabletphone)).
 
-- **Your data** (scenes, settings, imported sounds/music) lives under `%LocalAppData%\RpgSceneMaker\`,
+- **Your data** (scenes, settings, imported sounds/music) lives under `%LocalAppData%\AmbientDirector\`,
   separate from the app folder — so you can drop a newer build in place and keep everything.
 - **Keep the window open** while you play; closing it stops the server. On first run Windows may ask to allow
   network access — allow it for **private networks** so tablets on your Wi-Fi can reach the panel.
@@ -44,14 +44,14 @@ Prefer to run from source, or on Linux/macOS? See **[Running](#running)** below.
 ## Running
 
 ```powershell
-dotnet run --project src/RpgSceneMaker.Api
+dotnet run --project src/AmbientDirector.Api
 ```
 
 This serves both the API and the control panel on **http://localhost:5252** (and on your LAN — see the iPad section). The panel's tabs: **Scenes** (one-tap presets with live active highlight), **Music** (Spotify plus a local music library — now-playing, transport, volume, shuffle/repeat, playlists and track search), **Lights** (mood colors, brightness, white temperature, per-light targeting), **Sounds** (import your own or search Freesound + soundboard), **Events** (one-shot light flash + sound stingers), **Effects** (reusable Light FX library), **Screens** (custom shortcut boards), **TV** (push an image or handout to a shared table screen), **Assistant** (an optional bring-your-own-key AI chat that appears once you configure a provider key under ⚙), and **Logs**.
 
 ## Using it from an iPad (or any tablet/phone)
 
-1. Run the API on your PC. The first `dotnet run` after this change makes Windows ask about network access — **allow it for private networks**. (If you skipped the prompt: `netsh advfirewall firewall add rule name="RPG Scene Maker" dir=in action=allow protocol=TCP localport=5252`.)
+1. Run the API on your PC. The first `dotnet run` after this change makes Windows ask about network access — **allow it for private networks**. (If you skipped the prompt: `netsh advfirewall firewall add rule name="Ambient Director" dir=in action=allow protocol=TCP localport=5252`.)
 2. Find your PC's LAN address: `ipconfig` → IPv4, e.g. `192.168.1.20`. A DHCP reservation for the PC keeps the address stable.
 3. On the iPad open Safari → `http://192.168.1.20:5252`, then **Share → Add to Home Screen**. The panel is an installable PWA — it gets its own icon and launches fullscreen like a native app, with no Safari chrome.
 4. Recommended: set an API key (see Security below), then enter the same key on the iPad via the ⚙ button — it is stored on the device.
@@ -153,7 +153,7 @@ Use the built-in **System → Website** action (untick "Open in browser" / GET i
 
 ### 4. AI assistant (optional)
 
-Scene Maker can hand its scenes, events and light effects to an AI — either as a chat panel built into the app, or as an **MCP server** you point Claude Code / Claude Desktop at. Both are **bring-your-own-key**: you use your own provider API key, and all model usage is billed to *your* account. The in-panel chat works with **Anthropic (Claude), OpenAI (GPT) or Google Gemini** — one active at a time; the MCP server targets Claude clients.
+Ambient Director can hand its scenes, events and light effects to an AI — either as a chat panel built into the app, or as an **MCP server** you point Claude Code / Claude Desktop at. Both are **bring-your-own-key**: you use your own provider API key, and all model usage is billed to *your* account. The in-panel chat works with **Anthropic (Claude), OpenAI (GPT) or Google Gemini** — one active at a time; the MCP server targets Claude clients.
 
 **In-panel chat (BYOK)**
 
@@ -166,13 +166,13 @@ Scene Maker can hand its scenes, events and light effects to an AI — either as
 The app hosts an MCP endpoint at **`/mcp`** with the same ~43 tools. Point a client at it:
 
 ```
-claude mcp add --transport http rpg-scene-maker http://localhost:5252/mcp
+claude mcp add --transport http ambient-director http://localhost:5252/mcp
 ```
 
 If you've set a panel API key (`Security:ApiKey`), send it as a header:
 
 ```
-claude mcp add --transport http rpg-scene-maker http://localhost:5252/mcp --header "X-Api-Key: your-key"
+claude mcp add --transport http ambient-director http://localhost:5252/mcp --header "X-Api-Key: your-key"
 ```
 
 For **Claude Desktop**, add it to your `claude_desktop_config.json`:
@@ -180,7 +180,7 @@ For **Claude Desktop**, add it to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "rpg-scene-maker": {
+    "ambient-director": {
       "type": "http",
       "url": "http://localhost:5252/mcp",
       "headers": { "X-Api-Key": "your-key" }
@@ -200,7 +200,7 @@ on your server (with their art) and fires them in the background over the same G
 install it from [`integrations/obsidian/`](integrations/obsidian/README.md); set your server address (and
 API key, if any) in its settings.
 
-**[It's now available in the official Obsidian community plugins list](https://community.obsidian.md/plugins/rpg-scene-maker)**
+**[It's now available in the official Obsidian community plugins list](https://community.obsidian.md/plugins/ambient-director)**
 
 
 https://github.com/user-attachments/assets/38f4f217-9fa5-43f2-8306-23a74364a963
@@ -227,7 +227,7 @@ Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 
 Import your own sound effects and fire them from the panel's **Sounds** tab or from a Stream Deck. Audio plays on the **machine running the app** (like the old Kenku FM setup) — so it comes out of the same speakers no matter which panel or button triggered it, including scene activations.
 
-- **Import** — Sounds tab → *Import a sound* → pick an **MP3, WAV or OGG** file. It's uploaded to the server and stored under `%LocalAppData%\RpgSceneMaker\sounds`.
+- **Import** — Sounds tab → *Import a sound* → pick an **MP3, WAV or OGG** file. It's uploaded to the server and stored under `%LocalAppData%\AmbientDirector\sounds`.
 - **Tune** — each sound has a **volume** and a **loop** toggle (one-shot vs. continuous ambience). Tap ✎ on a sound to rename it, set its category, adjust volume/looping, and *Preview*.
 - **Play** — tap a sound to play, tap again to stop. Sounds **overlap** (thunder over rain); **Stop all** stops everything.
 - **From scenes** — in the scene editor's *Sound Effects* section, pick which sounds a scene fires. Activating the scene stops current playback, then plays the picked sounds with their own volume/loop.
@@ -270,7 +270,7 @@ The panel's language is switched at runtime from **Settings → Language** (save
 
 Translations are plain JSON files on the server, so anyone — including an AI agent — can add or edit a language without touching code or rebuilding:
 
-- Files live in `%LocalAppData%\RpgSceneMaker\locales\` (override with `Locales:Path`). `en.json` and `pl.json` are written there on first run.
+- Files live in `%LocalAppData%\AmbientDirector\locales\` (override with `Locales:Path`). `en.json` and `pl.json` are written there on first run.
 - To **add a language**, copy `en.json` to `<code>.json` (a [BCP-47](https://en.wikipedia.org/wiki/IETF_language_tag) code — `de`, `fr`, `es`, `pt-BR`, …), set `name` to the language's own name (e.g. `Deutsch`), and translate the values under `strings`. It shows up in the picker after a reload (files are read on demand — no restart needed).
 - Any key you leave out falls back to English, so a partial translation is fine.
 
@@ -321,11 +321,11 @@ All command endpoints accept GET or POST; parameters go in the query string.
 
 ## Persistence
 
-Scenes, lighting settings (provider, Hue, Tuya), the Spotify connection (Client ID, refresh token, preferred device), the local-music/soundboard metadata, and your **Freesound** and **AI-assistant** API tokens all live in a SQLite database at `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path` in `appsettings.json`). Imported audio (sounds + local music) and uploaded tile-art images live on disk next to it under `sounds\`, `music\` and `images\`. The schema is created/upgraded automatically at startup via EF Core migrations. Note the Spotify token and API keys in that file grant access to your accounts — treat backups of the database accordingly.
+Scenes, lighting settings (provider, Hue, Tuya), the Spotify connection (Client ID, refresh token, preferred device), the local-music/soundboard metadata, and your **Freesound** and **AI-assistant** API tokens all live in a SQLite database at `%LocalAppData%\AmbientDirector\ambient-director.db` (override with `Database:Path` in `appsettings.json`). Imported audio (sounds + local music) and uploaded tile-art images live on disk next to it under `sounds\`, `music\` and `images\`. The schema is created/upgraded automatically at startup via EF Core migrations. Note the Spotify token and API keys in that file grant access to your accounts — treat backups of the database accordingly.
 
 On first run with an empty database, the legacy JSON files are imported once: `scenes.json` (also the starter template on a fresh clone) and `settings.local.json` (the pre-SQLite settings overlay). After that the database is the source of truth — the legacy files are never read again and can be kept as a backup or deleted.
 
-## Configuration ([appsettings.json](src/RpgSceneMaker.Api/appsettings.json))
+## Configuration ([appsettings.json](src/AmbientDirector.Api/appsettings.json))
 
 Deployment-level config only — everything else is managed from the panel and stored in the database.
 
@@ -333,11 +333,11 @@ Deployment-level config only — everything else is managed from the panel and s
 |---|---|
 | `Urls` | Listen address, default `http://0.0.0.0:5252` so tablets on your Wi-Fi can reach the panel. Change to `http://localhost:5252` to lock it to this PC. |
 | `Security:ApiKey` | Optional shared secret. When set, all control endpoints require it (`X-Api-Key` header or `?apiKey=`); the panel asks for it under ⚙. |
-| `Database:Path` | SQLite file location, default `%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db`. |
-| `Sounds:Path` | Folder for imported sound-effect audio files, default `%LocalAppData%\RpgSceneMaker\sounds`. |
-| `Music:Path` | Folder for imported local-music audio files, default `%LocalAppData%\RpgSceneMaker\music`. |
-| `Images:Path` | Folder for uploaded tile-art images, default `%LocalAppData%\RpgSceneMaker\images`. |
-| `Locales:Path` | Folder for UI translation JSON files, default `%LocalAppData%\RpgSceneMaker\locales`. |
+| `Database:Path` | SQLite file location, default `%LocalAppData%\AmbientDirector\ambient-director.db`. |
+| `Sounds:Path` | Folder for imported sound-effect audio files, default `%LocalAppData%\AmbientDirector\sounds`. |
+| `Music:Path` | Folder for imported local-music audio files, default `%LocalAppData%\AmbientDirector\music`. |
+| `Images:Path` | Folder for uploaded tile-art images, default `%LocalAppData%\AmbientDirector\images`. |
+| `Locales:Path` | Folder for UI translation JSON files, default `%LocalAppData%\AmbientDirector\locales`. |
 | `Launch:OpenBrowser` | Auto-open the panel in your default browser at startup. Defaults **on** for the double-clickable Windows build, **off** under `dotnet run`. |
 
 > ⚠️ The API listens on your whole LAN by default so the iPad can reach it. On a home network the worst case is someone toggling your lights, but set `Security:ApiKey` anyway — one line of config, and the panel + Stream Deck both support it. Never expose the port to the internet.

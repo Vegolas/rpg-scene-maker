@@ -1,0 +1,230 @@
+@page "/screens/{Id}"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject ViewTransition Vt
+@inject Localizer L
+
+<PageTitle>Ambient Director — @(_label is { Length: > 0 } l ? l : L["screen.titleFallback"])</PageTitle>
+
+<div class="btn-row" style="margin-bottom:0.2rem">
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("screens")'><Icon Name="back" /> @L["screens.title"]</button>
+    @if (!_loading && !_notFound)
+    {
+        <button class="btn btn--small" @onclick='() => Vt.NavigateAsync($"screens/{Id}/arrange")'><Icon Name="edit" /> @L["screenArrange.title"]</button>
+    }
+</div>
+
+@if (_loading)
+{
+    <p class="empty-note">@L["screen.opening"]</p>
+}
+else if (_notFound)
+{
+    <div class="page-head"><h1>@L["screen.notFoundTitle"]</h1></div>
+    <p class="empty-note">@L.Format("screen.notFoundBody", Id)<a href="screens">@L["screens.title"]</a>@L["screen.notFoundBodyEnd"]</p>
+}
+else
+{
+    <div class="page-head"><h1>@(_label is { Length: > 0 } ? _label : L["screen.titleFallback"])</h1></div>
+
+    @if (_tiles.Count == 0)
+    {
+        <p class="empty-note">@L["screen.empty"]</p>
+    }
+    else
+    {
+        <div class="scene-grid @(_compact ? "compact" : "")">
+            @foreach (var (tile, index) in _tiles.Select((t, i) => (t, i)))
+            {
+                @if (tile.Kind == "break")
+                {
+                    var titled = !string.IsNullOrWhiteSpace(tile.Label);
+                    <div class="grid-break @(titled ? "titled" : "")">
+                        @if (titled)
+                        {
+                            <span>@tile.Label</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    var v = View(tile);
+                    var hasArt = v.Image is not null;
+                    <button class="scene-card @(v.Active ? "active" : "") @(v.Playing ? "playing" : "") @(v.Missing ? "missing" : "") @(_busyIndex == index ? "busy" : "") @(hasArt ? "art" : "")"
+                            style="animation-delay:@(index * 45)ms; --sc:@v.Color;@(hasArt ? $" --art:url('{v.Image}');" : "")"
+                            @onclick="() => Tap(tile, index)">
+                        @if (hasArt)
+                        {
+                            <span class="scene-art"></span>
+                        }
+                        <span class="scene-swatch"></span>
+                        <Glyph Emoji="@v.Emoji" Fallback="@v.Icon" />
+                        <span class="scene-name">@v.Label</span>
+                    </button>
+                }
+            }
+        </div>
+        <p class="hint" style="margin-top:1rem">@L["screen.tapHint"]</p>
+    }
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _notFound;
+    private int? _busyIndex;
+
+    private string _label = "";
+    private bool _compact;
+    private List<ScreenTileDto> _tiles = [];
+
+    // Entities referenced by tiles — resolved for display.
+    private List<SceneDto>? _scenes;
+    private List<EventDto>? _events;
+    private List<SoundDto>? _sounds;
+
+    // Live state for highlights (active scene + playing sounds), polled while the board is open.
+    private string? _activeSceneId;
+    private HashSet<string> _playingSoundIds = [];
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
+        var dto = (await Api.GetScreensAsync())
+            .FirstOrDefault(s => string.Equals(s.Id, Id, StringComparison.OrdinalIgnoreCase));
+        if (dto is null)
+        {
+            _notFound = true;
+            _loading = false;
+            return;
+        }
+        (_, _label) = SceneNaming.SplitName(dto.Name);
+        _compact = dto.Compact;
+        _tiles = [.. dto.Tiles ?? []];
+
+        // Referenced entities used to render each tile.
+        _scenes = await Api.GetScenesAsync();
+        _events = await Api.GetEventsAsync();
+        _sounds = await Api.GetSoundsAsync();
+
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 2000, 2000);
+        _loading = false;
+    }
+
+    private async Task PollAsync()
+    {
+        _activeSceneId = (await Api.GetActiveSceneAsync())?.Id;
+        _playingSoundIds = [.. await Api.GetPlayingSoundIdsAsync()];
+        StateHasChanged();
+    }
+
+    // ---------- tile display ----------
+
+    // Emoji = the user's picked name emoji (content, scene/event only); Icon = the chrome fallback / kind
+    // glyph. Glyph.razor shows the emoji when present, else the Icon.
+    private record TileView(string Emoji, string Icon, string Label, string Color, bool Missing, bool Active, bool Playing, string? Image = null);
+
+    private TileView View(ScreenTileDto tile)
+    {
+        switch (tile.Kind)
+        {
+            case "scene":
+                var scene = _scenes?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
+                if (scene is null) return Gone(tile);
+                var (se, sl) = SceneNaming.SplitName(scene.Name, "", scene.Id);
+                return new TileView(se, "scenes", sl, SceneSwatch(scene), false, Eq(_activeSceneId, scene.Id), false, Api.ImageUrl(scene.Image));
+            case "event":
+                var evt = _events?.FirstOrDefault(e => Eq(e.Id, tile.Ref));
+                if (evt is null) return Gone(tile);
+                var (ee, el) = SceneNaming.SplitName(evt.Name, "", evt.Id);
+                return new TileView(ee, "events", el, evt.Flash?.Color ?? "transparent", false, false, false, Api.ImageUrl(evt.Image));
+            case "sound":
+                var snd = _sounds?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
+                if (snd is null) return Gone(tile);
+                var playing = _playingSoundIds.Contains(snd.Id);
+                return new TileView("", playing ? "stop" : snd.Loop ? "repeat" : "sounds", snd.Name, "transparent", false, false, playing, Api.ImageUrl(snd.Image));
+            case "music":
+                return new TileView("", "music", Label(tile), "transparent", false, false, false);
+            case "light-reset":
+                return new TileView("", "lights", L["screenArrange.tile.resetLights"], "transparent", false, false, false);
+            default:
+                return Gone(tile);
+        }
+    }
+
+    // A tile whose referenced entity no longer exists.
+    private static TileView Gone(ScreenTileDto tile) => new("", "warn", Label(tile), "transparent", true, false, false);
+
+    private static string Label(ScreenTileDto tile) => string.IsNullOrWhiteSpace(tile.Label) ? tile.Ref : tile.Label;
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "scene" => "screenArrange.kind.scene", "event" => "screenArrange.kind.event", "sound" => "screenArrange.kind.sound",
+        "music" => "screenArrange.kind.music", "light-reset" => "screenArrange.kind.lights", _ => kind,
+    };
+
+    // Card tint: the scene's "all lights" colour, else its first per-light colour (as on the Scenes tab).
+    private static string SceneSwatch(SceneDto scene) =>
+        scene.Light?.Color ?? scene.Lights?.FirstOrDefault(l => l.Color is not null)?.Color ?? "transparent";
+
+    private static bool Eq(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    // ---------- play: fire a shortcut ----------
+
+    private async Task Tap(ScreenTileDto tile, int index)
+    {
+        _busyIndex = index;
+        StateHasChanged();
+        try
+        {
+            switch (tile.Kind)
+            {
+                case "scene":
+                    if (_scenes?.Any(s => Eq(s.Id, tile.Ref)) != true) { WarnGone(tile.Kind); return; }
+                    var ar = await Api.ActivateSceneAsync(tile.Ref);
+                    if (ar is null) return;
+                    _activeSceneId = tile.Ref;
+                    if (ar.FullySucceeded) Ui.ReportOk(L.Format("screen.toast.sceneLive", tile.Ref));
+                    else Ui.ReportError(L.Format("screen.toast.partialApplied", ar.ProblemSummary(k => L[k])));
+                    break;
+                case "event":
+                    if (_events?.Any(e => Eq(e.Id, tile.Ref)) != true) { WarnGone(tile.Kind); return; }
+                    var er = await Api.TriggerEventAsync(tile.Ref);
+                    if (er is null) return;
+                    if (er.FullySucceeded) Ui.ReportOk(L.Format("screen.toast.eventFired", tile.Ref));
+                    else Ui.ReportError(L.Format("screen.toast.partialFired", er.ProblemSummary(k => L[k])));
+                    break;
+                case "sound":
+                    var snd = _sounds?.FirstOrDefault(s => Eq(s.Id, tile.Ref));
+                    if (snd is null) { WarnGone(tile.Kind); return; }
+                    var isPlaying = _playingSoundIds.Contains(snd.Id);
+                    if (await Api.CommandAsync($"sounds/{Uri.EscapeDataString(snd.Id)}/{(isPlaying ? "stop" : "play")}"))
+                    {
+                        if (isPlaying) _playingSoundIds.Remove(snd.Id);
+                        else _playingSoundIds.Add(snd.Id);
+                    }
+                    break;
+                case "music":
+                    await Api.CommandAsync($"music/play?id={Uri.EscapeDataString(tile.Ref)}", L.Format("screen.toast.playing", Label(tile)));
+                    break;
+                case "light-reset":
+                    await Api.ResetLightsToDefaultAsync();
+                    break;
+            }
+        }
+        finally
+        {
+            _busyIndex = null;
+            StateHasChanged();
+        }
+    }
+
+    private void WarnGone(string kind) =>
+        Ui.ReportError(L.Format("screen.toast.gone", L[KindLabel(kind)]));
+
+    public void Dispose() => _timer?.Dispose();
+}

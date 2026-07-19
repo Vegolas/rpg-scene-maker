@@ -1,0 +1,202 @@
+@page "/sounds"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject ViewTransition Vt
+@inject Localizer L
+
+<PageTitle>Ambient Director — @L["nav.sounds"]</PageTitle>
+
+<div class="page-head">
+    <h1>@L["sounds.title"]</h1>
+    @if (_sounds is not null)
+    {
+        <span class="count">@L.Plural("sounds.count", _sounds.Count)</span>
+    }
+</div>
+
+<div class="panel">
+    <div class="field" style="margin-bottom:0">
+        <label for="snd-import">@L["sounds.importLabel"]</label>
+        <InputFile id="snd-import" OnChange="OnFilePicked" accept=".mp3,.wav,.ogg" disabled="@_uploading" />
+        <p class="hint" style="margin-top:0.5rem">
+            @if (_uploading)
+            {
+                <span>@L.Format("sounds.importing", _uploadName)</span>
+            }
+            else
+            {
+                <span>@L["sounds.importHint"]</span>
+            }
+        </p>
+    </div>
+</div>
+
+<div class="btn-row" style="margin:0 0 1rem">
+    <button class="btn" @onclick="ToggleLibrary">
+        <Icon Name="library" /> @L[_showLibrary ? "sounds.hideLibraryBtn" : "sounds.searchLibraryBtn"]
+    </button>
+</div>
+
+@if (_showLibrary)
+{
+    <SoundLibraryBrowser OnImported="RefreshAsync" />
+}
+
+@if (_sounds is null)
+{
+    <p class="empty-note">@L["sounds.loading"]</p>
+}
+else if (_sounds.Count == 0)
+{
+    <p class="empty-note">@L["sounds.empty"]</p>
+}
+else
+{
+    @if (_playing.Count > 0)
+    {
+        <div class="btn-row" style="margin:0.2rem 0 1rem">
+            <button class="btn" @onclick="StopAll"><Icon Name="stop" /> @L.Format("sounds.stopAll", _playing.Count)</button>
+        </div>
+    }
+
+    var shown = _sounds.Where(SoundMatches).ToList();
+    @if (Searching && shown.Count == 0)
+    {
+        <p class="empty-note">@L.Format("sounds.noMatch", Ui.SearchQuery)</p>
+    }
+    else
+    {
+        @foreach (var group in shown.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category))
+        {
+            <p class="section-h">@(group.Key == "Uncategorized" ? L["sounds.uncategorized"] : group.Key)</p>
+            <div class="sound-grid">
+                @foreach (var sound in group)
+                {
+                    var isPlaying = _playing.Contains(sound.Id);
+                    var artUrl = Api.ImageUrl(sound.Image);
+                    var hasArt = artUrl is not null;
+                    <button class="krow @(isPlaying ? "playing" : "") @(hasArt ? "art" : "")"
+                            style="@(hasArt ? $"--art:url('{artUrl}');" : "")"
+                            @onclick="() => Tap(sound, isPlaying)">
+                        @if (hasArt)
+                        {
+                            <span class="scene-art"></span>
+                        }
+                        <span class="card-edit" role="button" tabindex="0" aria-label='@L["sounds.editAria"]'
+                              @onclick="() => Edit(sound.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
+                        <span class="krow-ico"><Icon Name="@(isPlaying ? "stop" : sound.Loop ? "repeat" : "sounds")" /></span>
+                        <span class="krow-title">@sound.Name</span>
+                    </button>
+                }
+            </div>
+        }
+        <p class="hint" style="margin-top:1rem">@L["sounds.tapHint"]</p>
+    }
+}
+
+@code {
+    private List<SoundDto>? _sounds;
+    private HashSet<string> _playing = [];
+    private Timer? _timer;
+
+    private bool _uploading;
+    private string _uploadName = "";
+    private bool _showLibrary;
+
+    private void ToggleLibrary() => _showLibrary = !_showLibrary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Ui.SearchChanged += OnSearchChanged;
+        await RefreshAsync();
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
+    }
+
+    private bool Searching => !string.IsNullOrWhiteSpace(Ui.SearchQuery);
+
+    // Match the header search against the sound's name and its category.
+    private bool SoundMatches(SoundDto sound)
+    {
+        var q = Ui.SearchQuery;
+        if (string.IsNullOrWhiteSpace(q)) return true;
+        return (sound.Name?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (sound.Category?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task RefreshAsync()
+    {
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
+        _sounds = await Api.GetSoundsAsync();
+        StateHasChanged();
+    }
+
+    private async Task PollAsync()
+    {
+        _playing = [.. await Api.GetPlayingSoundIdsAsync()];
+        StateHasChanged();
+    }
+
+    private async Task Tap(SoundDto sound, bool isPlaying)
+    {
+        var verb = isPlaying ? "stop" : "play";
+        if (await Api.CommandAsync($"sounds/{Uri.EscapeDataString(sound.Id)}/{verb}"))
+        {
+            if (isPlaying) _playing.Remove(sound.Id);
+            else _playing.Add(sound.Id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopAll()
+    {
+        if (await Api.CommandAsync("sounds/stop"))
+        {
+            _playing.Clear();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnFilePicked(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        _uploading = true;
+        _uploadName = file.Name;
+        StateHasChanged();
+        try
+        {
+            var name = Path.GetFileNameWithoutExtension(file.Name);
+            var (result, error) = await Api.UploadSoundAsync(file, name, "");
+            if (result is not null)
+            {
+                Ui.ReportOk(L.Format("sounds.toast.imported", result.Name));
+                await RefreshAsync();
+                // Open the editor so category / volume / loop can be set right away.
+                await Vt.NavigateAsync($"sounds/editor/{result.Id}");
+            }
+            else
+            {
+                Ui.ReportError(error ?? L["sounds.toast.importFailed"]);
+            }
+        }
+        finally
+        {
+            _uploading = false;
+            _uploadName = "";
+            StateHasChanged();
+        }
+    }
+
+    private Task Edit(string id) => Vt.NavigateAsync($"sounds/editor/{id}");
+
+    public void Dispose()
+    {
+        Ui.SearchChanged -= OnSearchChanged;
+        _timer?.Dispose();
+    }
+}

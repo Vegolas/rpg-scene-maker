@@ -1,0 +1,215 @@
+@page "/"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject ViewTransition Vt
+@inject Localizer L
+
+<PageTitle>Ambient Director — @L["scenes.title"]</PageTitle>
+
+<div class="page-head">
+    <h1>@L["scenes.title"]</h1>
+    @if (_scenes is not null)
+    {
+        <span class="count">@L.Plural("scenes.savedCount", _scenes.Count)</span>
+    }
+</div>
+
+@if (_scenes is null)
+{
+    <p class="empty-note">@L["scenes.loading"]</p>
+}
+else if (_scenes.Count == 0)
+{
+    <p class="empty-note">@L["scenes.empty"]</p>
+    <div class="scene-grid">
+        <button class="scene-card ghost" @onclick="NewScene">
+            <span class="scene-emoji"><Icon Name="add" /></span>
+            <span class="scene-name">@L["scenes.new"]</span>
+        </button>
+    </div>
+}
+else
+{
+    var shown = _scenes.Where(SceneMatches).ToList();
+    <div class="scene-grid">
+        @foreach (var scene in shown)
+        {
+            var (emoji, label) = SceneNaming.SplitName(scene.Name, "", scene.Id);
+            var artUrl = Api.ImageUrl(scene.Image);
+            var hasArt = artUrl is not null;
+            var color = SwatchColor(scene);
+            var colored = !hasArt && color is not null;
+            var darkText = colored && IsLight(color!);
+            <button class="scene-card @(scene.Id == _activeId ? "active" : "") @(_busyId == scene.Id ? "busy" : "") @(hasArt ? "art" : "") @(colored ? "colored" : "") @(darkText ? "dark-text" : "")"
+                    style="@(hasArt ? $"--art:url('{artUrl}');" : colored ? $"background:{color};" : "")"
+                    title='@(scene.Id == _activeId ? L["scenes.stopHint"] : null)'
+                    @onclick="() => OnCardClick(scene.Id)">
+                @if (hasArt)
+                {
+                    <span class="scene-art"></span>
+                }
+                <span class="card-edit" role="button" tabindex="0" aria-label='@L["scenes.editAria"]'
+                      @onclick="() => Edit(scene.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
+                <Glyph Emoji="@emoji" Fallback="scenes" />
+                <span class="scene-name">@label</span>
+            </button>
+        }
+        @if (!Searching)
+        {
+            <button class="scene-card ghost" @onclick="NewScene">
+                <span class="scene-emoji"><Icon Name="add" /></span>
+                <span class="scene-name">@L["scenes.new"]</span>
+            </button>
+        }
+    </div>
+    @if (Searching && shown.Count == 0)
+    {
+        <p class="empty-note">@L.Format("scenes.noMatch", Ui.SearchQuery)</p>
+    }
+}
+
+@code {
+    private List<SceneDto>? _scenes;
+    private string? _activeId;
+    private string? _busyId;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Ui.SearchChanged += OnSearchChanged;
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
+        await RefreshAsync();
+        // Re-fetch the grid too (not just the active highlight) so edits made elsewhere —
+        // e.g. tile art uploaded from another device, or this always-on panel left open —
+        // surface without a manual reload.
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 4000, 4000);
+    }
+
+    private bool Searching => !string.IsNullOrWhiteSpace(Ui.SearchQuery);
+
+    // Match the header search against the scene's display label and its id.
+    private bool SceneMatches(SceneDto scene)
+    {
+        var q = Ui.SearchQuery;
+        if (string.IsNullOrWhiteSpace(q)) return true;
+        var (_, label) = SceneNaming.SplitName(scene.Name, "", scene.Id);
+        return label.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || scene.Id.Contains(q, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task RefreshAsync()
+    {
+        _scenes = await Api.GetScenesAsync();
+        await PollActiveAsync();
+    }
+
+    // Background refresh. Blazor diffs the grid in place, so unchanged tiles don't
+    // re-animate and a freshly-uploaded image just swaps into its tile.
+    private async Task PollAsync()
+    {
+        var scenes = await Api.GetScenesAsync();
+        // Ignore a transient empty result (fetch failure → []) so a blip can't blank a populated grid.
+        if (scenes.Count > 0 || _scenes is not { Count: > 0 })
+            _scenes = scenes;
+        await PollActiveAsync();
+    }
+
+    private async Task PollActiveAsync()
+    {
+        _activeId = (await Api.GetActiveSceneAsync())?.Id;
+        StateHasChanged();
+    }
+
+    // Card tint: the legacy "all lights" colour, else the first per-light entry that sets a colour.
+    private static string? SwatchColor(SceneDto scene) =>
+        scene.Light?.Color
+        ?? scene.Lights?.FirstOrDefault(l => l.Color is not null)?.Color;
+
+    // Pick black text for light mood colors (amber/yellow), white otherwise, via perceived luminance.
+    private static bool IsLight(string hex)
+    {
+        if (hex is not ['#', ..] || hex.Length < 7) return false;
+        if (!int.TryParse(hex.AsSpan(1, 2), System.Globalization.NumberStyles.HexNumber, null, out var r) ||
+            !int.TryParse(hex.AsSpan(3, 2), System.Globalization.NumberStyles.HexNumber, null, out var g) ||
+            !int.TryParse(hex.AsSpan(5, 2), System.Globalization.NumberStyles.HexNumber, null, out var b))
+            return false;
+        // ITU-R BT.601 luma; > 0.6 reads as a "light" fill that needs dark text.
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0 > 0.6;
+    }
+
+    private Task NewScene() => Vt.NavigateAsync("editor");
+
+    private Task Edit(string id) => Vt.NavigateAsync($"editor/{id}");
+
+    // Tapping the live scene stops it (return to default lights, pause music, stop sounds); any other
+    // card activates it.
+    private Task OnCardClick(string id) =>
+        string.Equals(id, _activeId, StringComparison.OrdinalIgnoreCase) ? Stop(id) : Activate(id);
+
+    private async Task Activate(string id)
+    {
+        _busyId = id;
+        try
+        {
+            var result = await Api.ActivateSceneAsync(id);
+            if (result is null) return;
+
+            // Cross-fade the active highlight from the old scene card to the new one.
+            await Vt.RunAsync(() =>
+            {
+                _busyId = null;
+                _activeId = id;
+                StateHasChanged();
+            }, type: "scene");
+
+            if (result.FullySucceeded)
+            {
+                Ui.ReportOk(L.Format("scenes.toast.live", id));
+            }
+            else
+            {
+                Ui.ReportError(L.Format("scenes.toast.partial", result.ProblemSummary(k => L[k])));
+            }
+        }
+        finally
+        {
+            _busyId = null;
+        }
+    }
+
+    private async Task Stop(string id)
+    {
+        _busyId = id;
+        try
+        {
+            var result = await Api.StopSceneAsync();
+            if (result is null) return;
+
+            // Fade the highlight off the card, mirroring the activation cross-fade.
+            await Vt.RunAsync(() =>
+            {
+                _busyId = null;
+                _activeId = null;
+                StateHasChanged();
+            }, type: "scene");
+
+            if (result.FullySucceeded)
+                Ui.ReportOk(L["scenes.toast.stopped"]);
+            else
+                Ui.ReportError(L.Format("scenes.toast.stoppedPartial", result.ProblemSummary(k => L[k])));
+        }
+        finally
+        {
+            _busyId = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        Ui.SearchChanged -= OnSearchChanged;
+        _timer?.Dispose();
+    }
+}

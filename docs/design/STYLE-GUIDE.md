@@ -1,4 +1,4 @@
-# Scene Maker — "Control Room" Design System
+# Ambient Director — "Control Room" Design System
 
 A dark, high-contrast control-panel aesthetic for a tabletop-RPG music & light
 manager. The app sits on a tablet at the DM's elbow during play: it must be

@@ -1,0 +1,60 @@
+@page "/effects"
+@inject ApiClient Api
+@inject ViewTransition Vt
+@inject Localizer L
+
+<PageTitle>Ambient Director — @L["effects.title"]</PageTitle>
+
+<div class="page-head">
+    <h1>@L["effects.title"]</h1>
+    @if (_fx is not null)
+    {
+        <span class="count">@L.Plural("effects.savedCount", _fx.Count)</span>
+    }
+</div>
+
+@if (_fx is null)
+{
+    <p class="empty-note">@L["effects.loading"]</p>
+}
+else
+{
+    <p class="hint" style="margin-top:0">
+        @L["effects.intro"]
+    </p>
+
+    @if (_fx.Count > 0)
+    {
+        <div class="klist">
+            @foreach (var fx in _fx)
+            {
+                <KRow IconName="effects" Title="@fx.Name" Hint="@Meta(fx)" OnClick="() => Edit(fx.Id)" />
+            }
+        </div>
+    }
+    else
+    {
+        <p class="empty-note">@L["effects.empty"]</p>
+    }
+
+    <div class="btn-row" style="margin-top:1rem">
+        <button class="btn btn--primary" @onclick="NewFx"><Icon Name="add" /> @L["effects.new"]</button>
+    </div>
+}
+
+@code {
+    private List<LightFxDto>? _fx;
+
+    protected override async Task OnInitializedAsync() => _fx = await Api.GetLightFxAsync();
+
+    private string Meta(LightFxDto fx)
+    {
+        var count = fx.Keyframes?.Count ?? 0;
+        var kf = L.Plural("effects.keyframeCount", count);
+        return fx.Loop ? kf + L["effects.loopSuffix"] : kf;
+    }
+
+    private Task NewFx() => Vt.NavigateAsync("effects/new");
+
+    private Task Edit(string id) => Vt.NavigateAsync($"effects/{id}");
+}

@@ -23,15 +23,15 @@ jobs:
 
       # Building the API project also builds the referenced Blazor WASM UI.
       - name: Restore
-        run: dotnet restore src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj
+        run: dotnet restore src/AmbientDirector.Api/AmbientDirector.Api.csproj
 
       - name: Build
-        run: dotnet build src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj --configuration Release --no-restore
+        run: dotnet build src/AmbientDirector.Api/AmbientDirector.Api.csproj --configuration Release --no-restore
 
       # Run the automated test suite. The Linux runner never touches NAudio's Windows-only audio
       # output device, so every test here is cross-platform.
       - name: Restore tests
-        run: dotnet restore src/RpgSceneMaker.Tests/RpgSceneMaker.Tests.csproj
+        run: dotnet restore src/AmbientDirector.Tests/AmbientDirector.Tests.csproj
 
       - name: Test
-        run: dotnet test src/RpgSceneMaker.Tests/RpgSceneMaker.Tests.csproj --configuration Release --no-restore
+        run: dotnet test src/AmbientDirector.Tests/AmbientDirector.Tests.csproj --configuration Release --no-restore
