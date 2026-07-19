@@ -1,0 +1,364 @@
+@page "/event-editor"
+@page "/event-editor/{EventId}"
+@using System.Text.Json
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject ViewTransition Vt
+@inject Localizer L
+
+<PageTitle>Ambient Director — @(_isNew ? L["eventEditor.titleNew"] : L["eventEditor.titleEdit"])</PageTitle>
+
+@if (_loading)
+{
+    <p class="empty-note">@L["eventEditor.loading"]</p>
+}
+else
+{
+    <div class="page-head">
+        <h1>@(_isNew ? L["eventEditor.titleNew"] : L["eventEditor.titleEdit"])</h1>
+        @if (Ui.AssistantConfigured && !_isNew)
+        {
+            <button class="btn" @onclick="AskAssistant"><Icon Name="assistant" /> @L["assistant.ask"]</button>
+        }
+    </div>
+
+    @if (_drawerOpen)
+    {
+        <AssistantDrawer InitialDraft="@AssistantDraft" OnRunCompleted="RefreshFromAssistantAsync" OnClose="() => _drawerOpen = false" />
+    }
+
+    <PageTabs TValue="EventTab" Options="TabOptions" Value="_tab" ValueChanged="@(t => _tab = t)" />
+
+    @if (_tab == EventTab.Details)
+    {
+    <div class="panel">
+        <div class="emoji-row">
+            @foreach (var e in Palette.Emojis)
+            {
+                <button class="emoji-pick @(e == _emoji ? "picked" : "")" @onclick="() => ToggleEmoji(e)">@e</button>
+            }
+        </div>
+        <div class="field" style="margin-top:1rem;margin-bottom:0">
+            <label for="evt-label">@L["eventEditor.nameLabel"]</label>
+            <input id="evt-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty"
+                   placeholder='@L["eventEditor.namePlaceholder"]' />
+        </div>
+        <p class="hint" style="margin-top:0.6rem">
+            @if (_isNew)
+            {
+                <span>@L["eventEditor.streamDeckUrl"] <code>/events/@(CurrentId is { Length: > 0 } cid ? cid : "…")/trigger</code></span>
+            }
+            else
+            {
+                <span>@L["eventEditor.idLabel"] <code>@_edit.Id</code> @L["eventEditor.idFixed"] <code>/events/@_edit.Id/trigger</code></span>
+            }
+        </p>
+        <ArtField @bind-Image="_edit.Image" />
+    </div>
+    @* Delete lives here as a quietly separated danger zone at the bottom of the Details tab. *@
+    @if (!_isNew)
+    {
+        <div class="btn-row" style="margin-top:1.5rem">
+            <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["eventEditor.deleteBtn"]</ConfirmButton>
+        </div>
+    }
+    }
+    else if (_tab == EventTab.Timeline)
+    {
+    <div class="panel">
+        <p class="hint" style="margin-top:0">
+            @L["eventEditor.timelineHint"]
+        </p>
+        <TimelineEditor Model="_edit.Timeline" Sounds="_sounds" Lights="_lights" Fx="_fxLibrary" />
+    </div>
+
+    <SectionHeading>@L["eventEditor.whenEnds"]</SectionHeading>
+    <div class="panel">
+        <Segmented TValue="string" Options="AfterOptions" Value="_edit.After.Mode" ValueChanged="m => _edit.After.Mode = m" />
+        @if (_edit.After.Mode == "scene")
+        {
+            <div class="field" style="margin-top:1rem;margin-bottom:0">
+                <label for="evt-after-scene">@L["eventEditor.sceneToActivate"]</label>
+                <select id="evt-after-scene" value="@(_edit.After.SceneId ?? "")"
+                        @onchange="e => _edit.After.SceneId = (e.Value?.ToString() is { Length: > 0 } v ? v : null)">
+                    <option value="">@L["eventEditor.pickScene"]</option>
+                    @foreach (var s in _scenes)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                    @if (_edit.After.SceneId is { Length: > 0 } sid && !_scenes.Any(s => string.Equals(s.Id, sid, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <option value="@sid">@L.Format("eventEditor.sceneMissing", sid)</option>
+                    }
+                </select>
+            </div>
+            <p class="hint" style="margin-top:0.6rem">@L["eventEditor.afterSceneHintPre"] <em>@L["eventEditor.afterSceneHintAnd"]</em> @L["eventEditor.afterSceneHintPost"]</p>
+        }
+        else if (_edit.After.Mode == "default")
+        {
+            <p class="hint" style="margin-top:0.8rem">@L["eventEditor.afterDefaultHint"]</p>
+        }
+        else
+        {
+            <p class="hint" style="margin-top:0.8rem">@L["eventEditor.afterPreviousHint"]</p>
+        }
+    </div>
+    }
+
+    <div class="editor-actions">
+        <button class="btn btn--primary" @onclick="() => Save(test: false)" disabled="@_busy">@L["common.save"]</button>
+        <button class="btn" @onclick="() => Save(test: true)" disabled="@_busy">@L["common.saveAndTest"]</button>
+        @if (!_isNew && _runningId == _edit.Id)
+        {
+            <button class="btn btn--danger" @onclick="Stop" disabled="@_busy"><Icon Name="stop" /> @L["common.stop"]</button>
+        }
+        <button class="btn" @onclick="Cancel" disabled="@_busy">@L["common.cancel"]</button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? EventId { get; set; }
+
+    private enum EventTab { Details, Timeline }
+
+    private bool _loading = true;
+    private bool _busy;
+    private bool _isNew;
+    private EventEdit _edit = new();
+    private List<string> _existingIds = [];
+    private List<SoundDto> _sounds = [];
+    private List<RegisteredLightInfo> _lights = [];
+    private List<SceneDto> _scenes = [];
+    private List<LightFxDto> _fxLibrary = [];
+
+    // Active editor tab. In its own field so LoadFrom / an assistant refresh never resets it; the
+    // starting tab is chosen from _isNew in OnInitializedAsync.
+    private EventTab _tab = EventTab.Details;
+
+    // Tab strip options (value + localized label; no icon — none of the chrome glyphs fit "Timeline").
+    private (EventTab, string, string?)[] TabOptions =>
+        [(EventTab.Details, L["eventEditor.tab.details"], null), (EventTab.Timeline, L["eventEditor.tab.timeline"], null)];
+
+    // Endings offered in the "When it ends" segmented control.
+    private (string, string)[] AfterOptions =>
+        [("previous", L["eventEditor.afterPrevious"]), ("scene", L["eventEditor.afterScene"]), ("default", L["eventEditor.afterDefault"])];
+
+    private string _emoji = "";
+    private string _label = "";
+
+    private string? _runningId;
+    private Timer? _timer;
+
+    // assistant drawer + real-time refresh
+    private bool _drawerOpen;
+    private string? _snapshot;
+    private string AssistantDraft => L.Format("assistant.ctxDraft.event", _edit.Id);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isNew = string.IsNullOrEmpty(EventId);
+        // Land on Timeline when editing an existing event (that's what you come to tweak), Details when creating one.
+        _tab = _isNew ? EventTab.Details : EventTab.Timeline;
+
+        var eventsTask = Api.GetEventsAsync();
+        var soundsTask = Api.GetSoundsAsync();
+        var lightsTask = Api.GetRegisteredLightsAsync();
+        var scenesTask = Api.GetScenesAsync();
+        var fxTask = Api.GetLightFxAsync();
+        await Task.WhenAll(eventsTask, soundsTask, lightsTask, scenesTask, fxTask);
+        _existingIds = (await eventsTask).Select(e => e.Id).ToList();
+        _sounds = await soundsTask;
+        _lights = await lightsTask;
+        _scenes = await scenesTask;
+        _fxLibrary = await fxTask;
+
+        if (!_isNew)
+        {
+            var evt = await Api.GetEventAsync(EventId!);
+            if (evt is null)
+            {
+                Ui.ReportError(L.Format("eventEditor.toast.loadFailed", EventId));
+                Nav.NavigateTo("events");
+                return;
+            }
+            LoadFrom(evt);
+            _snapshot = JsonSerializer.Serialize(evt);
+        }
+
+        await PollAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 1500, 1500);
+        _loading = false;
+    }
+
+    private void LoadFrom(EventDto evt)
+    {
+        (_emoji, _label) = SceneNaming.SplitName(evt.Name);
+        _edit = EventEdit.FromDto(evt, _sounds);
+    }
+
+    private async Task PollAsync()
+    {
+        var running = await Api.GetRunningEventIdAsync();
+        if (running != _runningId)
+        {
+            _runningId = running;
+            StateHasChanged();
+        }
+    }
+
+    // Open the in-editor assistant drawer (no navigation). Gated on !_isNew, so _edit.Id is always set.
+    private void AskAssistant() => _drawerOpen = true;
+
+    // Fired when an assistant run finishes: re-fetch the event, navigate away if it was deleted, else
+    // re-apply it to the form when it changed since we last loaded/saved. Accepted v1 tradeoff: unsaved
+    // local edits are overwritten (the user explicitly asked the assistant to edit this event).
+    private async Task RefreshFromAssistantAsync()
+    {
+        if (_isNew || string.IsNullOrEmpty(_edit.Id)) return;
+
+        var evt = await Api.GetEventAsync(_edit.Id);
+        if (evt is null)
+        {
+            Ui.ReportOk(L["assistant.toast.entityDeleted"]);
+            await Vt.NavigateAsync("events");
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(evt);
+        if (json == _snapshot) return;
+
+        _snapshot = json;
+        LoadFrom(evt);
+        Ui.ReportOk(L["assistant.toast.entityUpdated"]);
+        StateHasChanged();
+    }
+
+    private void ToggleEmoji(string e) => _emoji = _emoji == e ? "" : e;
+
+    private string ComposedName =>
+        string.IsNullOrEmpty(_emoji) ? _label.Trim() : $"{_emoji} {_label.Trim()}";
+
+    // On create the id follows the label; on edit it's fixed.
+    private string CurrentId => _isNew ? SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _existingIds) : _edit.Id;
+
+    private async Task Stop()
+    {
+        if (await Api.StopEventAsync())
+        {
+            _runningId = null;
+            StateHasChanged();
+        }
+    }
+
+    private Task Cancel() => Vt.NavigateAsync("events");
+
+    private async Task Save(bool test)
+    {
+        // Each validation failure first switches to the tab holding the offending field, so the toast makes sense.
+        if (string.IsNullOrWhiteSpace(_label))
+        {
+            _tab = EventTab.Details;
+            Ui.ReportError(L["eventEditor.toast.nameFirst"]);
+            return;
+        }
+        if (_edit.Timeline.IsEmpty)
+        {
+            _tab = EventTab.Timeline;
+            Ui.ReportError(L["eventEditor.toast.needClip"]);
+            return;
+        }
+        if (_edit.Timeline.EndMs > TimelineEdit.MaxEndMs)
+        {
+            _tab = EventTab.Timeline;
+            Ui.ReportError(L["eventEditor.toast.tooLong"]);
+            return;
+        }
+        // Drift needs at least two palette colours — catch it before the server 400s.
+        var badDrift = _edit.Timeline.Lights.FirstOrDefault(l =>
+            l.Mode is "color" or "white" && l.Effect.Type == "drift" && l.Effect.Colors.Count < 2);
+        if (badDrift is not null)
+        {
+            _tab = EventTab.Timeline;
+            Ui.ReportError(L["eventEditor.toast.driftColors"]);
+            return;
+        }
+        if (_edit.After.Mode == "scene" && string.IsNullOrWhiteSpace(_edit.After.SceneId))
+        {
+            _tab = EventTab.Timeline;
+            Ui.ReportError(L["eventEditor.toast.pickSceneEnd"]);
+            return;
+        }
+
+        var id = CurrentId;
+        if (string.IsNullOrEmpty(id))
+        {
+            _tab = EventTab.Details;
+            Ui.ReportError(L["eventEditor.toast.noId"]);
+            return;
+        }
+
+        _edit.Id = id;
+        _edit.Name = ComposedName;
+
+        _busy = true;
+        try
+        {
+            var (_, error) = await Api.SaveEventAsync(id, _edit);
+            if (error is not null)
+            {
+                Ui.ReportError(error);
+                return;
+            }
+
+            if (test)
+            {
+                var result = await Api.TriggerEventAsync(id);
+                if (result is null) return;
+                if (result.FullySucceeded)
+                    Ui.ReportOk(L.Format("eventEditor.toast.savedFired", id));
+                else
+                    Ui.ReportError(L.Format("eventEditor.toast.savedPartial", result.ProblemSummary(k => L[k])));
+                await PollAsync();
+                // On create, keep editing the freshly-made event rather than re-creating it.
+                if (_isNew)
+                    await Vt.NavigateAsync($"event-editor/{id}");
+                // Staying on the page: refresh the snapshot so a later assistant refresh compares against
+                // what we just saved and doesn't spuriously re-apply.
+                else if (await Api.GetEventAsync(id) is { } saved)
+                    _snapshot = JsonSerializer.Serialize(saved);
+            }
+            else
+            {
+                Ui.ReportOk(L.Format("eventEditor.toast.saved", id));
+                await Vt.NavigateAsync("events");
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteConfirmed()
+    {
+        _busy = true;
+        try
+        {
+            var (ok, error) = await Api.DeleteEventAsync(_edit.Id);
+            if (ok)
+            {
+                Ui.ReportOk(L.Format("eventEditor.toast.deleted", _edit.Id));
+                await Vt.NavigateAsync("events");
+            }
+            else
+            {
+                Ui.ReportError(error ?? L["eventEditor.toast.deleteFailed"]);
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

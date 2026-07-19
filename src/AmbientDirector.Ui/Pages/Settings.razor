@@ -1,0 +1,420 @@
+@page "/settings"
+@inject ApiClient Api
+@inject UiState Ui
+@inject NavigationManager Nav
+@inject Localizer L
+
+<PageTitle>Ambient Director — @L["settings.title"]</PageTitle>
+
+@if (_config is null)
+{
+    <p class="empty-note">@(_loadError ?? L["settings.loading"])</p>
+}
+else
+{
+    <div class="page-head"><h1>@L["settings.title"]</h1></div>
+
+    <PageTabs TValue="SettingsTab" Options="TabOptions" Value="_tab" ValueChanged="@(t => _tab = t)" />
+
+    @if (_tab == SettingsTab.General)
+    {
+    <SectionHeading>@L["settings.language.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.language.hint"]</p>
+        <div class="field">
+            <label for="lang-select">@L["settings.language.title"]</label>
+            <select id="lang-select" @onchange="OnLanguageChanged">
+                @foreach (var lang in L.Available)
+                {
+                    <option value="@lang.Code" selected="@(lang.Code == L.CurrentCode)">@lang.Name</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.wizard.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.wizard.hint"]</p>
+        <div class="btn-row" style="margin-top:0.6rem">
+            <button class="btn" @onclick="() => Ui.SetWizardOpen(true)">@L["settings.wizard.runBtn"]</button>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.menu.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.menu.hint"]</p>
+        <div class="btn-row" style="margin-top:0.6rem">
+            <button class="btn" @onclick="ResetMenuOrder" disabled="@(Ui.TabOrder.Count == 0)">@L["settings.menu.resetBtn"]</button>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.device.title"]</SectionHeading>
+    <div class="panel">
+        <div class="field">
+            <label for="apikey">@L["settings.device.apiKeyLabel"]</label>
+            <input id="apikey" type="password" @bind="_apiKeyInput" placeholder='@L["settings.device.apiKeyPlaceholder"]' />
+        </div>
+        <div class="btn-row">
+            <button class="btn btn--primary" @onclick="SaveApiKey">@L["settings.device.saveBtn"]</button>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.developer.title"]</SectionHeading>
+    <div class="panel">
+        <div class="chip-row" style="margin-top:0">
+            <Chip On="@Ui.DevMode" OnClick="ToggleDevMode">@L["settings.developer.mode"]</Chip>
+        </div>
+        <p class="hint">@L["settings.developer.hint"]</p>
+    </div>
+    }
+    else if (_tab == SettingsTab.Lights)
+    {
+    <SectionHeading>@L["settings.lightSystem.title"]</SectionHeading>
+    <div class="chip-row">
+        <Chip On="@(!IsHue)" OnClick="@(() => SetProvider("tuya"))">@L["settings.lightSystem.tuya"]</Chip>
+        <Chip On="@(IsHue)" OnClick="@(() => SetProvider("hue"))">@L["settings.lightSystem.hue"]</Chip>
+    </div>
+    <p class="hint">@L["settings.lightSystem.hint"]</p>
+
+    @* The provider setup forms are shared with the onboarding wizard (Components/Setup). Config is the
+       same object this page's registry/default sections edit, so changes stay in sync; OnChanged
+       re-renders this page (e.g. the registry's add button unlocking after a pair). *@
+    @if (IsHue)
+    {
+        <HueSetupForm Config="_config" OnChanged="StateHasChanged" />
+    }
+    else
+    {
+        <TuyaSetupForm Config="_config" OnChanged="StateHasChanged" />
+    }
+
+    <SectionHeading>@L["settings.registry.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint">@L["settings.registry.hint"]</p>
+
+        @if (_config.Lights.Count == 0)
+        {
+            <p class="empty-note" style="margin:0.8rem 0">@L["settings.registry.empty"]</p>
+        }
+        else
+        {
+            <div class="reg-list">
+                @foreach (var light in _config.Lights)
+                {
+                    <div class="reg-row">
+                        <span class="reg-badge @(light.Provider == "hue" ? "hue" : "tuya")">@L[LightFormat.ProviderLabelKey(light.Provider)]</span>
+                        <input class="reg-name" type="text" @bind="light.Name" placeholder='@L["settings.registry.namePlaceholder"]' />
+                        <code class="reg-key" title='@L["settings.registry.keyTitle"]'>@light.Key</code>
+                        <button class="reg-remove" aria-label='@L["settings.registry.removeAria"]' @onclick="() => RemoveLight(light)"><Icon Name="close" /></button>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="btn-row" style="margin-top:1rem">
+            <button class="btn" @onclick="ToggleHueAdd" disabled="@(!HueIsPaired)">@L["settings.registry.addHue"]</button>
+            <button class="btn" @onclick="AddTuya" disabled="@HasTuya">@L["settings.registry.addTuya"]</button>
+        </div>
+        @if (!HueIsPaired)
+        {
+            <p class="hint">@L["settings.registry.pairFirst"]</p>
+        }
+        @if (HasTuya)
+        {
+            <p class="hint">@L["settings.registry.tuyaExists"]</p>
+        }
+
+        @if (_showHueAdd && HueIsPaired)
+        {
+            @if (_hueLights is null)
+            {
+                <p class="empty-note" style="margin-top:1rem">@L["settings.registry.fetching"]</p>
+            }
+            else
+            {
+                <div class="reg-list" style="margin-top:1rem">
+                    @foreach (var hl in _hueLights)
+                    {
+                        var added = _config.Lights.Any(l => l.Provider == "hue" && l.HueId == hl.Id);
+                        <div class="reg-row">
+                            <span class="krow-ico"><Icon Name="@(hl.Reachable ? "lights" : "warn")" /></span>
+                            <span class="reg-name-static">@hl.Name</span>
+                            <button class="btn btn--small" disabled="@added" @onclick="() => AddHue(hl)">@(added ? L["common.added"] : L["common.add"])</button>
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        <div class="btn-row" style="margin-top:1rem">
+            <button class="btn btn--primary" @onclick="SaveConfig">@L["settings.registry.saveBtn"]</button>
+        </div>
+    </div>
+
+    <SectionHeading>@L["settings.default.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint">@L["settings.default.hint"]</p>
+
+        <Segmented TValue="string" Options="DefaultModes" Value="@(DefaultMode ?? "")" ValueChanged="SetDefaultMode" />
+
+        @if (DefaultMode == "color")
+        {
+            <div style="margin-top:1rem">
+                <SwatchGrid Selected="@_config.DefaultLight?.Color" OnPick="OnDefaultColorPicked" />
+            </div>
+            <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
+                       ValueChanged="OnDefaultBrightnessChanged" AriaLabel='@L["settings.default.brightnessAria"]' />
+        }
+        else if (DefaultMode == "white")
+        {
+            <SliderRow LeftIcon="warm" RightIcon="cold" Min="0" Max="100" Value="@(_config.DefaultLight?.Temperature ?? 50)"
+                       ValueChanged="OnDefaultTemperatureChanged" AriaLabel='@L["settings.default.tempAria"]' />
+            <SliderRow LeftIcon="dim" Min="1" Max="100" Suffix="%" Value="@(_config.DefaultLight?.Brightness ?? 80)"
+                       ValueChanged="OnDefaultBrightnessChanged" AriaLabel='@L["settings.default.brightnessAria"]' />
+        }
+        else if (DefaultMode == "off")
+        {
+            <p class="hint">@L["settings.default.offHint"]</p>
+        }
+        else
+        {
+            <p class="empty-note" style="margin:0.8rem 0">@L["settings.default.empty"]</p>
+        }
+
+        <div class="btn-row" style="margin-top:1rem">
+            <button class="btn btn--primary" @onclick="SaveConfig">@L["settings.default.saveBtn"]</button>
+            <button class="btn" @onclick="TestDefault" disabled="@(_config.DefaultLight is null)">@L["common.test"]</button>
+        </div>
+    </div>
+    }
+    else if (_tab == SettingsTab.Music)
+    {
+    @* Both panels are shared with the onboarding wizard (Components/Setup); they own their own state. *@
+    <SpotifySetupForm />
+    <FreesoundSetupForm />
+    }
+    else if (_tab == SettingsTab.Assistant)
+    {
+    <AssistantSetupForm />
+    }
+}
+
+@code {
+    private enum SettingsTab { General, Lights, Music, Assistant }
+    // Active tab. Set from the ?tab= / ?spotify= query on init (TabFromQuery); per-section save semantics are unchanged.
+    private SettingsTab _tab = SettingsTab.General;
+
+    // Tab strip options (value + localized label + chrome icon), rebuilt per render so labels track the language.
+    private (SettingsTab, string, string?)[] TabOptions =>
+        [(SettingsTab.General, L["settings.tab.general"], "settings"), (SettingsTab.Lights, L["settings.tab.lights"], "lights"),
+         (SettingsTab.Music, L["settings.tab.music"], "music"), (SettingsTab.Assistant, L["settings.tab.assistant"], "assistant")];
+
+    private LightingConfigDto? _config;
+    private string? _loadError;
+    private List<HueLightDto>? _hueLights;
+    private string? _apiKeyInput;
+    private bool _showHueAdd;
+
+    private async Task OnLanguageChanged(ChangeEventArgs e)
+    {
+        var code = e.Value?.ToString();
+        if (string.IsNullOrEmpty(code)) return;
+        await L.SetLanguageAsync(code);
+        var name = L.Available.FirstOrDefault(x => x.Code == code)?.Name ?? code;
+        Ui.ReportOk(L.Format("settings.toast.languageChanged", name));
+    }
+
+    private bool IsHue => _config?.Provider.Equals("hue", StringComparison.OrdinalIgnoreCase) == true;
+    private bool HueIsPaired => !string.IsNullOrWhiteSpace(_config?.Hue.AppKey);
+    private bool HasTuya => _config?.Lights.Any(l => l.Provider == "tuya") == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tab = TabFromQuery();
+        _apiKeyInput = await Api.GetApiKeyAsync();
+        var (config, error) = await Api.GetConfigAsync();
+        if (config is null)
+        {
+            _loadError = L.Format("settings.loadError", error);
+            return;
+        }
+        _config = config;
+
+        // Show the result of a just-completed connect attempt (from the OAuth callback redirect).
+        switch (QueryValue("spotify"))
+        {
+            case "connected":
+                Ui.ReportOk(L["settings.toast.spotifyConnected"]);
+                break;
+            case { } s when s.StartsWith("error", StringComparison.Ordinal):
+                Ui.ReportError(L.Format("settings.toast.spotifyFailed", s[(s.IndexOf(':') + 1)..]));
+                break;
+        }
+    }
+
+    private string? QueryValue(string key)
+    {
+        var query = new Uri(Nav.Uri).Query;
+        if (string.IsNullOrEmpty(query)) return null;
+        foreach (var pair in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var idx = pair.IndexOf('=');
+            var k = Uri.UnescapeDataString(idx >= 0 ? pair[..idx] : pair);
+            if (k == key)
+                return idx >= 0 ? Uri.UnescapeDataString(pair[(idx + 1)..]) : "";
+        }
+        return null;
+    }
+
+    // Which tab to open on load: ?spotify=… (the OAuth return) forces Music, otherwise honor
+    // ?tab=general|lights|music|assistant (defaulting to General).
+    private SettingsTab TabFromQuery()
+    {
+        if (QueryValue("spotify") is not null) return SettingsTab.Music;
+        return QueryValue("tab") switch
+        {
+            "lights" => SettingsTab.Lights,
+            "music" => SettingsTab.Music,
+            "assistant" => SettingsTab.Assistant,
+            _ => SettingsTab.General,
+        };
+    }
+
+    private async Task SetProvider(string provider)
+    {
+        if (_config is null) return;
+        _config.Provider = provider;
+        if (await Api.SaveConfigAsync(_config))
+            Ui.ReportOk(L.Format("settings.toast.providerSet", provider == "hue" ? L["settings.provider.hue"] : L["settings.provider.tuya"]));
+    }
+
+    private async Task SaveConfig()
+    {
+        if (_config is null) return;
+        if (await Api.SaveConfigAsync(_config))
+            Ui.ReportOk(L["settings.toast.saved"]);
+    }
+
+    // Hue lights for the registry's "add Hue light" list (the Hue setup panel loads its own copy).
+    private async Task LoadHueLights()
+    {
+        if (_config is null || !HueIsPaired) return;
+        var (lights, error) = await Api.GetHueLightsAsync(_config.Hue.BridgeIp, _config.Hue.AppKey);
+        if (lights is null)
+        {
+            if (error is not null) Ui.ReportError(error);
+            return;
+        }
+        _hueLights = lights;
+    }
+
+    private async Task SaveApiKey()
+    {
+        await Api.SetApiKeyAsync(_apiKeyInput);
+        Ui.ReportOk(L["settings.toast.apiKeySaved"]);
+    }
+
+    private async Task ResetMenuOrder()
+    {
+        await Api.ClearTabOrderAsync();
+        Ui.ReportOk(L["settings.toast.menuReset"]);
+    }
+
+    private async Task ToggleDevMode()
+    {
+        var on = !Ui.DevMode;
+        await Api.SetDevModeAsync(on);
+        Ui.ReportOk(on ? L["settings.toast.devModeOn"] : L["settings.toast.devModeOff"]);
+    }
+
+    // ---------- light registry ----------
+
+    private async Task ToggleHueAdd()
+    {
+        _showHueAdd = !_showHueAdd;
+        if (_showHueAdd && _hueLights is null)
+            await LoadHueLights();
+    }
+
+    private void AddHue(HueLightDto hl)
+    {
+        if (_config is null) return;
+        if (_config.Lights.Any(l => l.Provider == "hue" && l.HueId == hl.Id)) return;
+        _config.Lights.Add(new RegisteredLightEdit
+        {
+            Provider = "hue",
+            HueId = hl.Id,
+            Name = hl.Name,
+            Key = UniqueKey(SceneNaming.Slugify(hl.Name)),
+        });
+    }
+
+    private void AddTuya()
+    {
+        if (_config is null || HasTuya) return;
+        _config.Lights.Add(new RegisteredLightEdit
+        {
+            Provider = "tuya",
+            HueId = null,
+            Name = "Tuya bulb",
+            Key = UniqueKey("tuya-bulb"),
+        });
+    }
+
+    private void RemoveLight(RegisteredLightEdit light) => _config?.Lights.Remove(light);
+
+    private string UniqueKey(string baseKey) =>
+        SceneNaming.MakeUnique(baseKey, _config!.Lights.Select(l => l.Key).ToList(), "light");
+
+    // ---------- default lighting (the header's reset button) ----------
+
+    private IReadOnlyList<(string, string)> DefaultModes =>
+        [("color", L["common.modeColor"]), ("white", L["common.modeWhite"]), ("off", L["common.modeOff"])];
+
+    // Derive the editor mode from the stored default (null = nothing configured yet).
+    private string? DefaultMode => _config?.DefaultLight switch
+    {
+        null => null,
+        { Power: false } => "off",
+        { Color: not null } => "color",
+        _ => "white",
+    };
+
+    private void SetDefaultMode(string mode)
+    {
+        if (_config is null) return;
+        var d = _config.DefaultLight;
+        _config.DefaultLight = mode switch
+        {
+            "color" => new DefaultLightEdit { Power = true, Color = d?.Color ?? "#ff8c2a", Brightness = d?.Brightness ?? 80 },
+            "white" => new DefaultLightEdit { Power = true, Brightness = d?.Brightness ?? 80, Temperature = d?.Temperature ?? 50 },
+            "off" => new DefaultLightEdit { Power = false },
+            _ => d,
+        };
+    }
+
+    private void OnDefaultColorPicked(string hex)
+    {
+        if (_config?.DefaultLight is not { } d) return;
+        d.Color = hex;
+        d.Power = true;
+    }
+
+    private void OnDefaultBrightnessChanged(int value)
+    {
+        if (_config?.DefaultLight is { } d) d.Brightness = value;
+    }
+
+    private void OnDefaultTemperatureChanged(int value)
+    {
+        if (_config?.DefaultLight is { } d) d.Temperature = value;
+    }
+
+    private async Task TestDefault()
+    {
+        if (_config is null) return;
+        // Persist first so the server applies exactly what's on screen, then fire the reset.
+        if (await Api.SaveConfigAsync(_config))
+            await Api.ResetLightsToDefaultAsync(L["toast.lightsReset"]);
+    }
+}

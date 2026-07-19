@@ -2,15 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "scene-maker",
+      "name": "ambient-director",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj", "--no-build"],
+      "runtimeArgs": ["run", "--project", "src/AmbientDirector.Api/AmbientDirector.Api.csproj", "--no-build"],
       "port": 5252
     },
     {
-      "name": "scene-maker-5253",
+      "name": "ambient-director-5253",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj", "--no-build", "--", "--urls", "http://localhost:5253"],
+      "runtimeArgs": ["run", "--project", "src/AmbientDirector.Api/AmbientDirector.Api.csproj", "--no-build", "--", "--urls", "http://localhost:5253"],
       "port": 5253
     }
   ]

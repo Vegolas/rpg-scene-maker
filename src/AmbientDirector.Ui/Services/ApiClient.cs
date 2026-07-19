@@ -1,0 +1,862 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
+using AmbientDirector.Ui.Contracts;
+
+namespace AmbientDirector.Ui.Services;
+
+/// <summary>All communication with the Ambient Director API, with the optional API key attached.</summary>
+public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    private string? _apiKey;
+    private bool _keyLoaded;
+
+    // ---------- api key (persisted in the browser) ----------
+
+    public async Task<string?> GetApiKeyAsync()
+    {
+        if (!_keyLoaded)
+        {
+            _apiKey = await js.InvokeAsync<string?>("localStorage.getItem", "apiKey");
+            _keyLoaded = true;
+        }
+        return _apiKey;
+    }
+
+    public async Task SetApiKeyAsync(string? key)
+    {
+        _apiKey = string.IsNullOrWhiteSpace(key) ? null : key.Trim();
+        _keyLoaded = true;
+        if (_apiKey is null)
+            await js.InvokeVoidAsync("localStorage.removeItem", "apiKey");
+        else
+            await js.InvokeVoidAsync("localStorage.setItem", "apiKey", _apiKey);
+    }
+
+    // ---------- developer mode (persisted per-device in the browser) ----------
+
+    private bool? _devMode;
+
+    /// <summary>Whether developer mode is on for this device (surfaces the Logs tab + diagnostics).</summary>
+    public async Task<bool> GetDevModeAsync()
+    {
+        _devMode ??= await js.InvokeAsync<string?>("localStorage.getItem", "devMode") == "1";
+        return _devMode.Value;
+    }
+
+    public async Task SetDevModeAsync(bool on)
+    {
+        _devMode = on;
+        if (on)
+            await js.InvokeVoidAsync("localStorage.setItem", "devMode", "1");
+        else
+            await js.InvokeVoidAsync("localStorage.removeItem", "devMode");
+        ui.SetDevMode(on); // live-updates the tab bar and any subscribed page
+    }
+
+    // ---------- bottom tab order (persisted per-device in the browser) ----------
+
+    private List<string>? _tabOrder;
+
+    /// <summary>The saved bottom-tab order (tab hrefs) for this device; an empty list when never customized.</summary>
+    public async Task<List<string>> GetTabOrderAsync()
+    {
+        if (_tabOrder is null)
+        {
+            var raw = await js.InvokeAsync<string?>("localStorage.getItem", "tabOrder");
+            _tabOrder = DeserializeList(raw);
+        }
+        return _tabOrder;
+    }
+
+    /// <summary>Forget the custom order so the bar reverts to the built-in tab order.</summary>
+    public async Task ClearTabOrderAsync()
+    {
+        _tabOrder = [];
+        await js.InvokeVoidAsync("localStorage.removeItem", "tabOrder");
+        ui.SetTabOrder(_tabOrder);
+    }
+
+    private static List<string> DeserializeList(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return [];
+        try { return JsonSerializer.Deserialize<List<string>>(raw, Json) ?? []; }
+        catch { return []; }
+    }
+
+    // ---------- UI language (code persisted per-device; strings fetched from the server) ----------
+
+    private string? _lang;
+    private bool _langLoaded;
+
+    /// <summary>The saved UI language code for this device, or null when never chosen (use the default).</summary>
+    public async Task<string?> GetLanguageAsync()
+    {
+        if (!_langLoaded)
+        {
+            _lang = await js.InvokeAsync<string?>("localStorage.getItem", "lang");
+            _langLoaded = true;
+        }
+        return _lang;
+    }
+
+    public async Task SetLanguageAsync(string code)
+    {
+        _lang = code;
+        _langLoaded = true;
+        await js.InvokeVoidAsync("localStorage.setItem", "lang", code);
+    }
+
+    /// <summary>Languages offered by the server's locales folder; empty (silent) when offline.</summary>
+    public async Task<List<LocaleInfo>> GetLocalesAsync() =>
+        await GetAsync<List<LocaleInfo>>("i18n/list") ?? [];
+
+    /// <summary>One language's string table, or null if unknown/offline.</summary>
+    public Task<LocaleDocument?> GetLocaleAsync(string code) =>
+        GetAsync<LocaleDocument?>($"i18n/{Uri.EscapeDataString(code)}");
+
+    // ---------- scenes ----------
+
+    public async Task<List<SceneDto>> GetScenesAsync() =>
+        await GetAsync<List<SceneDto>>("scenes") ?? [];
+
+    public Task<ActiveSceneDto?> GetActiveSceneAsync() => GetAsync<ActiveSceneDto?>("scenes/active");
+
+    /// <summary>Registered lights the scene editor and Lights tab target individually; empty (silent) when offline.</summary>
+    public async Task<List<RegisteredLightInfo>> GetRegisteredLightsAsync() =>
+        await GetAsync<List<RegisteredLightInfo>>("lights/list") ?? [];
+
+    /// <summary>Live bulb state (on/off, mode, brightness, colour/temperature) the Lights tab reflects; null
+    /// (silent) when offline or the light provider isn't configured/reachable, like the other pollers.</summary>
+    public Task<LightStatusDto?> GetLightsStatusAsync() => GetAsync<LightStatusDto?>("lights/status");
+
+    /// <summary>Restore the configured default lighting (the header's reset button). 400s if none is set.
+    /// The success toast text is passed by the caller so it can be localized (ApiClient has no localizer).</summary>
+    public Task<bool> ResetLightsToDefaultAsync(string? okMessage = null) => CommandAsync("lights/default", okMessage);
+
+    public Task<SceneDto?> GetSceneAsync(string id) => GetAsync<SceneDto?>($"scenes/{Uri.EscapeDataString(id)}");
+
+    /// <summary>Upsert a scene; the editor shows the returned error inline / via toast.</summary>
+    public Task<(SceneDto? Result, string? Error)> SaveSceneAsync(string id, SceneEdit edit) =>
+        FetchAsync<SceneDto>(HttpMethod.Put, $"scenes/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteSceneAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"scenes/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    public async Task<ActivationDto?> ActivateSceneAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, $"scenes/{id}/activate");
+            var result = await response.Content.ReadFromJsonAsync<ActivationDto>(Json);
+            ui.SetConnected(true);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return null;
+        }
+    }
+
+    /// <summary>Stop the live scene (default lights + pause music + stop sounds). Returns the per-part
+    /// result like activation; null on a transport failure.</summary>
+    public async Task<ActivationDto?> StopSceneAsync()
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, "scenes/stop");
+            var result = await response.Content.ReadFromJsonAsync<ActivationDto>(Json);
+            ui.SetConnected(true);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return null;
+        }
+    }
+
+    // ---------- fire-and-forget commands (lights, music, sfx) ----------
+
+    public async Task<bool> CommandAsync(string path, string? okMessage = null)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, path);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+            {
+                ui.ReportError(await ExtractProblemAsync(response));
+                return false;
+            }
+            if (okMessage is not null) ui.ReportOk(okMessage);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return false;
+        }
+    }
+
+    // ---------- setup / configuration ----------
+
+    public Task<(LightingConfigDto? Result, string? Error)> GetConfigAsync() =>
+        FetchAsync<LightingConfigDto>(HttpMethod.Get, "setup/config");
+
+    public async Task<bool> SaveConfigAsync(LightingConfigDto config)
+    {
+        var (_, error) = await FetchAsync<LightingConfigDto>(HttpMethod.Put, "setup/config", config);
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<(List<BridgeDto>? Result, string? Error)> DiscoverBridgesAsync() =>
+        FetchAsync<List<BridgeDto>>(HttpMethod.Get, "setup/hue/discover");
+
+    public Task<(HueRegistrationDto? Result, string? Error)> RegisterHueAsync(string bridgeIp) =>
+        FetchAsync<HueRegistrationDto>(HttpMethod.Post, $"setup/hue/register?bridgeIp={Uri.EscapeDataString(bridgeIp)}");
+
+    public Task<(List<HueLightDto>? Result, string? Error)> GetHueLightsAsync(string bridgeIp, string appKey) =>
+        FetchAsync<List<HueLightDto>>(HttpMethod.Get,
+            $"setup/hue/lights?bridgeIp={Uri.EscapeDataString(bridgeIp)}&appKey={Uri.EscapeDataString(appKey)}");
+
+    public Task<(List<DiscoveredTuyaDto>? Result, string? Error)> ScanTuyaAsync() =>
+        FetchAsync<List<DiscoveredTuyaDto>>(HttpMethod.Get, "setup/scan?seconds=8");
+
+    /// <summary>Request with an explicit error channel — the settings wizard shows failures inline.</summary>
+    private async Task<(T? Result, string? Error)> FetchAsync<T>(HttpMethod method, string path, object? body = null)
+    {
+        try
+        {
+            var request = new HttpRequestMessage(method, path);
+            await AddHeadersAsync(request);
+            if (body is not null)
+                request.Content = JsonContent.Create(body, options: Json);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+                return (default, await ExtractProblemAsync(response));
+            return (await response.Content.ReadFromJsonAsync<T>(Json), null);
+        }
+        catch (TaskCanceledException)
+        {
+            return (default, "The request timed out — the device did not answer.");
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (default, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    // ---------- onboarding (first-run wizard) ----------
+
+    /// <summary>First-run onboarding state (show flag + per-step "already done" flags); null (silent)
+    /// when offline or key-gated, so a broken fetch can never trap the panel in the wizard.</summary>
+    public Task<OnboardingDto?> GetOnboardingAsync() => GetAsync<OnboardingDto?>("setup/onboarding");
+
+    /// <summary>Stamp onboarding as done server-side so the wizard never auto-shows again.</summary>
+    public Task<bool> CompleteOnboardingAsync() => CommandAsync("setup/onboarding/done");
+
+    private int? _onboardingStep;
+    private bool _onboardingStepLoaded;
+
+    /// <summary>The wizard step this device was on mid-flight (persisted per-device), or null when the
+    /// wizard isn't mid-flight. Lets the wizard survive the Spotify OAuth full-page round-trip and the
+    /// language-switch re-render, reopening where the user left off.</summary>
+    public async Task<int?> GetOnboardingStepAsync()
+    {
+        if (!_onboardingStepLoaded)
+        {
+            var raw = await js.InvokeAsync<string?>("localStorage.getItem", "onboardingStep");
+            _onboardingStep = int.TryParse(raw, out var v) ? v : null;
+            _onboardingStepLoaded = true;
+        }
+        return _onboardingStep;
+    }
+
+    /// <summary>Remember (or clear, with null) the wizard's current step for this device.</summary>
+    public async Task SetOnboardingStepAsync(int? step)
+    {
+        _onboardingStep = step;
+        _onboardingStepLoaded = true;
+        if (step is null)
+            await js.InvokeVoidAsync("localStorage.removeItem", "onboardingStep");
+        else
+            await js.InvokeVoidAsync("localStorage.setItem", "onboardingStep", step.Value.ToString());
+    }
+
+    // ---------- spotify (music) ----------
+
+    public Task<(SpotifyConfigDto? Result, string? Error)> GetSpotifyConfigAsync() =>
+        FetchAsync<SpotifyConfigDto>(HttpMethod.Get, "setup/spotify/config");
+
+    public async Task<bool> SaveSpotifyConfigAsync(SpotifyConfigDto config)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Put, "setup/spotify/config", config);
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<(List<SpotifyDeviceDto>? Result, string? Error)> GetSpotifyDevicesAsync() =>
+        FetchAsync<List<SpotifyDeviceDto>>(HttpMethod.Get, "setup/spotify/devices");
+
+    public Task<bool> DisconnectSpotifyAsync(string? okMessage = null) =>
+        CommandAsync("setup/spotify/disconnect", okMessage);
+
+    public Task<(List<SpotifyPlaylistDto>? Result, string? Error)> GetSpotifyPlaylistsAsync() =>
+        FetchAsync<List<SpotifyPlaylistDto>>(HttpMethod.Get, "music/playlists");
+
+    public Task<(List<SpotifyTrackDto>? Result, string? Error)> SearchSpotifyTracksAsync(string query) =>
+        FetchAsync<List<SpotifyTrackDto>>(HttpMethod.Get, $"music/search?q={Uri.EscapeDataString(query)}");
+
+    /// <summary>Source-aware playback state (active source + available sources + track info). Silent on
+    /// failure like the other pollers.</summary>
+    public Task<MusicStateDto?> GetMusicStateAsync() => GetAsync<MusicStateDto?>("music/state");
+
+    // ---------- local music library (bring-your-own files) ----------
+
+    public async Task<List<MusicTrackDto>> GetMusicLibraryTracksAsync() =>
+        await GetAsync<List<MusicTrackDto>>("music/library/tracks") ?? [];
+
+    public async Task<List<MusicPlaylistDto>> GetMusicLibraryPlaylistsAsync() =>
+        await GetAsync<List<MusicPlaylistDto>>("music/library/playlists") ?? [];
+
+    /// <summary>Import a file as a new local music track (multipart upload, like sounds).</summary>
+    public async Task<(MusicTrackDto? Result, string? Error)> UploadMusicTrackAsync(IBrowserFile file, string name, string artist)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            // 50 MB matches the server's upload cap.
+            content.Add(new StreamContent(file.OpenReadStream(50L * 1024 * 1024)), "file", file.Name);
+            if (!string.IsNullOrWhiteSpace(name)) content.Add(new StringContent(name), "name");
+            if (!string.IsNullOrWhiteSpace(artist)) content.Add(new StringContent(artist), "artist");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "music/library/import") { Content = content };
+            await AddHeadersAsync(request);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode
+                ? (await response.Content.ReadFromJsonAsync<MusicTrackDto>(Json), null)
+                : (null, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    public Task<(MusicTrackDto? Result, string? Error)> UpdateMusicTrackAsync(string id, string name, string artist) =>
+        FetchAsync<MusicTrackDto>(HttpMethod.Put, $"music/library/tracks/{Uri.EscapeDataString(id)}", new { name, artist });
+
+    public Task<(bool Ok, string? Error)> DeleteMusicTrackAsync(string id) =>
+        DeleteAsync($"music/library/tracks/{Uri.EscapeDataString(id)}");
+
+    public Task<(MusicPlaylistDto? Result, string? Error)> SaveMusicPlaylistAsync(string id, string name, List<string> trackIds) =>
+        FetchAsync<MusicPlaylistDto>(HttpMethod.Put, $"music/library/playlists/{Uri.EscapeDataString(id)}", new { name, trackIds });
+
+    public Task<(bool Ok, string? Error)> DeleteMusicPlaylistAsync(string id) =>
+        DeleteAsync($"music/library/playlists/{Uri.EscapeDataString(id)}");
+
+    // DELETE with a 204 (empty) success body — don't try to parse JSON out of it.
+    private async Task<(bool Ok, string? Error)> DeleteAsync(string path)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, path);
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    /// <summary>URL for a full-page redirect to start the Spotify login (with the API key when set).</summary>
+    public async Task<string> GetSpotifyLoginUrlAsync()
+    {
+        const string path = "setup/spotify/login";
+        return await GetApiKeyAsync() is { } key
+            ? $"{path}?apiKey={Uri.EscapeDataString(key)}"
+            : path;
+    }
+
+    // ---------- assistant (BYOK multi-provider chat) ----------
+
+    /// <summary>Poll the assistant transcript/state; silent on failure like the other pollers. Pass the
+    /// last seen rev — Entries comes back null (no-op) when nothing changed since then.</summary>
+    public Task<AssistantStateDto?> GetAssistantStateAsync(long rev) =>
+        GetAsync<AssistantStateDto>($"assistant/state?rev={rev}");
+
+    /// <summary>Queue a chat message and start a run. Returns the error text on 409 (busy) / 503 (no key)
+    /// so the page can surface it inline rather than swallowing it like a poller.</summary>
+    public async Task<(bool Ok, string? Error)> SendAssistantMessageAsync(string text)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Post, "assistant/send", new { text });
+        return (error is null, error);
+    }
+
+    public Task<bool> StopAssistantAsync() => CommandAsync("assistant/stop");
+
+    public Task<bool> ClearAssistantAsync() => CommandAsync("assistant/clear");
+
+    public Task<(AssistantConfigDto? Result, string? Error)> GetAssistantConfigAsync() =>
+        FetchAsync<AssistantConfigDto>(HttpMethod.Get, "setup/assistant/config");
+
+    public async Task<bool> SaveAssistantConfigAsync(AssistantConfigDto config)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Put, "setup/assistant/config",
+            new { provider = config.Provider, apiKey = config.ApiKey, model = config.Model });
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<bool> DisconnectAssistantAsync(string? okMessage = null) =>
+        CommandAsync("setup/assistant/disconnect", okMessage);
+
+    // ---------- logs ----------
+
+    /// <summary>Recent server log entries (newest first) for the Logs tab; silent on failure like other pollers.</summary>
+    public async Task<List<LogEntryDto>> GetLogsAsync() =>
+        await GetAsync<List<LogEntryDto>>("logs/list") ?? [];
+
+    public Task<bool> ClearLogsAsync(string? okMessage = null) => CommandAsync("logs/clear", okMessage);
+
+    /// <summary>Runtime diagnostics for developer mode; silent on failure like the other pollers.</summary>
+    public Task<DiagnosticsDto?> GetDiagnosticsAsync() => GetAsync<DiagnosticsDto?>("diagnostics");
+
+    // ---------- sounds (soundboard) ----------
+
+    public async Task<List<SoundDto>> GetSoundsAsync() =>
+        await GetAsync<List<SoundDto>>("sounds/list") ?? [];
+
+    /// <summary>Ids of sounds currently playing on the server; silent on failure like other pollers.</summary>
+    public async Task<List<string>> GetPlayingSoundIdsAsync() =>
+        (await GetAsync<SoundStateDto>("sounds/state"))?.Playing ?? [];
+
+    // ---------- sound library (Freesound: BYOK config + search + import) ----------
+
+    /// <summary>Freesound "configured" flag (the token is never echoed). The library browser reads this to
+    /// decide between search and a "connect in Settings" hint.</summary>
+    public Task<(FreesoundConfigDto? Result, string? Error)> GetFreesoundConfigAsync() =>
+        FetchAsync<FreesoundConfigDto>(HttpMethod.Get, "setup/freesound/config");
+
+    public async Task<bool> SaveFreesoundConfigAsync(FreesoundConfigDto config)
+    {
+        var (_, error) = await FetchAsync<JsonNode>(HttpMethod.Put, "setup/freesound/config", new { apiKey = config.ApiKey });
+        if (error is not null)
+        {
+            ui.ReportError(error);
+            return false;
+        }
+        return true;
+    }
+
+    public Task<bool> DisconnectFreesoundAsync(string? okMessage = null) =>
+        CommandAsync("setup/freesound/disconnect", okMessage);
+
+    /// <summary>Search the online sound library (Freesound). The browser shows the error inline (503 until
+    /// a token is configured).</summary>
+    public Task<(SoundSearchDto? Result, string? Error)> SearchSoundLibraryAsync(string query, int page) =>
+        FetchAsync<SoundSearchDto>(HttpMethod.Get,
+            $"sounds/library/search?query={Uri.EscapeDataString(query)}&page={page}");
+
+    /// <summary>Import a library sound by its id (the server downloads the HQ MP3 preview and captures
+    /// author/license). Optional name/category override the library title / leave it uncategorized.</summary>
+    public Task<(SoundDto? Result, string? Error)> ImportLibrarySoundAsync(int id, string? name, string? category) =>
+        FetchAsync<SoundDto>(HttpMethod.Post, "sounds/library/import", new { id, name, category });
+
+    /// <summary>Import a file as a new sound (multipart upload).</summary>
+    public async Task<(SoundDto? Result, string? Error)> UploadSoundAsync(IBrowserFile file, string name, string category)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            // 50 MB matches the server's upload cap.
+            content.Add(new StreamContent(file.OpenReadStream(50L * 1024 * 1024)), "file", file.Name);
+            if (!string.IsNullOrWhiteSpace(name)) content.Add(new StringContent(name), "name");
+            if (!string.IsNullOrWhiteSpace(category)) content.Add(new StringContent(category), "category");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "sounds/import") { Content = content };
+            await AddHeadersAsync(request);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode
+                ? (await response.Content.ReadFromJsonAsync<SoundDto>(Json), null)
+                : (null, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    public Task<(SoundDto? Result, string? Error)> UpdateSoundAsync(string id, string name, string category, double volume, bool loop, string? image) =>
+        FetchAsync<SoundDto>(HttpMethod.Put, $"sounds/{Uri.EscapeDataString(id)}", new { name, category, volume, loop, image });
+
+    public async Task<(bool Ok, string? Error)> DeleteSoundAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"sounds/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    // ---------- images (tile art) ----------
+
+    /// <summary>Upload a cropped tile-art image (multipart); returns its stored file name on success.</summary>
+    public async Task<(string? Id, string? Error)> UploadImageAsync(byte[] bytes, string fileName, string contentType)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var part = new ByteArrayContent(bytes);
+            part.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            content.Add(part, "file", fileName);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "images/upload") { Content = content };
+            await AddHeadersAsync(request);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+                return (null, await ExtractProblemAsync(response));
+
+            var node = await response.Content.ReadFromJsonAsync<JsonNode>(Json);
+            var id = node?["id"]?.GetValue<string>();
+            return string.IsNullOrEmpty(id) ? (null, "Upload succeeded but no image id was returned.") : (id, null);
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Root-relative url for a stored tile-art image, or null when none. <img>/CSS can't send
+    /// the key header, so append it as a query param when set (the GET /images path is protected).</summary>
+    public string? ImageUrl(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        // Leading slash so it resolves against the origin in BOTH an <img src> and a CSS url(): a bare
+        // relative url() inside the --art custom property would otherwise resolve against the stylesheet
+        // folder (/css/…) instead of the document, 404-ing the tile background.
+        var url = $"/images/{Uri.EscapeDataString(id)}";
+        return _apiKey is { } key ? $"{url}?apiKey={Uri.EscapeDataString(key)}" : url;
+    }
+
+    /// <summary>Registered image-search sources (id + display name + attribution) for the art picker; empty
+    /// (silent) when offline, so the picker can still search with the source omitted and no attribution.</summary>
+    public async Task<List<ImageSourceDto>> GetImageSourcesAsync() =>
+        await GetAsync<List<ImageSourceDto>>("images/sources") ?? [];
+
+    /// <summary>Search a source for art; the picker shows the returned error inline. Pass a null/blank
+    /// sourceId to let the server pick the sole registered source.</summary>
+    public Task<(ImageSearchResponseDto? Result, string? Error)> SearchImagesAsync(string? sourceId, string query)
+    {
+        var path = $"images/search?q={Uri.EscapeDataString(query)}";
+        if (!string.IsNullOrWhiteSpace(sourceId))
+            path += $"&source={Uri.EscapeDataString(sourceId)}";
+        return FetchAsync<ImageSearchResponseDto>(HttpMethod.Get, path);
+    }
+
+    /// <summary>Import a picked image by URL server-side; returns its stored file name (same { id } shape as
+    /// UploadImageAsync), which goes straight into the entity's Image.</summary>
+    public async Task<(string? Id, string? Error)> ImportImageAsync(string url)
+    {
+        var (node, error) = await FetchAsync<JsonNode>(HttpMethod.Post, "images/import", new { url });
+        if (error is not null) return (null, error);
+        var id = node?["id"]?.GetValue<string>();
+        return string.IsNullOrEmpty(id) ? (null, "Import succeeded but no image id was returned.") : (id, null);
+    }
+
+    // ---------- tv (player-facing shared display) ----------
+
+    /// <summary>Poll what the shared table screen is showing; silent on failure like the other pollers.
+    /// Works without an API key (the /tv read routes are outside the gate, so a TV device that has no key
+    /// stored polls fine — AddHeadersAsync only attaches the key when one is set on this device).</summary>
+    public Task<TvStateDto?> GetTvStateAsync(long rev) => GetAsync<TvStateDto?>($"tv/state?rev={rev}");
+
+    /// <summary>Push a stored image to the TV, with an optional panel-side label (a GM command — key-gated).</summary>
+    public Task<bool> ShowOnTvAsync(string image, string? label, string? okMessage = null)
+    {
+        var path = $"tv/show?image={Uri.EscapeDataString(image)}";
+        if (!string.IsNullOrWhiteSpace(label))
+            path += $"&label={Uri.EscapeDataString(label.Trim())}";
+        return CommandAsync(path, okMessage);
+    }
+
+    /// <summary>Clear the TV (nothing shown; the display falls back to its idle state).</summary>
+    public Task<bool> ClearTvAsync(string? okMessage = null) => CommandAsync("tv/clear", okMessage);
+
+    /// <summary>Recently pushed TV content, newest first, for the remote's re-push tiles.</summary>
+    public async Task<List<TvRecentItemDto>> GetTvRecentAsync() =>
+        await GetAsync<List<TvRecentItemDto>>("tv/show/recent") ?? [];
+
+    /// <summary>Upload a picked file as-is (full resolution — maps/handouts for the TV, unlike the cropped
+    /// tile art) via the same /images/upload; returns the stored file name. 10 MB matches the server cap.</summary>
+    public async Task<(string? Id, string? Error)> UploadImageFileAsync(IBrowserFile file)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var part = new StreamContent(file.OpenReadStream(10L * 1024 * 1024));
+            if (!string.IsNullOrEmpty(file.ContentType))
+                part.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+            content.Add(part, "file", file.Name);
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "images/upload") { Content = content };
+            await AddHeadersAsync(request);
+
+            using var response = await http.SendAsync(request);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+                return (null, await ExtractProblemAsync(response));
+
+            var node = await response.Content.ReadFromJsonAsync<JsonNode>(Json);
+            var id = node?["id"]?.GetValue<string>();
+            return string.IsNullOrEmpty(id) ? (null, "Upload succeeded but no image id was returned.") : (id, null);
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (null, $"Upload failed: {ex.Message}");
+        }
+    }
+
+    // ---------- events (one-shot triggered effects) ----------
+
+    public async Task<List<EventDto>> GetEventsAsync() =>
+        await GetAsync<List<EventDto>>("events/list") ?? [];
+
+    public Task<EventDto?> GetEventAsync(string id) => GetAsync<EventDto?>($"events/{Uri.EscapeDataString(id)}");
+
+    /// <summary>Upsert an event; the editor shows the returned error inline / via toast.</summary>
+    public Task<(EventDto? Result, string? Error)> SaveEventAsync(string id, EventEdit edit) =>
+        FetchAsync<EventDto>(HttpMethod.Put, $"events/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteEventAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"events/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    public async Task<EventTriggerDto?> TriggerEventAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, $"events/{Uri.EscapeDataString(id)}/trigger");
+            var result = await response.Content.ReadFromJsonAsync<EventTriggerDto>(Json);
+            ui.SetConnected(true);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return null;
+        }
+    }
+
+    /// <summary>Id of the timeline event currently playing (null when none); silent on failure like other pollers.</summary>
+    public async Task<string?> GetRunningEventIdAsync() =>
+        (await GetAsync<EventStateDto>("events/state"))?.RunningId;
+
+    /// <summary>Stop the currently-playing timeline event. Returns true when something was actually stopped.</summary>
+    public async Task<bool> StopEventAsync()
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Post, "events/stop");
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode)
+            {
+                ui.ReportError(await ExtractProblemAsync(response));
+                return false;
+            }
+            var result = await response.Content.ReadFromJsonAsync<EventStopDto>(Json);
+            return result?.Stopped ?? false;
+        }
+        catch (Exception ex)
+        {
+            ReportTransportError(ex);
+            return false;
+        }
+    }
+
+    // ---------- screens (shortcut boards) ----------
+
+    public async Task<List<ScreenDto>> GetScreensAsync() =>
+        await GetAsync<List<ScreenDto>>("screens/list") ?? [];
+
+    /// <summary>Upsert a screen; the editor shows the returned error inline / via toast.</summary>
+    public Task<(ScreenDto? Result, string? Error)> SaveScreenAsync(string id, ScreenEdit edit) =>
+        FetchAsync<ScreenDto>(HttpMethod.Put, $"screens/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteScreenAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"screens/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    // ---------- light fx (reusable effect library) ----------
+
+    public async Task<List<LightFxDto>> GetLightFxAsync() =>
+        await GetAsync<List<LightFxDto>>("lightfx/list") ?? [];
+
+    /// <summary>Upsert a library Light FX; the editor shows the returned error inline / via toast.</summary>
+    public Task<(LightFxDto? Result, string? Error)> SaveLightFxAsync(string id, LightFxEdit edit) =>
+        FetchAsync<LightFxDto>(HttpMethod.Put, $"lightfx/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteLightFxAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"lightfx/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    /// <summary>Start a bounded test-run of an FX (empty light = the configured provider group). Surfaces a
+    /// server error (e.g. no lights configured) via toast.</summary>
+    public Task<bool> TestLightFxAsync(string id, string? light, int seconds)
+    {
+        var path = $"lightfx/{Uri.EscapeDataString(id)}/test?seconds={seconds}";
+        if (!string.IsNullOrWhiteSpace(light))
+            path += $"&light={Uri.EscapeDataString(light)}";
+        return CommandAsync(path);
+    }
+
+    public Task<bool> StopLightFxTestAsync() => CommandAsync("lightfx/test/stop");
+
+    // ---------- plumbing ----------
+
+    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(method, path);
+        await AddHeadersAsync(request);
+        return await http.SendAsync(request);
+    }
+
+    /// <summary>Attach the per-device API key (when set) and the chosen UI language (as X-Ui-Lang) to a
+    /// request, so the server localizes its error/validation messages to match the panel's language.</summary>
+    private async Task AddHeadersAsync(HttpRequestMessage request)
+    {
+        if (await GetApiKeyAsync() is { } key)
+            request.Headers.Add("X-Api-Key", key);
+        if (await GetLanguageAsync() is { } lang)
+            request.Headers.Add("X-Ui-Lang", lang);
+    }
+
+    /// <summary>GET with silent failure — pollers use this so a hiccup only flips the connection dot.</summary>
+    private async Task<T?> GetAsync<T>(string path)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Get, path);
+            ui.SetConnected(true);
+            if (!response.IsSuccessStatusCode) return default;
+            return await response.Content.ReadFromJsonAsync<T>(Json);
+        }
+        catch (Exception)
+        {
+            ui.SetConnected(false);
+            return default;
+        }
+    }
+
+    private static async Task<string> ExtractProblemAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var node = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+            var title = node?["title"]?.GetValue<string>();
+            var detail = node?["detail"]?.GetValue<string>();
+            return (title, detail) switch
+            {
+                (not null, not null) => $"{title}: {detail}",
+                (not null, null) => title,
+                _ => $"HTTP {(int)response.StatusCode}",
+            };
+        }
+        catch
+        {
+            return $"HTTP {(int)response.StatusCode}";
+        }
+    }
+
+    private void ReportTransportError(Exception ex)
+    {
+        ui.SetConnected(false);
+        ui.ReportError($"API unreachable: {ex.Message}");
+    }
+}

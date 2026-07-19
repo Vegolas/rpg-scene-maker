@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.36.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
+    <PackageReference Include="Mscc.GenerativeAI" Version="3.1.0" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
+    <PackageReference Include="OpenAI" Version="2.12.0" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
+    <PackageReference Include="TuyaNet" Version="1.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- UndefineProperties: don't flow this project's PublishProfile (win-x64, used for the installable
+         Windows build) into the referenced WASM UI, which has no such profile — it would only emit a
+         spurious NETSDK1198 "publish profile not found" warning during `dotnet publish`. -->
+    <ProjectReference Include="..\AmbientDirector.Ui\AmbientDirector.Ui.csproj" UndefineProperties="PublishProfile" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shipped UI translations: embedded in the assembly so they are the built-in fallback and can seed
+         the on-disk locales dir (see LocaleService). Remove them from the default Content/None globs first
+         so they aren't double-included. -->
+    <Content Remove="Locales\**" />
+    <None Remove="Locales\**" />
+    <EmbeddedResource Include="Locales\**\*.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>AmbientDirector.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

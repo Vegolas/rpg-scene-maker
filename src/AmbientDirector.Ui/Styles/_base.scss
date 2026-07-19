@@ -1,0 +1,116 @@
+/* ============================================================
+   Base — reset, body, boot splash, error bar, motion
+   ============================================================ */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 500 14px/1.5 var(--font);
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { color: var(--text); }
+
+/* ---------- boot splash ---------- */
+.boot {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  background: var(--bg);
+}
+/* The brand logo already carries the "Ambient Director" wordmark, so it stands in for the
+   old die glyph + title. It breathes gently while the WASM runtime downloads. */
+.boot-logo {
+  width: min(70vw, 360px);
+  height: auto;
+  animation: bootPulse 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 4px 28px rgba(0, 0, 0, .55));
+}
+.boot-text { font: 600 14px/1 var(--font); color: var(--text-muted); letter-spacing: .2px; }
+@keyframes bootPulse {
+  0%, 100% { transform: scale(1);     opacity: .82; }
+  50%      { transform: scale(1.035); opacity: 1;   }
+}
+
+/* ---------- shared page bits ---------- */
+.section-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font: var(--text-label);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: var(--s-6) 0 var(--s-3);
+}
+.section-h .count,
+.page-head .count {
+  font: var(--text-sm);
+  color: var(--text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Page heading row: big title + muted count (replaces the old rune divider). */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin: 0 0 var(--s-4);
+}
+.page-head h1,
+.page-head .page-title { margin: 0; font: var(--text-2xl); color: var(--text); }
+/* An action button in the heading row (e.g. "Ask the assistant") sits at the far right. */
+.page-head .btn { margin-left: auto; align-self: center; }
+
+.hint { color: var(--text-muted); font: var(--text-sm); }
+.empty-note { color: var(--text-muted); text-align: center; padding: var(--s-8) var(--s-4); }
+
+/* ---------- blazor error bar ---------- */
+#blazor-error-ui {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 100;
+  background: var(--danger-soft);
+  border-top: 1px solid var(--danger-border);
+  color: var(--danger);
+  padding: var(--s-3) 2.4rem var(--s-3) var(--s-4);
+  font: var(--text-md);
+}
+#blazor-error-ui .reload { color: var(--danger); text-decoration: underline; }
+#blazor-error-ui .dismiss { position: absolute; right: var(--s-4); top: var(--s-3); cursor: pointer; }
+#blazor-error-ui .dismiss svg { width: 16px; height: 16px; display: block; }
+
+/* ---------- view transitions (tab nav + scene changes) ---------- */
+/* The persistent chrome gets its own snapshots so the page transition can animate
+   the content region without dragging the top bar / rail along with it. */
+.topbar { view-transition-name: topbar; }
+.rail { view-transition-name: rail; }
+.tabbar { view-transition-name: tabbar; }
+
+/* Gated on reduced-motion for safety; durations kept ≤ 250ms per the style guide. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) { animation: vtFadeOut .12s ease both; }
+  ::view-transition-new(root) { animation: vtRiseIn .22s cubic-bezier(.22, 1, .36, 1) both; }
+
+  :root[data-view-transition="scene"]::view-transition-old(root) { animation: vtFadeOut .16s ease both; }
+  :root[data-view-transition="scene"]::view-transition-new(root) { animation: vtFadeIn .22s ease both; }
+}
+
+@keyframes vtFadeOut { to { opacity: 0; } }
+@keyframes vtFadeIn { from { opacity: 0; } }
+@keyframes vtRiseIn { from { opacity: 0; transform: translateY(10px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

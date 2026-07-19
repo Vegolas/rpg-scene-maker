@@ -37,10 +37,10 @@ const LIST_PATH: Record<ListKind, string> = {
 const CACHE_TTL_MS = 15_000;
 
 /**
- * Thin client over the RPG Scene Maker HTTP API. Uses Obsidian's requestUrl so requests
+ * Thin client over the Ambient Director HTTP API. Uses Obsidian's requestUrl so requests
  * bypass CORS (the API sets no CORS headers) and work the same on desktop and mobile.
  */
-export class SceneMakerApi {
+export class AmbientDirectorApi {
   private cache: Partial<Record<ListKind, { at: number; items: Entity[] }>> = {};
 
   constructor(private getSettings: () => ApiSettings) {}

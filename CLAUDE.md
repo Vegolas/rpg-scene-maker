@@ -1,4 +1,4 @@
-# RPG Scene Maker
+# Ambient Director
 
 Local **.NET 10 Minimal API + Blazor WASM touch panel** that switches an RPG table's whole mood
 (lights + music) with one tap, from a Stream Deck, iPad, or any browser. Lights are controlled
@@ -8,7 +8,7 @@ See [README.md](README.md) for the user-facing setup walkthrough (Tuya, Hue, Spo
 
 ## Task tracking
 
-The backlog lives in **GitHub Issues** ([Vegolas/rpg-scene-maker/issues](https://github.com/Vegolas/rpg-scene-maker/issues)),
+The backlog lives in **GitHub Issues** ([Vegolas/ambient-director/issues](https://github.com/Vegolas/ambient-director/issues)),
 not in `roadmap.md`. Issues are the source of truth for what to work on.
 
 - **Labels**: every issue gets an area label (`area: ui`, `area: api`, `area: lights`, `area: music`,
@@ -23,31 +23,31 @@ not in `roadmap.md`. Issues are the source of truth for what to work on.
 ## Projects
 
 Two projects under `src/`; the solution file lives at
-[src/RpgSceneMaker.Api/RpgSceneMaker.slnx](src/RpgSceneMaker.Api/RpgSceneMaker.slnx).
+[src/AmbientDirector.Api/AmbientDirector.slnx](src/AmbientDirector.Api/AmbientDirector.slnx).
 
-- **RpgSceneMaker.Api** — Minimal API. [Program.cs](src/RpgSceneMaker.Api/Program.cs) wires up DI +
+- **AmbientDirector.Api** — Minimal API. [Program.cs](src/AmbientDirector.Api/Program.cs) wires up DI +
   middleware and calls the endpoint groups in `Endpoints/` (`Scene`/`Light`/`Music`/`Sound`/`Event`/`Screen`/`Setup`Endpoints,
   one `Map…Endpoints()` extension method each); wire DTOs live in `Contracts/`, request guards in `Validation/`.
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **RpgSceneMaker.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/RpgSceneMaker.Ui/Components/OnboardingWizard.razor), not a nav tab);
+- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
-  through [ApiClient.cs](src/RpgSceneMaker.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
-  injected `Localizer` ([Localizer.cs](src/RpgSceneMaker.Ui/Services/Localizer.cs)): components read strings by
+  through [ApiClient.cs](src/AmbientDirector.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
+  injected `Localizer` ([Localizer.cs](src/AmbientDirector.Ui/Services/Localizer.cs)): components read strings by
   dotted key (`@L["nav.scenes"]`, `L.Format`, `L.Plural`), the language is a per-device localStorage pref,
   `App.razor` loads strings from `/i18n` before first render, and switching language (Settings → Language)
   swaps the active table + re-renders with no reload. `Palette`/`LightFormat` label helpers return i18n keys
   (not text). **UI chrome icons** are Phosphor Fill
-  SVGs: [`Icon.razor`](src/RpgSceneMaker.Ui/Components/Icon.razor) renders a glyph by semantic name from
-  [`Icons.cs`](src/RpgSceneMaker.Ui/Shared/Icons.cs) (tinted `currentColor`); user-picked scene/sound emoji
-  stay content, and [`Glyph.razor`](src/RpgSceneMaker.Ui/Components/Glyph.razor) shows a user's emoji or falls
+  SVGs: [`Icon.razor`](src/AmbientDirector.Ui/Components/Icon.razor) renders a glyph by semantic name from
+  [`Icons.cs`](src/AmbientDirector.Ui/Shared/Icons.cs) (tinted `currentColor`); user-picked scene/sound emoji
+  stay content, and [`Glyph.razor`](src/AmbientDirector.Ui/Components/Glyph.razor) shows a user's emoji or falls
   back to a chrome icon. The top bar (in
-  [MainLayout.razor](src/RpgSceneMaker.Ui/Layout/MainLayout.razor)) hosts always-visible
-  [QuickControls.razor](src/RpgSceneMaker.Ui/Components/QuickControls.razor): music play/pause + volume
+  [MainLayout.razor](src/AmbientDirector.Ui/Layout/MainLayout.razor)) hosts always-visible
+  [QuickControls.razor](src/AmbientDirector.Ui/Components/QuickControls.razor): music play/pause + volume
   (shown only when Spotify is connected) and a reset-lights button, on every tab.
-  **Styling is SCSS**: sources in [Styles/](src/RpgSceneMaker.Ui/Styles) (partials per concern, tokens in
+  **Styling is SCSS**: sources in [Styles/](src/AmbientDirector.Ui/Styles) (partials per concern, tokens in
   `_tokens.scss`), compiled to `wwwroot/css/app.css` by `AspNetCore.SassCompiler` during `dotnet build` —
   the generated CSS is gitignored, never edit it. The visual language is the **"Control Room" design
   system**: tokens + rules live in [docs/design/](docs/design) (STYLE-GUIDE.md, tokens.css); follow it for
@@ -56,18 +56,18 @@ Two projects under `src/`; the solution file lives at
 ## Build & run
 
 ```powershell
-dotnet build src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj   # builds both (API references UI)
-dotnet run   --project src/RpgSceneMaker.Api                  # serves API + panel on http://localhost:5252
+dotnet build src/AmbientDirector.Api/AmbientDirector.Api.csproj   # builds both (API references UI)
+dotnet run   --project src/AmbientDirector.Api                  # serves API + panel on http://localhost:5252
 ```
 
 Running the API is enough to see the panel — it builds and serves the WASM assets.
 
 ## Architecture (API)
 
-- **`ILightService`** ([ILightService.cs](src/RpgSceneMaker.Api/Services/ILightService.cs)) — light
+- **`ILightService`** ([ILightService.cs](src/AmbientDirector.Api/Services/ILightService.cs)) — light
   abstraction with two implementations: `TuyaLightService` (local TCP via TuyaNet) and
   `HueLightService` (Hue Bridge REST). The provider is chosen per-request in
-  [Program.cs](src/RpgSceneMaker.Api/Program.cs) from `SettingsStore.Current.Provider`. The
+  [Program.cs](src/AmbientDirector.Api/Program.cs) from `SettingsStore.Current.Provider`. The
   `ApplyAsync(LightSettings)` default-interface method maps a scene's light block to power/colour/white.
   A configurable **default state** (`LightingConfig.DefaultLight`) is applied by `GET/POST /lights/default`
   — the panel's always-visible "reset lights" button; set it on the Settings page (400s until then).
@@ -75,12 +75,12 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   (below). `SpotifyClient` wraps the Spotify Web
   API (Authorization Code + PKCE, no client secret) to drive a Spotify Connect device on the LAN;
   `SpotifyStore` persists the Client ID, refresh token and preferred device (in SQLite). The OAuth
-  connect flow lives under `/setup/spotify/*` in [SetupEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SetupEndpoints.cs),
+  connect flow lives under `/setup/spotify/*` in [SetupEndpoints.cs](src/AmbientDirector.Api/Endpoints/SetupEndpoints.cs),
   and the Spotify-specific browser (`/music/playlists`, `/music/search`) still maps straight onto
   `SpotifyClient`; the `/music/*` transport now routes through the `MusicRouter` (below), with
   `SpotifyMusicSource` a thin `IMusicSource` adapter over `SpotifyClient` (left intact).
 - **`IMusicSource` / `MusicRouter` / local music library** — music is **pluggable** (mirroring how
-  `ILightService` abstracts Tuya/Hue): [`IMusicSource`](src/RpgSceneMaker.Api/Services/Music/IMusicSource.cs)
+  `ILightService` abstracts Tuya/Hue): [`IMusicSource`](src/AmbientDirector.Api/Services/Music/IMusicSource.cs)
   (play/pause/resume/next/previous/volume/shuffle/repeat/state, a neutral `MusicState`) has two
   implementations — `SpotifyMusicSource` and `LocalMusicSource` (over `LocalMusicPlayer`). A scoped
   `MusicRouter` picks the source per request: `/music/play?id=` **infers it from the id shape**
@@ -92,8 +92,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   gives a scene the same discriminator (null = infer from `PlayId`). **Local library**:
   `MusicTrack`/`MusicPlaylist` (SQLite, NOCASE ids) + `MusicTrackStore` / `MusicPlaylistStore` /
   `MusicFileStorage` / `MusicImporter` mirror the `Sound*` trio (files at
-  `%LocalAppData%\RpgSceneMaker\music\`, override `Music:Path`) and back `/music/library/*` (tracks +
-  playlists CRUD and a multipart `import`). [`LocalMusicPlayer`](src/RpgSceneMaker.Api/Services/Music/LocalMusicPlayer.cs)
+  `%LocalAppData%\AmbientDirector\music\`, override `Music:Path`) and back `/music/library/*` (tracks +
+  playlists CRUD and a multipart `import`). [`LocalMusicPlayer`](src/AmbientDirector.Api/Services/Music/LocalMusicPlayer.cs)
   (singleton, NAudio, **Windows-only** like `SoundboardPlayer` — its own output device, one stream at a
   time, *not* the soundboard mixer) plays a queue with shuffle + repeat off/track/playlist, advancing at
   each track's natural end. **All output-device creation is one lazy method wrapped in
@@ -104,11 +104,11 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   **concurrently**; each part reports ok/skipped/error independently (activation returns HTTP 207 if any part
   failed). The light half lives in `SceneLightApplier` (per-light entries + legacy "all lights" block,
   starting/stopping `EffectEngine` loops), extracted so `EventActivator` can reuse it.
-- **`EventActivator`** — fires a one-shot **event** (`GameEvent`, [GameEvent.cs](src/RpgSceneMaker.Api/Models/GameEvent.cs)):
+- **`EventActivator`** — fires a one-shot **event** (`GameEvent`, [GameEvent.cs](src/AmbientDirector.Api/Models/GameEvent.cs)):
   a brief light **flash** (jump to a colour, hold `DurationMs`, then restore the live scene's lights via
   `SceneLightApplier`, else the configured default light) and/or **sounds** that *overlay* current playback
   (no `StopAll`, unlike a scene). Light + sound run concurrently and each reports ok/skipped/error (207 if any
-  failed). `/events/*` ([EventEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/EventEndpoints.cs)) covers `list`,
+  failed). `/events/*` ([EventEndpoints.cs](src/AmbientDirector.Api/Endpoints/EventEndpoints.cs)) covers `list`,
   get/put/delete, `trigger`, `stop` and `state`; like `/sounds`, nothing is mapped at the bare `/events` path
   so the panel's Events tab can live there.
 - **`EventTimelineRunner`** — plays an event's optional **timeline** (`GameEvent.Timeline`: sound and light
@@ -123,24 +123,24 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   over the lights). When the timeline touched the lights they are restored afterwards via
   `SceneLightApplier.RestoreLightsAsync` (shared with the flash path). The runner is a singleton but
   `ILightService` is scoped, so each run creates one service scope for its lifetime.
-- **`LightFxStore` / `LightFxTester`** — the reusable **Light FX library** (`LightFx`, [LightFx.cs](src/RpgSceneMaker.Api/Models/LightFx.cs)):
+- **`LightFxStore` / `LightFxTester`** — the reusable **Light FX library** (`LightFx`, [LightFx.cs](src/AmbientDirector.Api/Models/LightFx.cs)):
   a named keyframe sequence (same shape as a "custom" `LightEffect`). Scene lights and event-timeline light
   clips reference one by id via a new `LightEffect.FxId` and `Type == "fx"`, resolved to a materialized "custom"
   effect at apply time in `SceneLightApplier` / `EventTimelineRunner` (once per activation, not per engine tick;
   a missing FX warns and degrades to a static light — `EffectEngine` is untouched). `/lightfx/*`
-  ([LightFxEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/LightFxEndpoints.cs)) covers `list`, put/delete and a
+  ([LightFxEndpoints.cs](src/AmbientDirector.Api/Endpoints/LightFxEndpoints.cs)) covers `list`, put/delete and a
   bounded `{id}/test` + `test/stop` (the `LightFxTester` singleton previews an FX as an `EffectEngine` group for
   a window, then restores via `SceneLightApplier.RestoreLightsAsync`). **Deleting an FX detaches it**: every
   referencing scene light / timeline clip is rewritten in place to embed a "custom" copy of the keyframes (like
   the sound-delete scrub), so nothing dangles. Like `/screens`, there is deliberately no `GET /lightfx/{id}` and
   nothing at the bare `/lightfx` path; the panel's Effects pages live at `/effects` and `/effects/{id}` and read
   the library from `/lightfx/list`.
-- **`ScreenStore`** — persistence for **screens** (`Screen`, [Screen.cs](src/RpgSceneMaker.Api/Models/Screen.cs)):
+- **`ScreenStore`** — persistence for **screens** (`Screen`, [Screen.cs](src/AmbientDirector.Api/Models/Screen.cs)):
   named boards of *shortcut tiles* (`ScreenTile` = a `Kind` of scene/event/sound/music/light-reset, a `Ref`
   — the entity id, or a Spotify URI for music — and a `Label`) that group existing entities onto one
   tap-friendly screen. Purely organizational: a screen owns no light/music/sound state and has no
   `/trigger`; the panel's tiles just call the existing `/scenes`, `/events`, `/sounds`, `/music` and
-  `/lights` endpoints. `/screens/*` ([ScreenEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/ScreenEndpoints.cs))
+  `/lights` endpoints. `/screens/*` ([ScreenEndpoints.cs](src/AmbientDirector.Api/Endpoints/ScreenEndpoints.cs))
   covers `list` and put/delete only — there is deliberately **no** `GET /screens/{id}` (and nothing at the
   bare `/screens`) so full-page loads of the panel's `/screens` and `/screens/{id}` pages fall through to
   `index.html` (the panel reads `/screens/list` and picks a board by id client-side).
@@ -149,7 +149,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   of overlapping "voices", each with its own volume and optional looping) — this is what Kenku FM used to
   do. `SoundStore` persists per-sound metadata (name/category/volume/loop, plus `DurationMs` — measured at
   import, lazily backfilled on `list`; the timeline editor uses it to size clips) in SQLite; `SoundFileStorage`
-  keeps the audio files on disk. `/sounds/*` ([SoundEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SoundEndpoints.cs))
+  keeps the audio files on disk. `/sounds/*` ([SoundEndpoints.cs](src/AmbientDirector.Api/Endpoints/SoundEndpoints.cs))
   covers `list`, `import` (multipart), update, delete, play/stop/stop-all, and `state` (playing ids); a scene
   fires its `SoundEffects` (sound ids) on activation. Deleting a sound also scrubs its id from every scene's
   and event's `SoundEffects` and from event timeline clips, so activations/triggers never warn about a
@@ -162,23 +162,23 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `FreesoundConfig`, **never echoed** — the config endpoints return only `{configured}`). `SoundImporter` is the
   shared import tail (unique id, save, measure `DurationMs`, validate, upsert) reused by both `/sounds/import`
   (multipart) and `/sounds/library/import` (fetch a chosen Freesound preview). `/sounds/library/*`
-  ([SoundEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SoundEndpoints.cs)) adds `search` + `import`; the token is
-  managed over `/setup/freesound/*` ([SetupEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/SetupEndpoints.cs))
+  ([SoundEndpoints.cs](src/AmbientDirector.Api/Endpoints/SoundEndpoints.cs)) adds `search` + `import`; the token is
+  managed over `/setup/freesound/*` ([SetupEndpoints.cs](src/AmbientDirector.Api/Endpoints/SetupEndpoints.cs))
   (`config` get/put + `disconnect`). Upstream failures throw **`FreesoundException`** → 502
   (`error.title.freesound`), classified in `ErrorClassifier` like Hue/Spotify.
 - **`ImageFileStorage` / image search + import (`Services/Images/`)** — entity tile art lives on disk at
-  `%LocalAppData%\RpgSceneMaker\images\` (override `Images:Path`), one file per image, referenced by stored
+  `%LocalAppData%\AmbientDirector\images\` (override `Images:Path`), one file per image, referenced by stored
   file name only; `ImageFileStorage` mirrors `SoundFileStorage` (traversal-guarded names, 10 MB cap). Besides
   the browser `POST /images/upload` (multipart) and `GET /images/{name}` (byte server), the panel can search
   a provider and import a picked image server-side through the **`IImageSearchSource`** seam
-  ([IImageSearchSource.cs](src/RpgSceneMaker.Api/Services/Images/IImageSearchSource.cs)): a source exposes an
+  ([IImageSearchSource.cs](src/AmbientDirector.Api/Services/Images/IImageSearchSource.cs)): a source exposes an
   `Id`/`Name`/English `Attribution`, a `SearchAsync` → `ImageSearchResponseDto`, a `CanFetch(Uri)` host
   allowlist, and a streaming `FetchImageAsync`. The one implementation is `ScryfallImageSource` (typed
   `HttpClient` with the Scryfall-required `User-Agent`/`Accept` set in its ctor) — it hits
   `api.scryfall.com/cards/search?...&unique=art`, maps each card (or each face of a double-faced card) to its
   `art_crop`, caps at 60 hits, treats a 404 as empty results, maps a 400 to `error.imageSearch.badQuery`, and
   memo-caches successful searches for 15 min in `IMemoryCache`. `/images/*`
-  ([ImageEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/ImageEndpoints.cs)) adds `GET /sources` (over the
+  ([ImageEndpoints.cs](src/AmbientDirector.Api/Endpoints/ImageEndpoints.cs)) adds `GET /sources` (over the
   injected `IEnumerable<IImageSearchSource>`), `GET /search?source=&q=`, and `POST /import` ({ url } — fetches
   an allowlisted https URL, re-checks the host after redirects, derives the extension from `Content-Type`
   (URL-ext fallback), enforces the 10 MB cap on both `Content-Length` and the streamed copy, then saves via
@@ -188,7 +188,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 - **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
   (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single image/handout the GM
   has pushed to a shared table screen, a small recent-history list, and a monotonic `rev` for the panel's
-  `/tv/state?rev=` poll. `/tv/*` ([TvEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/TvEndpoints.cs)) covers
+  `/tv/state?rev=` poll. `/tv/*` ([TvEndpoints.cs](src/AmbientDirector.Api/Endpoints/TvEndpoints.cs)) covers
   `state`, `content/current` (streams the current image's bytes via `Results.File`; 404 once cleared/missing),
   `show`/`clear` (GET+POST push commands) and `show/recent`. **Gate split**: only `/tv/show*` + `/tv/clear` are
   in `IsProtectedPath`; `/tv`, `/tv/state` and `/tv/content/current` stay OPEN so a shared player screen never
@@ -199,23 +199,23 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   (= the flag is still null) plus per-step "already configured" hints, and **auto-completes for upgrades** (if
   lights/Spotify/local-music are already set up but the flag is null, it stamps done so long-time users never see
   the wizard); `GET|POST /setup/onboarding/done` stamps it via `SettingsStore.MarkOnboardingDone()`. The UI is
-  [`OnboardingWizard.razor`](src/RpgSceneMaker.Ui/Components/OnboardingWizard.razor), reusing the Settings forms;
+  [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), reusing the Settings forms;
   every step is skippable, and Settings has a "Run setup wizard" button that reopens the overlay locally without
   clearing the flag.
-- **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/RpgSceneMaker.Api/Logging/InMemoryLogStore.cs)) —
+- **`InMemoryLogStore`** ([InMemoryLogStore.cs](src/AmbientDirector.Api/Logging/InMemoryLogStore.cs)) —
   bounded ring buffer of recent log entries, fed by `InMemoryLoggerProvider` (our logs at Information,
   everything else at Warning+) and surfaced by `/logs/list` + the panel's Logs tab. The error middleware
   logs every caught failure here.
-- **`LocaleService`** ([LocaleService.cs](src/RpgSceneMaker.Api/Services/LocaleService.cs)) — serves the
+- **`LocaleService`** ([LocaleService.cs](src/AmbientDirector.Api/Services/LocaleService.cs)) — serves the
   panel's **UI translations**. Each language is a JSON file (`<code>.json`, e.g. `en`/`pl`) in the on-disk
-  locales dir (`%LocalAppData%\RpgSceneMaker\locales\`, override `Locales:Path`), read on demand so a
+  locales dir (`%LocalAppData%\AmbientDirector\locales\`, override `Locales:Path`), read on demand so a
   community/agent edit needs no restart. `en.json`+`pl.json` also ship **embedded** in the assembly: seeded to
   disk on first run (missing files only, never clobbering edits). For these shipped codes `Get` **merges per
   key** — the embedded strings are the base and the on-disk file overlays them (disk wins key-by-key) — so
   community edits are preserved while newly shipped keys always appear even when the on-disk file was seeded
   by an older build (a stale file can't hide a new key), and a missing/broken file still can't blank the UI
   (embedded only). Community languages with no embedded counterpart are served from disk as-is.
-  `/i18n/*` ([LocaleEndpoints.cs](src/RpgSceneMaker.Api/Endpoints/LocaleEndpoints.cs))
+  `/i18n/*` ([LocaleEndpoints.cs](src/AmbientDirector.Api/Endpoints/LocaleEndpoints.cs))
   covers `list` and `{code}` (GET only); like `/screens` there is nothing at bare `/i18n`. The panel's
   `Localizer` fetches English + the active language and falls back to English per missing key. **Server-side
   error/validation messages are localized too** (via the `Errors/` layer below), against the same locale
@@ -225,9 +225,9 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
 - **Error localization (`Errors/`)** — user-facing failures carry a stable, machine-readable code so the
   message can be localized and consumers (Stream Deck/MCP/tests) can branch on it. Validation and endpoints
   throw a code-carrying `ValidationException` (400) / `NotConfiguredException` (503)
-  ([AppExceptions.cs](src/RpgSceneMaker.Api/Errors/AppExceptions.cs), both implementing `IErrorCode` with a
+  ([AppExceptions.cs](src/AmbientDirector.Api/Errors/AppExceptions.cs), both implementing `IErrorCode` with a
   dotted `error.*` `Code` + interpolation `Args`; a `CtxRef` arg is itself a localizable "which light/effect"
-  fragment). [`ErrorClassifier`](src/RpgSceneMaker.Api/Errors/ErrorClassifier.cs) maps every exception →
+  fragment). [`ErrorClassifier`](src/AmbientDirector.Api/Errors/ErrorClassifier.cs) maps every exception →
   (HTTP status, title key), shared by the error middleware and the activators. The middleware localizes the
   ProblemDetails `title`/`detail` via `LocaleService.Localize` and emits `code`/`args` extensions; server logs
   stay English (`Exception.Message` renders English from the embedded `en.json` via `ErrorMessages`, guarded
@@ -236,7 +236,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   with a new `error.*` code and add that key to `en.json` **and** `pl.json`; for a brand-new exception *type*,
   add a `switch` arm to `ErrorClassifier` (not the middleware).
 - **`SceneStore` / `SettingsStore`** — persistence (see below).
-- **`AiToolService`** ([AiToolService.cs](src/RpgSceneMaker.Api/Services/Ai/AiToolService.cs)) — the shared
+- **`AiToolService`** ([AiToolService.cs](src/AmbientDirector.Api/Services/Ai/AiToolService.cs)) — the shared
   AI **tool façade** (a singleton) behind both AI surfaces (MCP + the assistant): full CRUD + live control
   over scenes, events, **screens** and Light FX; **Spotify music transport** (`play_music`/`pause_music`/
   `resume_music`/`next_track`/`previous_track`/`set_music_volume`/`set_music_shuffle`/`set_music_repeat`);
@@ -250,14 +250,14 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   and resolves per call (the `EventTimelineRunner`/`LightFxTester` pattern; music/lights-status use a
   `WithSpotifyAsync`/scoped `ILightService` helper), while the singleton `SoundboardPlayer` needs no scope;
   `AiJson` gives it a `JsonSerializerDefaults.Web` options so tool JSON matches the wire exactly. The FX
-  detach-on-delete logic is factored into `LightFxDetacher` ([LightFxDetacher.cs](src/RpgSceneMaker.Api/Services/LightFxDetacher.cs))
+  detach-on-delete logic is factored into `LightFxDetacher` ([LightFxDetacher.cs](src/AmbientDirector.Api/Services/LightFxDetacher.cs))
   so the endpoint and the façade delete FX identically. `update_sound` deliberately edits only name/category/
   volume/loop (never the tile art or file); there is deliberately **no** `delete_sound` op (it would have to
   replicate the endpoint's scene/event/timeline scrub).
 - **MCP server** — `ModelContextProtocol.AspNetCore` (stateless streamable HTTP) mapped at **`/mcp`**
   (`AddMcpServer().WithHttpTransport(o => o.Stateless = true)` + `MapMcp("/mcp")` in
-  [Program.cs](src/RpgSceneMaker.Api/Program.cs), before `MapFallbackToFile`). The 43 tools
-  ([McpTools.cs](src/RpgSceneMaker.Api/Services/Ai/McpTools.cs)) are thin `[McpServerTool]` adapters over
+  [Program.cs](src/AmbientDirector.Api/Program.cs), before `MapFallbackToFile`). The 43 tools
+  ([McpTools.cs](src/AmbientDirector.Api/Services/Ai/McpTools.cs)) are thin `[McpServerTool]` adapters over
   `AiToolService`, grouped into tool-type classes by domain (scene/event/screen/lightFx/music/sound/library),
   each registered with a `.WithTools<…>()` call in Program.cs (upserts take the typed entity so schemas
   auto-generate from the models). Point Claude Code / Claude Desktop here; it is behind the optional API-key
@@ -266,14 +266,14 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   the build if the two name sets ever diverge.
 - **`AssistantService` / `AssistantStore` / `IAssistantProvider`** — the in-panel **BYOK assistant**, which
   runs against **any of three backends** (Anthropic / OpenAI / Gemini), one active at a time. `AssistantStore`
-  ([AssistantStore.cs](src/RpgSceneMaker.Api/Services/AssistantStore.cs)) persists the active `provider` +
+  ([AssistantStore.cs](src/AmbientDirector.Api/Services/AssistantStore.cs)) persists the active `provider` +
   API key + model in SQLite via `/setup/assistant/*` (`AssistantConfig` single row; the key is **never
   echoed** — endpoints return only `{provider, configured, model}`). `AssistantService`
-  ([AssistantService.cs](src/RpgSceneMaker.Api/Services/Ai/AssistantService.cs), a singleton) runs a single
+  ([AssistantService.cs](src/AmbientDirector.Api/Services/Ai/AssistantService.cs), a singleton) runs a single
   in-memory chat session as a **provider-agnostic** non-streaming agentic tool loop: it owns the transcript,
   history and cancel/busy state, keeps history in a neutral block model
-  ([Providers/AssistantChat.cs](src/RpgSceneMaker.Api/Services/Ai/Providers/AssistantChat.cs)), and delegates
-  each model turn to the configured [`IAssistantProvider`](src/RpgSceneMaker.Api/Services/Ai/Providers/IAssistantProvider.cs)
+  ([Providers/AssistantChat.cs](src/AmbientDirector.Api/Services/Ai/Providers/AssistantChat.cs)), and delegates
+  each model turn to the configured [`IAssistantProvider`](src/AmbientDirector.Api/Services/Ai/Providers/IAssistantProvider.cs)
   (one adapter each — `AnthropicProvider` / `OpenAiProvider` / `GeminiProvider` — selected per run by
   `AssistantConfig.Provider`, using the official `Anthropic`, `OpenAI` and `Mscc.GenerativeAI` SDKs). Tools
   come from `AssistantTools` as provider-neutral `AiToolDefinition`s (each adapter maps them to its SDK's tool
@@ -284,9 +284,9 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   first access) so it survives a server restart; `clear` wipes it permanently.
 - **Installable Windows build (#75)** — [release-win.yml](.github/workflows/release-win.yml) cross-publishes
   (from an ubuntu runner) a self-contained, single-file **win-x64** exe via the
-  [`win-x64` publish profile](src/RpgSceneMaker.Api/Properties/PublishProfiles/win-x64.pubxml) on a `v*` tag (or
-  manual dispatch), packaging `RpgSceneMaker.Api.exe` + the trimmed Blazor `wwwroot` + starter `scenes.json`
-  into `rpg-scene-maker-win-x64.zip` as a GitHub release. Program.cs recognizes this build by an **empty
+  [`win-x64` publish profile](src/AmbientDirector.Api/Properties/PublishProfiles/win-x64.pubxml) on a `v*` tag (or
+  manual dispatch), packaging `AmbientDirector.Api.exe` + the trimmed Blazor `wwwroot` + starter `scenes.json`
+  into `ambient-director-win-x64.zip` as a GitHub release. Program.cs recognizes this build by an **empty
   entry-assembly `Location`** (`isPublishedExe`): it then roots the content root at `AppContext.BaseDirectory`
   (so it runs from any launch dir) and defaults `Launch:OpenBrowser` on. The everyday PR build
   ([build.yml](.github/workflows/build.yml)) is untouched.
@@ -297,9 +297,9 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   *System → Website* action works without a plugin. Keep this when adding command routes.
 - **Errors → status codes**: failures are thrown as typed exceptions (`SpotifyException`, `HueException`,
   `ValidationException`/`NotConfiguredException`, socket/timeout, etc.), classified to an HTTP status + title
-  key by [`ErrorClassifier`](src/RpgSceneMaker.Api/Errors/ErrorClassifier.cs), and rendered as localized
+  key by [`ErrorClassifier`](src/AmbientDirector.Api/Errors/ErrorClassifier.cs), and rendered as localized
   Problem responses (+ a `code`/`args` extension) by the first middleware in
-  [Program.cs](src/RpgSceneMaker.Api/Program.cs). When adding a new failure mode, throw a code-carrying
+  [Program.cs](src/AmbientDirector.Api/Program.cs). When adding a new failure mode, throw a code-carrying
   `ValidationException`/`NotConfiguredException` (with an `error.*` key added to `en.json`+`pl.json`) rather
   than returning ad-hoc error bodies; for a new exception *type*, add a `switch` arm to `ErrorClassifier`. See
   the error-localization notes under `LocaleService` above.
@@ -307,16 +307,16 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` — plus the TV **push** commands
   `/tv/show*` and `/tv/clear` (the rest of the player-facing `/tv` surface stays open, see `TvState`) — require it
   (`X-Api-Key` header or `?apiKey=`; the Spotify OAuth callback is exempt). The panel stores it in browser
-  localStorage. Keep new protected prefixes in `IsProtectedPath` in [Program.cs](src/RpgSceneMaker.Api/Program.cs).
+  localStorage. Keep new protected prefixes in `IsProtectedPath` in [Program.cs](src/AmbientDirector.Api/Program.cs).
 - **DTOs are duplicated**, not shared: the API's wire DTOs live in `Contracts/` and the UI keeps its own
-  copies in [its own `Contracts/`](src/RpgSceneMaker.Ui/Contracts) (there is no shared contracts project).
+  copies in [its own `Contracts/`](src/AmbientDirector.Ui/Contracts) (there is no shared contracts project).
   If you change an API DTO, update the matching UI DTO by hand.
 
 ## Persistence
 
 Scenes and lighting settings live in **SQLite via EF Core**, not appsettings.json. The DB is at
-`%LocalAppData%\RpgSceneMaker\rpg-scene-maker.db` (override with `Database:Path`). Context:
-[AppDbContext.cs](src/RpgSceneMaker.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
+`%LocalAppData%\AmbientDirector\ambient-director.db` (override with `Database:Path`). Context:
+[AppDbContext.cs](src/AmbientDirector.Api/Data/AppDbContext.cs). Tables: `Scenes` (Light/Music stored
 as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids `NOCASE`),
 `MusicTracks`/`MusicPlaylists` (local music library; playlist `TrackIds` a JSON column; ids `NOCASE`), `Events`
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
@@ -328,10 +328,10 @@ and a single-row
 `AssistantConversation` (the in-panel assistant's persisted transcript + history, each a JSON string). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.
 
-Sound-effect **audio files** live on disk, not in the DB, at `%LocalAppData%\RpgSceneMaker\sounds\`
+Sound-effect **audio files** live on disk, not in the DB, at `%LocalAppData%\AmbientDirector\sounds\`
 (override with `Sounds:Path`); each `Sound` row references its file by name via `SoundFileStorage`.
 `Scene.SoundEffects` (a `List<string>` JSON column) holds the ids of sounds a scene fires on activation.
-Local **music files** live alongside at `%LocalAppData%\RpgSceneMaker\music\` (override `Music:Path`),
+Local **music files** live alongside at `%LocalAppData%\AmbientDirector\music\` (override `Music:Path`),
 one file per `MusicTrack` via `MusicFileStorage`.
 
 `appsettings.json` holds deployment config only: `Urls`, `Security:ApiKey`, `Database:Path`, `Sounds:Path`,
@@ -341,8 +341,8 @@ on for the installable exe, off under `dotnet run`).
 ### Changing the schema — create a migration
 
 Any change to `AppDbContext`, the entities
-([LightingConfig.cs](src/RpgSceneMaker.Api/Data/LightingConfig.cs),
-[Scene.cs](src/RpgSceneMaker.Api/Models/Scene.cs)), or their `OnModelCreating` mapping **requires a new
+([LightingConfig.cs](src/AmbientDirector.Api/Data/LightingConfig.cs),
+[Scene.cs](src/AmbientDirector.Api/Models/Scene.cs)), or their `OnModelCreating` mapping **requires a new
 migration** — the app only applies migrations, it never auto-creates tables from the model. After
 editing the model, run from the API project:
 
@@ -356,6 +356,6 @@ hand-edit a committed migration; add a new one instead.
 
 ### Legacy import
 
-On first run with an empty DB, [LegacyImporter.cs](src/RpgSceneMaker.Api/Data/LegacyImporter.cs) imports
+On first run with an empty DB, [LegacyImporter.cs](src/AmbientDirector.Api/Data/LegacyImporter.cs) imports
 the old `scenes.json` and `settings.local.json` once, then never reads them again. `scenes.json` also
 serves as the starter scene template on a fresh clone.

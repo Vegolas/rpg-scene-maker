@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../AmbientDirector.Ui/AmbientDirector.Ui.csproj" />
+  <Project Path="AmbientDirector.Api.csproj" />
+  <Project Path="../AmbientDirector.Tests/AmbientDirector.Tests.csproj" />
+</Solution>

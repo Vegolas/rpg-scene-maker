@@ -1,0 +1,169 @@
+@page "/screens"
+@implements IDisposable
+@inject ApiClient Api
+@inject UiState Ui
+@inject ViewTransition Vt
+@inject Localizer L
+
+<PageTitle>Ambient Director — @L["screens.title"]</PageTitle>
+
+<div class="page-head">
+    <h1>@L["screens.title"]</h1>
+    @if (_screens is not null)
+    {
+        <span class="count">@L.Plural("screens.savedCount", _screens.Count)</span>
+    }
+</div>
+
+@if (_creating)
+{
+    <div class="panel">
+        <div class="emoji-row">
+            @foreach (var e in Palette.Emojis)
+            {
+                <button class="emoji-pick @(e == _emoji ? "picked" : "")" @onclick="() => ToggleEmoji(e)">@e</button>
+            }
+        </div>
+        <div class="field" style="margin-top:1rem;margin-bottom:0">
+            <label for="screen-label">@L["screens.nameLabel"]</label>
+            <input id="screen-label" type="text" value="@_label" @oninput="e => _label = e.Value?.ToString() ?? string.Empty"
+                   placeholder='@L["screens.namePlaceholder"]' />
+        </div>
+        <p class="hint" style="margin-top:0.6rem">@L["screens.createHint"]</p>
+        <ArtField @bind-Image="_image" />
+        <div class="btn-row" style="margin-top:0.6rem">
+            <button class="btn btn--primary" @onclick="Create" disabled="@_busy">@L["screens.createBtn"]</button>
+            <button class="btn" @onclick="() => _creating = false" disabled="@_busy">@L["common.cancel"]</button>
+        </div>
+    </div>
+}
+
+@if (_screens is null)
+{
+    <p class="empty-note">@L["screens.loading"]</p>
+}
+else
+{
+    var shown = _screens.Where(ScreenMatches).ToList();
+    @if (_screens.Count == 0 && !_creating)
+    {
+        <p class="empty-note">@L["screens.emptyNote"]</p>
+    }
+    <div class="scene-grid">
+        @foreach (var (screen, index) in shown.Select((s, i) => (s, i)))
+        {
+            var (emoji, label) = SceneNaming.SplitName(screen.Name, "", screen.Id);
+            var artUrl = Api.ImageUrl(screen.Image);
+            var hasArt = artUrl is not null;
+            <button class="scene-card @(hasArt ? "art" : "")"
+                    style="animation-delay:@(index * 55)ms;@(hasArt ? $" --art:url('{artUrl}');" : "")"
+                    @onclick="() => Open(screen.Id)">
+                @if (hasArt)
+                {
+                    <span class="scene-art"></span>
+                }
+                <Glyph Emoji="@emoji" Fallback="screens" />
+                <span class="scene-name">@label</span>
+                <span class="screen-count">@TileCount(screen)</span>
+            </button>
+        }
+        @if (!Searching)
+        {
+            <button class="scene-card ghost" @onclick="NewScreen">
+                <span class="scene-emoji"><Icon Name="add" /></span>
+                <span class="scene-name">@L["screens.newScreen"]</span>
+            </button>
+        }
+    </div>
+    @if (Searching && shown.Count == 0)
+    {
+        <p class="empty-note">@L.Format("screens.noMatch", Ui.SearchQuery)</p>
+    }
+    else if (_screens.Count > 0)
+    {
+        <p class="hint" style="margin-top:1rem">@L["screens.tapHint"]</p>
+    }
+}
+
+@code {
+    private List<ScreenDto>? _screens;
+    private bool _creating;
+    private bool _busy;
+    private string _emoji = "";
+    private string _label = "";
+    private string? _image;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Ui.SearchChanged += OnSearchChanged;
+        await Api.GetApiKeyAsync(); // cache the key so tile-art urls carry it
+        _screens = await Api.GetScreensAsync();
+    }
+
+    private bool Searching => !string.IsNullOrWhiteSpace(Ui.SearchQuery);
+
+    // Match the header search against the board's display label and its id.
+    private bool ScreenMatches(ScreenDto screen)
+    {
+        var q = Ui.SearchQuery;
+        if (string.IsNullOrWhiteSpace(q)) return true;
+        var (_, label) = SceneNaming.SplitName(screen.Name, "", screen.Id);
+        return label.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || screen.Id.Contains(q, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Ui.SearchChanged -= OnSearchChanged;
+
+    private string TileCount(ScreenDto s)
+    {
+        // "break" tiles are layout markers, not shortcuts — don't count them.
+        var n = s.Tiles?.Count(t => t.Kind != "break") ?? 0;
+        return L.Plural("screens.tileCount", n);
+    }
+
+    private Task Open(string id) => Vt.NavigateAsync($"screens/{id}");
+
+    private void NewScreen()
+    {
+        _creating = true;
+        _emoji = "";
+        _label = "";
+        _image = null;
+    }
+
+    private void ToggleEmoji(string e) => _emoji = _emoji == e ? "" : e;
+
+    private string ComposedName =>
+        string.IsNullOrEmpty(_emoji) ? _label.Trim() : $"{_emoji} {_label.Trim()}";
+
+    private async Task Create()
+    {
+        if (string.IsNullOrWhiteSpace(_label))
+        {
+            Ui.ReportError(L["screens.toast.nameFirst"]);
+            return;
+        }
+        var id = SceneNaming.MakeUnique(SceneNaming.Slugify(_label), _screens?.Select(s => s.Id).ToList() ?? []);
+        if (string.IsNullOrEmpty(id))
+        {
+            Ui.ReportError(L["screens.toast.badId"]);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            // Persist an empty board, then drop straight into it to arrange the shortcuts.
+            var (_, error) = await Api.SaveScreenAsync(id, new ScreenEdit { Id = id, Name = ComposedName, Image = _image });
+            if (error is not null)
+            {
+                Ui.ReportError(error);
+                return;
+            }
+            await Vt.NavigateAsync($"screens/{id}");
+        }
+        finally { _busy = false; }
+    }
+}

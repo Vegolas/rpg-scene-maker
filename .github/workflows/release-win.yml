@@ -35,12 +35,12 @@ jobs:
 
       # Publishing the API project also builds + trims the referenced Blazor WASM UI into wwwroot.
       - name: Publish (win-x64, single-file, self-contained)
-        run: dotnet publish src/RpgSceneMaker.Api/RpgSceneMaker.Api.csproj -p:PublishProfile=win-x64 -o publish/win-x64
+        run: dotnet publish src/AmbientDirector.Api/AmbientDirector.Api.csproj -p:PublishProfile=win-x64 -o publish/win-x64
 
       # Smoke-check the artifact actually built before packaging/releasing (the brief's Test-Path check).
       - name: Verify artifact
         run: |
-          test -f publish/win-x64/RpgSceneMaker.Api.exe || { echo "::error::RpgSceneMaker.Api.exe missing"; exit 1; }
+          test -f publish/win-x64/AmbientDirector.Api.exe || { echo "::error::AmbientDirector.Api.exe missing"; exit 1; }
           test -f publish/win-x64/wwwroot/index.html    || { echo "::error::wwwroot/index.html missing"; exit 1; }
           test -f publish/win-x64/scenes.json           || { echo "::error::scenes.json missing"; exit 1; }
           echo "Artifact contents:"; ls -la publish/win-x64
@@ -48,16 +48,16 @@ jobs:
       - name: Package zip
         run: |
           cd publish/win-x64
-          zip -r ../../rpg-scene-maker-win-x64.zip .
+          zip -r ../../ambient-director-win-x64.zip .
           cd ../..
-          ls -la rpg-scene-maker-win-x64.zip
+          ls -la ambient-director-win-x64.zip
 
       # Always keep the zip on the run so a manual (tagless) build is still downloadable.
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rpg-scene-maker-win-x64
-          path: rpg-scene-maker-win-x64.zip
+          name: ambient-director-win-x64
+          path: ambient-director-win-x64.zip
 
       # Create the GitHub release on a v* tag push, or on a manual run that supplied a tag.
       - name: Create GitHub release
@@ -66,11 +66,11 @@ jobs:
         with:
           draft: false
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          name: RPG Scene Maker ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-          files: rpg-scene-maker-win-x64.zip
+          name: Ambient Director ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          files: ambient-director-win-x64.zip
           body: |
-            Windows build of RPG Scene Maker. Download **rpg-scene-maker-win-x64.zip**, unzip it anywhere,
-            and double-click **RpgSceneMaker.Api.exe** — the panel opens in your browser and a guided first-run
+            Windows build of Ambient Director. Download **ambient-director-win-x64.zip**, unzip it anywhere,
+            and double-click **AmbientDirector.Api.exe** — the panel opens in your browser and a guided first-run
             setup walks you through lights, music and the rest. No .NET install required.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
