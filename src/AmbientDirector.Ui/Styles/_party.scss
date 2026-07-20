@@ -48,28 +48,34 @@
   border-radius: 1.6cqh;
 }
 
-.bparty__grid {
+/* Vertical stack of equal-height hero cards filling the element box (the #120 design's versus/left column). */
+.bparty__list {
   flex: 1 1 auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(24cqw, 1fr));
-  gap: 1.6cqw;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  gap: 1.6cqh;
+  min-height: 0;
   overflow: hidden;
 }
 
+/* One hero card: portrait LEFT, name + counter rows in a column to its right (design "TV Board" hero card).
+   Solid surface (#1C2129 / #2E3542) like the mock — the party column reads as an opaque panel, not floating
+   translucently over board art. */
 .bparty__player {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
-  flex-direction: column;
-  gap: 1cqh;
-  min-width: 0;
+  flex-direction: row;
+  gap: 1.6cqw;
+  overflow: hidden;
   padding: 1.4cqh 1.4cqw;
-  background: rgba(0, 0, 0, .45);
-  border: 1px solid rgba(255, 255, 255, .10);
+  background: #1C2129;
+  border: 1px solid #2E3542;
   border-radius: 1.8cqh;
 }
 .bparty__portrait {
-  width: 100%;
-  aspect-ratio: 1;
+  flex: 0 0 26%;               /* ~152/568 of the card, matching the mock; stretches to card height */
+  align-self: stretch;
   border-radius: 1.4cqh;
   overflow: hidden;
   background: rgba(255, 255, 255, .06);
@@ -80,36 +86,50 @@
 }
 .bparty__initial {
   font-weight: 800;
-  font-size: 9cqh;
+  font-size: 7cqh;
   color: rgba(255, 255, 255, .82);
 }
+/* The right column: name pinned to the top, counter rows spread down the remaining height. */
+.bparty__info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1cqh;
+}
 .bparty__pname {
-  font-weight: 700;
-  font-size: 3.4cqh;
+  font-weight: 800;
+  font-size: 3cqh;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, .6); /* legible over any board art */
 }
 .bparty__crows {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  justify-content: space-evenly;  /* spread rows down the card like the mock's repeat(4,1fr) grid */
   gap: .8cqh;
+  min-height: 0;
 }
 .bparty__crow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.2cqw;
+  justify-content: flex-start;    /* label then pips, left-aligned (design), not pushed apart */
+  gap: 1.6cqw;
   line-height: 1;
 }
+/* Fixed-ish label column so pips line up across a card's rows (design's 74px label). em tracks the label's own
+   size, so it scales with the stage. Scoped to the per-row crows (party + enemies), NOT the table-strip chips. */
+.bparty__crow > .bparty__label,
+.benemies__crow > .bparty__label { flex: 0 0 auto; min-width: 4.5em; }
 .bparty__label {
   font-weight: 800;
   font-size: 2.1cqh;
   letter-spacing: .05em;
   text-transform: uppercase;
-  color: rgba(238, 242, 248, .85);
+  color: #8a94a6;                 /* muted track label (design) */
 }
 .bparty__num {
   font-weight: 700;
@@ -119,15 +139,23 @@
 .bparty__pips {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: .8cqw;
 }
+/* Per-track pips: empty = dark hollow (design #12151B / #2E3542), filled = the track colour the renderer set
+   in --pip (HP/Stress/Armor/Hope/Fear; soft neutral for unknown tracks). */
 .bparty__pip {
   width: 1.9cqh;
   height: 1.9cqh;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .22); /* empty */
+  box-sizing: border-box;
+  background: #12151B;
+  border: 1px solid #2E3542;
 }
-.bparty__pip.is-on { background: rgba(255, 255, 255, .92); } /* filled */
+.bparty__pip.is-on {
+  background: var(--pip, #eef2f8);
+  border-color: var(--pip, #eef2f8);
+}
 
 /* ---- enemies board element — BoardCanvas kind="enemies" (container units, lives here beside bparty
    because it is the same live-roster idiom). A vertical stack of enemy cards; the spotlight (boss) card is
@@ -194,20 +222,12 @@
 .benemies__crow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.2cqw;
+  justify-content: flex-start;    /* label then pips, left-aligned (design) */
+  gap: 1.6cqw;
   line-height: 1;
 }
-/* Enemy pips are red (content colour from the design), reusing the shared .bparty__pip markup emitted by
-   BoardCanvas's counterValue fragment — so only the colours change, sizing stays consistent with bparty. */
-.benemies .bparty__pip {
-  background: #12151B;
-  border: 1px solid #2E3542;
-}
-.benemies .bparty__pip.is-on {
-  background: #FF4D2E;
-  border-color: #FF4D2E;
-}
+/* Enemy pips reuse the shared .bparty__pip markup + per-track --pip colouring (design: an enemy's HP/Stress
+   read the same as a hero's). The spotlight red lives only on the card border, chip and name — not the pips. */
 
 /* ---- (b) panel tracker (Party.razor) + editor (PartyEditor.razor) ---- */
 

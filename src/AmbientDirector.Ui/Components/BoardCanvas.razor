@@ -14,14 +14,15 @@
         // One counter's value: a row of pips (dots, filled up to Value) for a "pips"/small-bounded counter, else
         // tabular-nums text (Value, or Value/Max when a max is set). Hoisted above the kind branches so BOTH the
         // party element (table strip + each player's rows) AND the enemies element (each enemy's rows) share the
-        // one fragment; sized in container units so it scales with the stage.
+        // one fragment; sized in container units so it scales with the stage. Filled pips are tinted per track by
+        // label (the #120 design's HP/Stress/Armor/Hope palette) via a `--pip` custom property the CSS reads.
         RenderFragment<TvPartyCounterDto> counterValue = c =>
         @<span class="bparty__val">
             @if (IsPips(c))
             {
                 var pipMax = Math.Min(c.Max ?? 0, PipCap);
                 var filled = Math.Clamp(c.Value, 0, pipMax);
-                <span class="bparty__pips">
+                <span class="bparty__pips" style="--pip:@PipColor(c.Label)">
                     @for (var i = 0; i < pipMax; i++)
                     {
                         <span class="bparty__pip@(i < filled ? " is-on" : "")"></span>
@@ -63,7 +64,10 @@
                                 }
                             </div>
                         }
-                        <div class="bparty__grid">
+                        @* Design hero cards (#120 "TV Board" versus mode): portrait on the LEFT, then a column
+                           with the name and one row per counter. A vertical stack of equal-height cards fills the
+                           element box — matching the mock's left party column. *@
+                        <div class="bparty__list">
                             @foreach (var pl in p.Players)
                             {
                                 <div class="bparty__player">
@@ -77,19 +81,21 @@
                                             <span class="bparty__initial">@Initial(pl.Name)</span>
                                         }
                                     </div>
-                                    <div class="bparty__pname">@pl.Name</div>
-                                    @if (pl.Counters.Count > 0)
-                                    {
-                                        <div class="bparty__crows">
-                                            @foreach (var c in pl.Counters)
-                                            {
-                                                <div class="bparty__crow">
-                                                    <span class="bparty__label">@c.Label</span>
-                                                    @counterValue(c)
-                                                </div>
-                                            }
-                                        </div>
-                                    }
+                                    <div class="bparty__info">
+                                        <div class="bparty__pname">@pl.Name</div>
+                                        @if (pl.Counters.Count > 0)
+                                        {
+                                            <div class="bparty__crows">
+                                                @foreach (var c in pl.Counters)
+                                                {
+                                                    <div class="bparty__crow">
+                                                        <span class="bparty__label">@c.Label</span>
+                                                        @counterValue(c)
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
                                 </div>
                             }
                         </div>
@@ -173,6 +179,21 @@
     // number. Mirrors the API's renderer rule (PartyValidation) and Party.razor's panel-side copy.
     private static bool IsPips(TvPartyCounterDto c) =>
         string.Equals(c.Style, "pips", StringComparison.Ordinal) || (c.Style is null && c.Max is >= 1 and <= PipCap);
+
+    // Filled-pip colour per counter, keyed by label — the #120 "TV Board" design's Daggerheart track palette
+    // (HP/Stress/Armor/Hope), plus Fear for the table strip. These are PLAYER-FACING CONTENT colours, exempt
+    // from the one blue chrome accent like scene colours. An unknown/custom track falls back to a soft neutral.
+    // Shared by the party and enemies elements, so an enemy's HP/Stress pips read the same as a hero's (per the
+    // mock — red is reserved for the spotlight border/chip, not the pips).
+    private static string PipColor(string label) => label.Trim().ToLowerInvariant() switch
+    {
+        "hp" or "health" => "#ff6e7e",
+        "stress" => "#ffd21a",
+        "armor" or "armour" => "#eef2f8",
+        "hope" => "#2563ff",
+        "fear" => "#ff4d2e",
+        _ => "#cfd6e2",
+    };
 
     // The portrait fallback: the first (rune-safe, so an emoji name doesn't split a surrogate) letter of the name.
     private static string Initial(string name)
