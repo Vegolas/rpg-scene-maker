@@ -16,9 +16,10 @@ namespace AmbientDirector.Api.Models;
 /// Like a member, an enemy's stats are generic <see cref="PartyCounter"/>s so any system fits: the Daggerheart
 /// HP/Stress loadout is a <em>UI-side preset</em>, never hardcoded here. As a bestiary template these
 /// <see cref="Counters"/> are the <b>base definitions</b> (each <see cref="PartyCounter.Value"/> is the starting
-/// value, typically equal to <see cref="PartyCounter.Max"/>) — the values an encounter instance is seeded with.
-/// The per-fight <em>spotlight</em> (boss) flag lives on the instance (<see cref="EncounterEnemy.Spotlight"/>),
-/// never on the template.
+/// value — typically 0, since HP/Stress are tracked <em>upward</em> as damage/stress is marked, with
+/// <see cref="PartyCounter.Max"/> the threshold) — the values an encounter instance is seeded with, and what a
+/// "reset enemies" restores. The per-fight <em>spotlight</em> (boss) flag lives on the instance
+/// (<see cref="EncounterEnemy.Spotlight"/>), never on the template.
 /// </remarks>
 public class Enemy
 {

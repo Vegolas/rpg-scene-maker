@@ -127,27 +127,55 @@ public class EncounterStoreTests
     }
 
     [Fact]
-    public async Task Reset_restores_every_bounded_instance_counter_to_its_max()
+    public async Task Reset_reseeds_instance_counters_from_the_statblock_starting_values()
     {
         using var db = new SqliteTestDb();
         var store = new EncounterStore(db);
+        // A bestiary template whose statblock starts fresh at 0 (HP = damage marked, Stress marked — count up).
+        var party = new PartyStore(db);
+        await party.UpsertEnemyAsync(new Enemy
+        {
+            Id = "goblin",
+            Name = "Goblin",
+            Counters =
+            [
+                new PartyCounter { Label = "HP", Value = 0, Max = 8 },
+                new PartyCounter { Label = "Stress", Value = 0, Max = 4 },
+            ],
+        });
         var encounter = Sample();
-        // An extra unbounded counter to prove reset leaves it untouched.
-        encounter.Enemies[0].Counters.Add(new PartyCounter { Label = "Notes", Value = 3, Max = null });
+        encounter.Enemies[0].Counters =
+        [
+            new PartyCounter { Label = "HP", Value = 0, Max = 8 },
+            new PartyCounter { Label = "Stress", Value = 0, Max = 4 },
+        ];
         await store.UpsertAsync(encounter);
 
-        // Damage the instance: HP down, Stress up.
-        await store.AdjustEnemyInstanceAsync("goblin-ambush", "goblin-1", "HP", -4, null);
+        // Mark damage: HP up, Stress up.
+        await store.AdjustEnemyInstanceAsync("goblin-ambush", "goblin-1", "HP", 5, null);
         await store.AdjustEnemyInstanceAsync("goblin-ambush", "goblin-1", "Stress", 3, null);
 
         var reset = await store.ResetEnemiesAsync("goblin-ambush");
         var counters = reset.Enemies[0].Counters;
-        Assert.Equal(6, counters.Single(c => c.Label == "HP").Value);     // → Max
-        Assert.Equal(4, counters.Single(c => c.Label == "Stress").Value); // → Max
-        Assert.Equal(3, counters.Single(c => c.Label == "Notes").Value);  // unbounded: unchanged
+        Assert.Equal(0, counters.Single(c => c.Label == "HP").Value);     // → statblock start (fresh)
+        Assert.Equal(0, counters.Single(c => c.Label == "Stress").Value); // → statblock start (fresh)
 
         var reload = await store.GetAsync("goblin-ambush");
-        Assert.Equal(6, reload!.Enemies[0].Counters.Single(c => c.Label == "HP").Value); // persisted
+        Assert.Equal(0, reload!.Enemies[0].Counters.Single(c => c.Label == "HP").Value); // persisted
+    }
+
+    [Fact]
+    public async Task Reset_falls_back_to_zero_when_the_statblock_is_gone()
+    {
+        using var db = new SqliteTestDb();
+        var store = new EncounterStore(db);
+        // No "goblin" template exists — the instance stands alone. Reset falls back to 0 (fresh).
+        var encounter = Sample();
+        encounter.Enemies[0].Counters = [new PartyCounter { Label = "HP", Value = 4, Max = 8 }];
+        await store.UpsertAsync(encounter);
+
+        var reset = await store.ResetEnemiesAsync("goblin-ambush");
+        Assert.Equal(0, reset.Enemies[0].Counters.Single(c => c.Label == "HP").Value);
     }
 
     [Fact]

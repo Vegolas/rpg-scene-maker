@@ -4,16 +4,16 @@
 @inject ViewTransition Vt
 @inject Localizer L
 
-@* Enemy editor (issue #120): the player editor's twin, minus the portrait ArtField, plus a Spotlight (boss)
-   toggle. Load the whole roster, pick this enemy by id client-side, edit name / order / spotlight / counters,
-   then save the whole enemy back. Blazor routes this over the player editor's "/party/{Id}" because the LITERAL
-   "enemies" segment wins over the "{Id}" parameter. The Daggerheart HP/Stress set is a UI-only preset (the API
-   stores generic counters); inputs are kept valid client-side but the server stays authoritative. *@
+@* Enemy editor (issue #122): the player editor's twin — a bestiary statblock template with a portrait ArtField
+   and base counter definitions (no live tracking, no spotlight — those live on an encounter instance). Load the
+   whole roster, pick this enemy by id client-side, edit name / portrait / order / counters, then save it back.
+   Blazor routes this over the player editor's "/party/{Id}" because the LITERAL "enemies" segment wins over the
+   "{Id}" parameter. The Daggerheart set is a UI-only preset (the API stores generic counters). *@
 
 <PageTitle>Ambient Director — @(_edit.Name is { Length: > 0 } n ? n : L["enemyEditor.title"])</PageTitle>
 
 <div class="btn-row" style="margin-bottom:0.2rem">
-    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("party")'><Icon Name="back" /> @L["party.title"]</button>
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("encounters?tab=enemies")'><Icon Name="back" /> @L["encounters.title"]</button>
 </div>
 
 @if (_loading)
@@ -23,7 +23,7 @@
 else if (_notFound)
 {
     <div class="page-head"><h1>@L["enemyEditor.notFoundTitle"]</h1></div>
-    <p class="empty-note">@L.Format("enemyEditor.notFoundBody", Id)<a href="party">@L["party.title"]</a>@L["enemyEditor.notFoundBodyEnd"]</p>
+    <p class="empty-note">@L.Format("enemyEditor.notFoundBody", Id)<a href="encounters?tab=enemies">@L["encounters.title"]</a>@L["enemyEditor.notFoundBodyEnd"]</p>
 }
 else
 {
@@ -36,16 +36,16 @@ else
                 <input id="e-name" type="text" value="@_edit.Name"
                        @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
             </div>
-            <div class="field">
+            <div class="field" style="margin-bottom:0">
                 <label for="e-order">@L["partyEditor.sortOrder"]</label>
                 <input id="e-order" class="party-order" type="number" step="1" min="0" max="9999" value="@_edit.SortOrder"
                        @onchange="e => _edit.SortOrder = ClampInt(e.Value, _edit.SortOrder, 0, 9999)" />
             </div>
-            <label class="party-check" style="margin-bottom:0">
-                <input type="checkbox" checked="@_edit.Spotlight"
-                       @onchange="e => _edit.Spotlight = e.Value is true" />
-                <span>@L["party.spotlight"]</span>
-            </label>
+        </div>
+
+        <SectionHeading>@L["partyEditor.portrait"]</SectionHeading>
+        <div class="panel">
+            <ArtField Image="_edit.Portrait" ImageChanged="v => _edit.Portrait = v" />
         </div>
 
         <SectionHeading>@L["partyEditor.counters"]</SectionHeading>
@@ -113,6 +113,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await Api.GetApiKeyAsync(); // cache the key so the ArtField portrait thumbnail url carries it
         var party = await Api.GetPartyAsync();
         var dto = party?.Enemies.FirstOrDefault(e => string.Equals(e.Id, Id, StringComparison.OrdinalIgnoreCase));
         if (dto is null)
@@ -127,11 +128,11 @@ else
 
     private void AddCounter() => _edit.Counters.Add(new CounterEdit { Label = "", Value = 0, Max = 6, Style = "pips" });
 
-    // The Daggerheart enemy loadout — a UI-only preset (the API stores generic counters). Appends HP/Stress,
-    // skipping labels that already exist (case-insensitive) so re-clicking never duplicates.
+    // The Daggerheart enemy loadout — a UI-only preset (the API stores generic counters). HP/Stress both start
+    // fresh at 0 and are tracked upward (damage/stress marked). Skips labels that already exist (case-insensitive).
     private void AddDaggerheart()
     {
-        AddPreset(L["party.preset.hp"], 4, 4);
+        AddPreset(L["party.preset.hp"], 0, 6);
         AddPreset(L["party.preset.stress"], 0, 3);
     }
 
@@ -183,7 +184,7 @@ else
         try
         {
             var (ok, error) = await Api.DeleteEnemyAsync(_edit.Id);
-            if (ok) await Vt.NavigateAsync("party");
+            if (ok) await Vt.NavigateAsync("encounters?tab=enemies");
             else Ui.ReportError(error ?? L["enemyEditor.toast.deleteFailed"]);
         }
         finally { _busy = false; }

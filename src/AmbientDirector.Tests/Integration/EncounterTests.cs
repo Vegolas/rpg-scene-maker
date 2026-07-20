@@ -248,18 +248,39 @@ public class EncounterTests
     }
 
     [Fact]
-    public async Task Reset_restores_every_instance_to_full()
+    public async Task Reset_reseeds_instances_from_the_bestiary_starting_values()
     {
         using var factory = new ApiFactory();
         var client = factory.CreateClient();
-        (await client.PutAsJsonAsync("/encounters/goblins", SampleEncounter())).EnsureSuccessStatusCode();
 
-        (await client.GetAsync("/encounters/goblins/enemies/goblin-1/adjust?counter=HP&value=1")).EnsureSuccessStatusCode();
-        (await client.GetAsync("/encounters/goblins/enemies/goblin-2/adjust?counter=HP&value=2")).EnsureSuccessStatusCode();
+        // A bestiary template that starts fresh at 0 (HP/Stress tracked upward as damage/stress is marked).
+        (await client.PutAsJsonAsync("/party/enemies/goblin", new
+        {
+            name = "Goblin",
+            counters = new object[]
+            {
+                new { label = "HP", value = 0, max = 8 },
+                new { label = "Stress", value = 0, max = 4 },
+            },
+        })).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync("/encounters/fight", new
+        {
+            name = "Fight",
+            enemies = new object[]
+            {
+                new { instanceId = "g1", enemyId = "goblin", name = "Goblin 1", counters = new object[]
+                    { new { label = "HP", value = 0, max = 8 }, new { label = "Stress", value = 0, max = 4 } } },
+            },
+        })).EnsureSuccessStatusCode();
 
-        var reset = await (await client.PostAsync("/encounters/goblins/reset", null)).Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(6, CounterValue(reset.GetProperty("enemies")[0], "HP"));
-        Assert.Equal(6, CounterValue(reset.GetProperty("enemies")[1], "HP"));
+        // Mark damage on the instance.
+        (await client.GetAsync("/encounters/fight/enemies/g1/adjust?counter=HP&value=5")).EnsureSuccessStatusCode();
+        (await client.GetAsync("/encounters/fight/enemies/g1/adjust?counter=Stress&value=3")).EnsureSuccessStatusCode();
+
+        // Reset → back to the statblock's fresh (0) values, not to Max.
+        var reset = await (await client.PostAsync("/encounters/fight/reset", null)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, CounterValue(reset.GetProperty("enemies")[0], "HP"));
+        Assert.Equal(0, CounterValue(reset.GetProperty("enemies")[0], "Stress"));
     }
 
     // ---- 4. TV synthesis: heroes-left / enemies-right, live hero counters, HeroIds resolution ----

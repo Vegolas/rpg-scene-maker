@@ -75,18 +75,34 @@ public class EncounterStore(IDbContextFactory<AppDbContext> dbFactory)
         return encounter;
     }
 
-    /// <summary>Reset every enemy instance in the encounter to full: each counter's value goes back to its Max
-    /// (a bounded counter's "full"); an unbounded counter (no Max) is left unchanged. Returns the updated
-    /// encounter. Throws <see cref="NotFoundException"/> for an unknown encounter.</summary>
+    /// <summary>Reset every enemy instance in the encounter to its <b>statblock's starting values</b> before
+    /// re-running the fight. Counters are tracked <em>upward</em> (HP = damage marked, Stress marked), so
+    /// "fresh" is each counter's starting Value — <em>not</em> its Max. Re-seed by label from the bestiary
+    /// template (matched by <see cref="EncounterEnemy.EnemyId"/>); a counter with no template match — or an
+    /// instance whose template was since deleted — falls back to 0, the undamaged value in that count-up model.
+    /// Returns the updated encounter. Throws <see cref="NotFoundException"/> for an unknown encounter.</summary>
     public async Task<Encounter> ResetEnemiesAsync(string encounterId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var encounter = await db.Encounters.SingleOrDefaultAsync(e => e.Id == encounterId)
             ?? throw new NotFoundException("error.encounter.notFound", encounterId);
+
+        // Load the bestiary templates behind the instances (NOCASE id column → case-insensitive IN match).
+        var enemyIds = (encounter.Enemies ?? []).Select(i => i.EnemyId).Distinct().ToList();
+        var templates = await db.Enemies.AsNoTracking()
+            .Where(e => enemyIds.Contains(e.Id))
+            .ToDictionaryAsync(e => e.Id, StringComparer.OrdinalIgnoreCase);
+
         foreach (var instance in encounter.Enemies ?? [])
+        {
+            templates.TryGetValue(instance.EnemyId, out var template);
             foreach (var counter in instance.Counters ?? [])
-                if (counter.Max is { } max)
-                    counter.Value = max;
+            {
+                var start = template?.Counters?.FirstOrDefault(c =>
+                    string.Equals(c.Label, counter.Label, StringComparison.OrdinalIgnoreCase))?.Value ?? 0;
+                counter.Value = Math.Clamp(start, 0, counter.Max ?? 999);
+            }
+        }
         await db.SaveChangesAsync();
         return encounter;
     }

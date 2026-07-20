@@ -175,7 +175,8 @@ else
                     </label>
                     <button class="btn btn--small" @onclick="() => OpenPdf(FillTarget.NewImage, -1)" disabled="@_busy"><Icon Name="pdf" /> @L["boardEditor.fromPdf"]</button>
                     <button class="btn btn--small" @onclick="AddParty"><Icon Name="party" /> @L["boardEditor.addParty"]</button>
-                    <button class="btn btn--small" @onclick="AddEnemies"><Icon Name="enemies" /> @L["boardEditor.addEnemies"]</button>
+                    @* No "Add enemies" here anymore (issue #122): enemies live in Encounters now. Legacy boards
+                       that already have an enemies element keep editing/rendering it (the kind stays valid). *@
                 </div>
             </div>
         </div>
@@ -298,9 +299,8 @@ else
     // A party element is geometry-only (the server nulls image/text/colour); it renders the live roster.
     private void AddParty() => _edit.Elements.Add(new BoardElementEdit { Kind = "party", X = 10, Y = 10, W = 80, H = 80 });
 
-    // An enemies element is geometry-only too; it renders the live enemy roster. Defaults to a right-hand column
-    // (the encounter layout: party left, art centre, enemies right).
-    private void AddEnemies() => _edit.Elements.Add(new BoardElementEdit { Kind = "enemies", X = 70, Y = 2, W = 28, H = 96 });
+    // No AddEnemies: standalone enemies elements are superseded by Encounters (issue #122). The "enemies" kind
+    // stays valid so a legacy board keeps editing/rendering, but the panel no longer seeds new ones.
 
     private void Move(int index, int delta)
     {

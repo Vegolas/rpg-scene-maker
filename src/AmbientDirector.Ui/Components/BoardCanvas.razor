@@ -128,6 +128,12 @@
                         {
                             <div class="benemies__card@(en.Spotlight ? " benemies__card--spotlight" : "")">
                                 <div class="benemies__namerow">
+                                    @if (en.PortraitUrl is { } eurl && !_failed.Contains(eurl))
+                                    {
+                                        @* Enemies get portraits too (#122); a vanished file hides rather than
+                                           flashing a broken glyph, like the hero portrait. *@
+                                        <span class="benemies__portrait"><img src="@eurl" alt="" @onerror="() => _failed.Add(eurl)" /></span>
+                                    }
                                     <span class="benemies__name">@en.Name</span>
                                     @if (en.Spotlight)
                                     {

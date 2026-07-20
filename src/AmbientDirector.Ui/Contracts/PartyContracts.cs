@@ -12,9 +12,9 @@ public record PartyDto(List<PartyPlayerDto> Players, List<PartyCounterDto> Count
 
 public record PartyPlayerDto(string Id, string Name, string? Portrait, int SortOrder, List<PartyCounterDto>? Counters);
 
-// An enemy is a member's twin minus the portrait (v1 enemy cards are text + tracks), plus a Spotlight (boss)
-// flag the TV renders red. Same generic counters as a player.
-public record PartyEnemyDto(string Id, string Name, bool Spotlight, int SortOrder, List<PartyCounterDto>? Counters);
+// An enemy is a reusable bestiary statblock (issue #122): name, portrait and base counter definitions. Base
+// stats only — the per-fight spotlight (boss) flag and live values live on an encounter instance, not here.
+public record PartyEnemyDto(string Id, string Name, string? Portrait, int SortOrder, List<PartyCounterDto>? Counters);
 
 public record PartyCounterDto(string Label, int Value, int? Max, string? Style);
 
@@ -41,13 +41,13 @@ public class PlayerEdit
     public PartyPlayerDto ToDto() => new(Id, Name.Trim(), Portrait, SortOrder, [.. Counters.Select(c => c.ToDto())]);
 }
 
-// Mutable form model for editing one enemy in the panel; the PlayerEdit twin minus the portrait, plus the
-// Spotlight flag. Converts to the immutable wire DTO on save.
+// Mutable form model for editing one bestiary enemy template in the panel; the PlayerEdit twin (name, portrait,
+// order, base counter definitions). Converts to the immutable wire DTO on save.
 public class EnemyEdit
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
-    public bool Spotlight { get; set; }
+    public string? Portrait { get; set; }
     public int SortOrder { get; set; }
     public List<CounterEdit> Counters { get; set; } = [];
 
@@ -55,12 +55,12 @@ public class EnemyEdit
     {
         Id = dto.Id,
         Name = dto.Name,
-        Spotlight = dto.Spotlight,
+        Portrait = dto.Portrait,
         SortOrder = dto.SortOrder,
         Counters = [.. (dto.Counters ?? []).Select(CounterEdit.FromDto)],
     };
 
-    public PartyEnemyDto ToDto() => new(Id, Name.Trim(), Spotlight, SortOrder, [.. Counters.Select(c => c.ToDto())]);
+    public PartyEnemyDto ToDto() => new(Id, Name.Trim(), Portrait, SortOrder, [.. Counters.Select(c => c.ToDto())]);
 }
 
 public class CounterEdit
@@ -98,10 +98,12 @@ public static class PartyRender
                 imageUrl(p.Portrait),
                 [.. (p.Counters ?? []).Select(ToRenderCounter)]))],
             [.. party.Counters.Select(ToRenderCounter)],
-            // Enemies carry no portrait — text + tracks + the spotlight flag.
+            // Bestiary templates rendered on a legacy board's enemies element: portrait + tracks, no per-instance
+            // spotlight (that lives on an encounter instance, not the template — so always false here).
             [.. party.Enemies.Select(e => new TvEnemyDto(
                 e.Name,
-                e.Spotlight,
+                imageUrl(e.Portrait),
+                false,
                 [.. (e.Counters ?? []).Select(ToRenderCounter)]))]);
 
     private static TvPartyCounterDto ToRenderCounter(PartyCounterDto c) => new(c.Label, c.Value, c.Max, c.Style);

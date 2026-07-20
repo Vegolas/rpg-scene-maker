@@ -1,0 +1,368 @@
+@page "/encounters/{Id}"
+@inject ApiClient Api
+@inject UiState Ui
+@inject ViewTransition Vt
+@inject Localizer L
+
+@* Encounter editor + tracker (issue #122): build a fight (name, background, scene/event to fire on run, chosen
+   heroes, enemy instances) and run it to the TV. The structural setup is edited into a model and persisted with
+   Save; the per-instance ± steppers are LIVE (they hit /encounters/{id}/enemies/{instanceId}/adjust, so a shown
+   encounter updates on the TV within one poll). "Add enemy" auto-saves so the new instance is immediately
+   trackable; Run saves first, then activates the scene+event and pushes the encounter. *@
+
+<PageTitle>Ambient Director — @(_edit.Name is { Length: > 0 } n ? n : L["encounterEditor.title"])</PageTitle>
+
+<div class="btn-row" style="margin-bottom:0.2rem">
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("encounters?tab=encounters")'><Icon Name="back" /> @L["encounters.title"]</button>
+</div>
+
+@if (_loading)
+{
+    <p class="empty-note">@L["party.loading"]</p>
+}
+else if (_notFound)
+{
+    <div class="page-head"><h1>@L["encounterEditor.notFoundTitle"]</h1></div>
+    <p class="empty-note">@L.Format("encounterEditor.notFoundBody", Id)<a href="encounters?tab=encounters">@L["encounters.title"]</a>@L["encounterEditor.notFoundBodyEnd"]</p>
+}
+else
+{
+    // One counter's value in the tracker: pips or a number, mirroring the party tracker.
+    RenderFragment<CounterEdit> counterValue = c =>
+    @<span class="party-cval">
+        @if (c.Style == "pips")
+        {
+            var pipMax = Math.Min(c.Max ?? 0, 24);
+            var filled = Math.Clamp(c.Value, 0, pipMax);
+            <span class="party-pips">
+                @for (var i = 0; i < pipMax; i++)
+                {
+                    <span class="party-pip@(i < filled ? " is-on" : "")"></span>
+                }
+            </span>
+        }
+        else
+        {
+            <span class="party-num">@(c.Max is { } m ? $"{c.Value}/{m}" : c.Value.ToString())</span>
+        }
+    </span>;
+
+    <div class="page-head"><h1>@(_edit.Name is { Length: > 0 } ? _edit.Name : L["encounterEditor.title"])</h1></div>
+
+    @* ---- setup ---- *@
+    <div class="panel">
+        <div class="field">
+            <label for="enc-name">@L["encounterEditor.nameLabel"]</label>
+            <input id="enc-name" type="text" value="@_edit.Name"
+                   @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
+        </div>
+        <div class="field">
+            <label for="enc-scene">@L["encounterEditor.sceneLabel"]</label>
+            <select id="enc-scene" class="enc-select" value="@(_edit.ActivateSceneId ?? "")"
+                    @onchange="e => _edit.ActivateSceneId = Blank(e.Value)">
+                <option value="">@L["encounterEditor.none"]</option>
+                @foreach (var s in _scenes)
+                {
+                    <option value="@s.Id" selected="@(string.Equals(s.Id, _edit.ActivateSceneId, StringComparison.OrdinalIgnoreCase))">@s.Name</option>
+                }
+            </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+            <label for="enc-event">@L["encounterEditor.eventLabel"]</label>
+            <select id="enc-event" class="enc-select" value="@(_edit.ActivateEventId ?? "")"
+                    @onchange="e => _edit.ActivateEventId = Blank(e.Value)">
+                <option value="">@L["encounterEditor.none"]</option>
+                @foreach (var ev in _events)
+                {
+                    <option value="@ev.Id" selected="@(string.Equals(ev.Id, _edit.ActivateEventId, StringComparison.OrdinalIgnoreCase))">@ev.Name</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <SectionHeading>@L["encounterEditor.background"]</SectionHeading>
+    <div class="panel">
+        <ArtField Image="_edit.BackgroundImage" ImageChanged="v => _edit.BackgroundImage = v" />
+    </div>
+
+    @* ---- heroes ---- *@
+    <SectionHeading>@L["encounterEditor.heroes"]</SectionHeading>
+    <div class="panel">
+        @if (_players.Count == 0)
+        {
+            <p class="hint" style="margin:0">@L["encounterEditor.noPlayers"]</p>
+        }
+        else
+        {
+            <div class="enc-heroes">
+                @foreach (var p in _players)
+                {
+                    <label class="party-check enc-hero">
+                        <input type="checkbox" checked="@_edit.HeroIds.Contains(p.Id, StringComparer.OrdinalIgnoreCase)"
+                               @onchange="e => ToggleHero(p.Id, e.Value is true)" />
+                        <span>@p.Name</span>
+                    </label>
+                }
+            </div>
+            <p class="hint" style="margin-top:var(--s-3)">@L["encounterEditor.heroesHint"]</p>
+        }
+    </div>
+
+    @* ---- enemy instances ---- *@
+    <SectionHeading>@L["encounterEditor.enemies"]</SectionHeading>
+    <div class="panel">
+        @if (_bestiary.Count == 0)
+        {
+            <p class="hint" style="margin:0">@L["encounterEditor.noBestiary"]<a href="encounters?tab=enemies">@L["encounters.tab.enemies"]</a>@L["encounterEditor.noBestiaryEnd"]</p>
+        }
+        else
+        {
+            <div class="party-new">
+                <select class="enc-select" value="@_addEnemyId" @onchange="e => _addEnemyId = e.Value?.ToString() ?? string.Empty">
+                    <option value="">@L["encounterEditor.pickEnemy"]</option>
+                    @foreach (var t in _bestiary)
+                    {
+                        <option value="@t.Id">@t.Name</option>
+                    }
+                </select>
+                <button class="btn btn--primary" @onclick="AddEnemy" disabled="@(_busy || string.IsNullOrEmpty(_addEnemyId))">
+                    <Icon Name="add" /> @L["encounterEditor.addEnemy"]
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (_edit.Enemies.Count == 0)
+    {
+        <p class="empty-note">@L["encounterEditor.enemiesEmpty"]</p>
+    }
+    else
+    {
+        <div class="party-grid" style="margin-top:var(--s-3)">
+            @foreach (var inst in _edit.Enemies)
+            {
+                <div @key="inst.InstanceId" class="party-card@(inst.Spotlight ? " party-card--spotlight" : "")">
+                    <div class="party-card__head">
+                        <div class="party-portrait">
+                            @if (Api.ImageUrl(inst.Portrait) is { } url)
+                            {
+                                <img src="@url" alt="" />
+                            }
+                            else
+                            {
+                                <span class="party-initial">@Initial(inst.Name)</span>
+                            }
+                        </div>
+                        <input class="party-input enc-instname" type="text" value="@inst.Name"
+                               placeholder='@L["encounterEditor.instanceName"]'
+                               @oninput="e => inst.Name = e.Value?.ToString() ?? string.Empty" />
+                        <button class="btn btn--icon btn--danger" @onclick="() => RemoveInstance(inst)"
+                                aria-label='@L["encounterEditor.removeInstance"]'><Icon Name="close" /></button>
+                    </div>
+                    <button class="btn btn--small party-spotlight @(inst.Spotlight ? "is-on" : "")"
+                            @onclick="() => inst.Spotlight = !inst.Spotlight" aria-pressed="@(inst.Spotlight ? "true" : "false")">
+                        <Icon Name="enemies" /> @L["party.spotlight"]
+                    </button>
+                    @if (inst.Counters.Count > 0)
+                    {
+                        <div class="party-crows">
+                            @foreach (var c in inst.Counters)
+                            {
+                                <div class="party-crow">
+                                    <span class="party-clabel">@c.Label</span>
+                                    <div class="party-adjust">
+                                        <button class="party-step" @onclick="() => AdjustInstance(inst, c.Label, -1)"
+                                                disabled="@IsRowBusy(inst.InstanceId, c.Label)" aria-label='@L["party.decrease"]'><Icon Name="minus" /></button>
+                                        @counterValue(c)
+                                        <button class="party-step" @onclick="() => AdjustInstance(inst, c.Label, 1)"
+                                                disabled="@IsRowBusy(inst.InstanceId, c.Label)" aria-label='@L["party.increase"]'><Icon Name="add" /></button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="party-nocounters">@L["party.noCounters"]</p>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @* ---- actions ---- *@
+    <div class="editor-actions">
+        <button class="btn btn--primary" @onclick="Save" disabled="@_busy">@L["common.save"]</button>
+        <button class="btn" @onclick="Run" disabled="@_busy"><Icon Name="play" /> @L["encounters.run"]</button>
+        <button class="btn" @onclick="Reset" disabled="@_busy"><Icon Name="reset" /> @L["encounterEditor.resetEnemies"]</button>
+    </div>
+    <div class="btn-row" style="margin-top:0.7rem">
+        <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["encounterEditor.delete"]</ConfirmButton>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _busy;
+    private EncounterEdit _edit = new();
+
+    private List<PartyPlayerDto> _players = [];
+    private List<PartyEnemyDto> _bestiary = [];
+    private List<SceneDto> _scenes = [];
+    private List<EventDto> _events = [];
+    private string _addEnemyId = "";
+    private readonly HashSet<string> _pendingRows = new(StringComparer.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.GetApiKeyAsync(); // cache the key so portrait/background thumbnail urls carry it
+        var encounters = await Api.GetEncountersAsync();
+        var dto = encounters.FirstOrDefault(e => string.Equals(e.Id, Id, StringComparison.OrdinalIgnoreCase));
+        if (dto is null)
+        {
+            _notFound = true;
+            _loading = false;
+            return;
+        }
+        _edit = EncounterEdit.FromDto(dto);
+        var party = await Api.GetPartyAsync();
+        _players = party?.Players ?? [];
+        _bestiary = party?.Enemies ?? [];
+        _scenes = await Api.GetScenesAsync();
+        _events = await Api.GetEventsAsync();
+        _loading = false;
+    }
+
+    private static string? Blank(object? raw)
+    {
+        var s = raw?.ToString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    private static string Initial(string name)
+    {
+        name = name.Trim();
+        if (name.Length == 0) return "?";
+        return name.EnumerateRunes().First().ToString().ToUpperInvariant();
+    }
+
+    private void ToggleHero(string id, bool on)
+    {
+        _edit.HeroIds.RemoveAll(h => string.Equals(h, id, StringComparison.OrdinalIgnoreCase));
+        if (on) _edit.HeroIds.Add(id);
+    }
+
+    // ---------- enemy instances ----------
+
+    // Append a fresh instance seeded from the picked bestiary template (auto-named for duplicates, counters
+    // copied), then auto-save so the new instance exists server-side and its ± steppers work immediately.
+    private async Task AddEnemy()
+    {
+        if (_busy || string.IsNullOrEmpty(_addEnemyId)) return;
+        var template = _bestiary.FirstOrDefault(t => string.Equals(t.Id, _addEnemyId, StringComparison.OrdinalIgnoreCase));
+        if (template is null) return;
+
+        var sameCount = _edit.Enemies.Count(i => string.Equals(i.EnemyId, template.Id, StringComparison.OrdinalIgnoreCase));
+        var name = sameCount == 0 ? template.Name : $"{template.Name} {sameCount + 1}";
+        var instanceId = SceneNaming.MakeUnique(template.Id, [.. _edit.Enemies.Select(i => i.InstanceId)]);
+
+        _edit.Enemies.Add(new EncounterEnemyEdit
+        {
+            InstanceId = instanceId,
+            EnemyId = template.Id,
+            Name = name,
+            Portrait = template.Portrait,
+            Spotlight = false,
+            Counters = [.. (template.Counters ?? []).Select(CounterEdit.FromDto)],
+        });
+        _addEnemyId = "";
+        await Save(); // persist so the new instance is immediately trackable via /adjust
+    }
+
+    private void RemoveInstance(EncounterEnemyEdit inst) => _edit.Enemies.Remove(inst);
+
+    // Live per-instance adjust: hit the server, then update just this counter's value from the response so any
+    // unsaved structural edits (rename, new instances) are preserved. A shown encounter updates on the TV.
+    private async Task AdjustInstance(EncounterEnemyEdit inst, string label, int delta)
+    {
+        var key = $"{inst.InstanceId} {label}";
+        if (_pendingRows.Contains(key)) return;
+        _pendingRows.Add(key);
+        try
+        {
+            var (result, error) = await Api.AdjustEncounterEnemyAsync(_edit.Id, inst.InstanceId, label, delta);
+            if (error is not null) { Ui.ReportError(error); return; }
+            var updated = result?.Enemies?.FirstOrDefault(i => string.Equals(i.InstanceId, inst.InstanceId, StringComparison.OrdinalIgnoreCase));
+            var value = updated?.Counters?.FirstOrDefault(c => string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase))?.Value;
+            var target = inst.Counters.FirstOrDefault(c => string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase));
+            if (value is { } v && target is not null) target.Value = v;
+        }
+        finally { _pendingRows.Remove(key); }
+    }
+
+    private bool IsRowBusy(string instanceId, string label) => _pendingRows.Contains($"{instanceId} {label}");
+
+    // ---------- save / run / reset / delete ----------
+
+    private async Task<bool> SaveInternal()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.Name)) { Ui.ReportError(L["party.toast.nameFirst"]); return false; }
+        var (_, error) = await Api.SaveEncounterAsync(_edit.Id, _edit);
+        if (error is not null) { Ui.ReportError(error); return false; }
+        return true;
+    }
+
+    private async Task Save()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (await SaveInternal()) Ui.ReportOk(L.Format("encounterEditor.toast.saved", _edit.Name.Trim()));
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Run()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (!await SaveInternal()) return; // run what's on screen — persist first
+            var (result, error) = await Api.RunEncounterAsync(_edit.Id);
+            if (error is not null) { Ui.ReportError(error); return; }
+            if (result is not null) Ui.ReportOk(L["encounters.toast.ran"]);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Reset()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var (result, error) = await Api.ResetEncounterEnemiesAsync(_edit.Id);
+            if (error is not null) { Ui.ReportError(error); return; }
+            if (result is not null) _edit = EncounterEdit.FromDto(result); // refresh instance values from the reset
+            Ui.ReportOk(L["encounterEditor.toast.reset"]);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteConfirmed()
+    {
+        _busy = true;
+        try
+        {
+            var (ok, error) = await Api.DeleteEncounterAsync(_edit.Id);
+            if (ok) await Vt.NavigateAsync("encounters?tab=encounters");
+            else Ui.ReportError(error ?? L["encounterEditor.toast.deleteFailed"]);
+        }
+        finally { _busy = false; }
+    }
+}

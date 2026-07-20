@@ -85,8 +85,8 @@ public class PartyRenderTests
             ],
             [new PartyCounterDto("Fear", 4, 12, "pips")],
             [
-                new PartyEnemyDto("goblin", "Goblin", false, 0, [new PartyCounterDto("HP", 3, 4, "pips")]),
-                new PartyEnemyDto("boss", "Dread King", true, 1, null),
+                new PartyEnemyDto("goblin", "Goblin", "goblin.png", 0, [new PartyCounterDto("HP", 3, 4, "pips")]),
+                new PartyEnemyDto("boss", "Dread King", null, 1, null),
             ]);
 
         var model = PartyRender.ToRenderModel(party, Img);
@@ -110,13 +110,16 @@ public class PartyRenderTests
         Assert.Equal("Fear", model.Counters[0].Label);
         Assert.Equal(4, model.Counters[0].Value);
 
-        // Enemies map through too (name + spotlight + counters; no portrait). A null counters list → empty.
+        // Enemies (bestiary templates) map through: name + portrait routed through imageUrl + counters; the
+        // per-instance spotlight is never a template's, so it's always false here. A null counters list → empty.
         Assert.Equal(2, model.Enemies.Count);
         Assert.Equal("Goblin", model.Enemies[0].Name);
+        Assert.Equal("/images/goblin.png?apiKey=k", model.Enemies[0].PortraitUrl); // routed through imageUrl
         Assert.False(model.Enemies[0].Spotlight);
         Assert.Equal("HP", model.Enemies[0].Counters[0].Label);
         Assert.Equal(3, model.Enemies[0].Counters[0].Value);
-        Assert.True(model.Enemies[1].Spotlight);
+        Assert.Null(model.Enemies[1].PortraitUrl);
+        Assert.False(model.Enemies[1].Spotlight);
         Assert.Empty(model.Enemies[1].Counters);
     }
 }
