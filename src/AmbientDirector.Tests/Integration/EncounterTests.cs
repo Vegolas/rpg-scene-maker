@@ -346,6 +346,56 @@ public class EncounterTests
         Assert.Equal(2, players.GetArrayLength()); // both players, empty selection = all
     }
 
+    [Fact]
+    public async Task Hidden_instances_are_skipped_on_the_tv_but_kept_in_the_encounter()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+        (await client.PutAsJsonAsync("/encounters/fight", new
+        {
+            name = "Fight",
+            enemies = new object[]
+            {
+                new { instanceId = "g1", enemyId = "goblin", name = "Goblin 1",
+                    counters = new object[] { new { label = "HP", value = 0, max = 6 } } },
+                new { instanceId = "g2", enemyId = "goblin", name = "Goblin 2 (held back)", hidden = true,
+                    counters = new object[] { new { label = "HP", value = 0, max = 6 } } },
+            },
+        })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/tv/show?encounter=fight")).StatusCode);
+
+        // The TV shows only the visible instance…
+        var state = await client.GetFromJsonAsync<JsonElement>("/tv/state");
+        var enemies = state.GetProperty("content").GetProperty("board").GetProperty("elements")[1]
+            .GetProperty("party").GetProperty("enemies");
+        Assert.Equal(1, enemies.GetArrayLength());
+        Assert.Equal("Goblin 1", enemies[0].GetProperty("name").GetString());
+
+        // …but both are still kept in the encounter (the hidden one can be revealed later).
+        var list = await client.GetFromJsonAsync<JsonElement>("/encounters/list");
+        var stored = list.EnumerateArray().Single(e => e.GetProperty("id").GetString() == "fight");
+        Assert.Equal(2, stored.GetProperty("enemies").GetArrayLength());
+        var hidden = stored.GetProperty("enemies").EnumerateArray().Single(e => e.GetProperty("instanceId").GetString() == "g2");
+        Assert.True(hidden.GetProperty("hidden").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Instances_default_to_shown_when_the_field_is_omitted()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+        // No "hidden" on the wire → defaults false, so the instance is shown.
+        (await client.PutAsJsonAsync("/encounters/fight", new
+        {
+            name = "Fight",
+            enemies = new object[] { new { instanceId = "g1", enemyId = "goblin", name = "Goblin" } },
+        })).EnsureSuccessStatusCode();
+
+        var list = await client.GetFromJsonAsync<JsonElement>("/encounters/list");
+        var stored = list.EnumerateArray().Single(e => e.GetProperty("id").GetString() == "fight");
+        Assert.False(stored.GetProperty("enemies")[0].GetProperty("hidden").GetBoolean());
+    }
+
     // ---- 5. The key-free portrait gate: serves the encounter's files only while it is shown ----
 
     [Fact]

@@ -722,6 +722,8 @@
     "encounterEditor.enemiesEmpty": "No enemies in this encounter yet — add one above.",
     "encounterEditor.instanceName": "Enemy name",
     "encounterEditor.removeInstance": "Remove enemy",
+    "encounterEditor.visible": "Visible",
+    "encounterEditor.hidden": "Hidden",
     "encounterEditor.resetEnemies": "Reset enemies",
     "encounterEditor.delete": "Delete encounter",
     "encounterEditor.toast.saved": "Saved {0}.",

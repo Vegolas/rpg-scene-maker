@@ -229,7 +229,9 @@ public static class TvEndpoints
         var partyDto = new TvPartyDto(
             [.. heroes.Select(m => PlayerDto(m, rev))],
             [.. tableCounters.Select(Counter)],
-            [.. encounter.Enemies.Select(en => EnemyDto(en.Name, en.Portrait, en.Spotlight, en.Counters, rev))]);
+            // Held-back instances are skipped on the TV but kept in the encounter (issue #122 follow-up).
+            [.. encounter.Enemies.Where(en => !en.Hidden)
+                .Select(en => EnemyDto(en.Name, en.Portrait, en.Spotlight, en.Counters, rev))]);
 
         List<TvBoardElementDto> elements =
         [

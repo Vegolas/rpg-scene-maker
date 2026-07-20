@@ -732,6 +732,8 @@
     "encounterEditor.enemiesEmpty": "Brak przeciwników w tym starciu — dodaj jednego powyżej.",
     "encounterEditor.instanceName": "Nazwa przeciwnika",
     "encounterEditor.removeInstance": "Usuń przeciwnika",
+    "encounterEditor.visible": "Widoczny",
+    "encounterEditor.hidden": "Ukryty",
     "encounterEditor.resetEnemies": "Zresetuj przeciwników",
     "encounterEditor.delete": "Usuń starcie",
     "encounterEditor.toast.saved": "Zapisano {0}.",

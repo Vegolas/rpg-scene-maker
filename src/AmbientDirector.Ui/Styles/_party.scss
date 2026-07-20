@@ -306,6 +306,13 @@
   border-color: #FF4D2E;
   color: #fff;
 }
+
+/* A held-back (hidden) encounter instance: dimmed so the GM sees it's off the TV but still in the encounter. */
+.party-card--hidden { opacity: .5; }
+/* The spotlight + visible toggles sit in a row on the instance card. */
+.enc-inst-toggles { flex-wrap: wrap; gap: var(--s-2); }
+/* Visible toggle: "on" (shown) is the neutral pressed state; when off the card itself dims (above). */
+.enc-visible.is-on { background: rgba(255, 255, 255, .1); border-color: var(--border-strong, #3a4250); }
 .party-portrait {
   flex: 0 0 auto;
   width: 56px;

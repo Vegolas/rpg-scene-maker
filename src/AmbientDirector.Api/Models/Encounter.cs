@@ -100,6 +100,14 @@ public class EncounterEnemy
     /// off the template): when set, the TV renders this enemy's card with the red spotlight treatment.</summary>
     public bool Spotlight { get; set; }
 
+    /// <summary>Whether this instance is <em>held back</em> — skipped by the TV render but kept in the encounter
+    /// (toggle it to reveal a hidden adversary mid-fight without deleting it). The panel presents this as a
+    /// "Visible" toggle; it is stored inverted as <c>Hidden</c> <b>on purpose</b>: EF's JSON deserializer does
+    /// NOT honour a C# property initializer, so a missing key becomes <c>default(bool)</c>. Defaulting to
+    /// <c>false</c> means an encounter stored before this field existed (no <c>hidden</c> in its JSON)
+    /// deserializes to shown — never hiding pre-existing enemies.</summary>
+    public bool Hidden { get; set; }
+
     /// <summary>This instance's live counters, seeded from the template at add-time. The generic
     /// <see cref="PartyCounter"/>; adjusted mid-fight via <c>/encounters/{id}/enemies/{instanceId}/adjust</c>.</summary>
     public List<PartyCounter> Counters { get; set; } = [];

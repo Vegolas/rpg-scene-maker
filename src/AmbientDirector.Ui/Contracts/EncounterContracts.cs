@@ -9,10 +9,11 @@ public record EncounterDto(string Id, string Name, int SortOrder, List<string>? 
 
 // One enemy instance in an encounter: a live copy of a bestiary statblock. InstanceId is unique within the
 // encounter; EnemyId references the bestiary template it was seeded from; Name is editable (auto-suffixed for
-// duplicates); Portrait is a snapshot of the template's; Spotlight is the per-instance boss flag; Counters are
-// the live tracked values.
+// duplicates); Portrait is a snapshot of the template's; Spotlight is the per-instance boss flag; Hidden
+// (default false) holds a prepped enemy back from the TV without deleting it (the panel shows it as a "Visible"
+// toggle — stored inverted so pre-existing data stays shown); Counters are the live tracked values.
 public record EncounterEnemyDto(string InstanceId, string EnemyId, string Name, string? Portrait, bool Spotlight,
-    List<PartyCounterDto>? Counters);
+    bool Hidden, List<PartyCounterDto>? Counters);
 
 // Mutable form model for editing one encounter in the panel; converts to the immutable wire DTO on save (the
 // BoardEdit pattern).
@@ -54,6 +55,7 @@ public class EncounterEnemyEdit
     public string Name { get; set; } = "";
     public string? Portrait { get; set; }
     public bool Spotlight { get; set; }
+    public bool Hidden { get; set; }
     public List<CounterEdit> Counters { get; set; } = [];
 
     public static EncounterEnemyEdit FromDto(EncounterEnemyDto dto) => new()
@@ -63,9 +65,10 @@ public class EncounterEnemyEdit
         Name = dto.Name,
         Portrait = dto.Portrait,
         Spotlight = dto.Spotlight,
+        Hidden = dto.Hidden,
         Counters = [.. (dto.Counters ?? []).Select(CounterEdit.FromDto)],
     };
 
-    public EncounterEnemyDto ToDto() => new(InstanceId, EnemyId, Name.Trim(), Portrait, Spotlight,
+    public EncounterEnemyDto ToDto() => new(InstanceId, EnemyId, Name.Trim(), Portrait, Spotlight, Hidden,
         [.. Counters.Select(c => c.ToDto())]);
 }

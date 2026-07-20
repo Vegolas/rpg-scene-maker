@@ -141,7 +141,7 @@ else
         <div class="party-grid" style="margin-top:var(--s-3)">
             @foreach (var inst in _edit.Enemies)
             {
-                <div @key="inst.InstanceId" class="party-card@(inst.Spotlight ? " party-card--spotlight" : "")">
+                <div @key="inst.InstanceId" class="@CardClass(inst)">
                     <div class="party-card__head">
                         <div class="party-portrait">
                             @if (Api.ImageUrl(inst.Portrait) is { } url)
@@ -156,13 +156,22 @@ else
                         <input class="party-input enc-instname" type="text" value="@inst.Name"
                                placeholder='@L["encounterEditor.instanceName"]'
                                @oninput="e => inst.Name = e.Value?.ToString() ?? string.Empty" />
-                        <button class="btn btn--icon btn--danger" @onclick="() => RemoveInstance(inst)"
+                        <button class="btn btn--icon btn--danger" @onclick="() => RemoveInstance(inst)" disabled="@_busy"
                                 aria-label='@L["encounterEditor.removeInstance"]'><Icon Name="close" /></button>
                     </div>
-                    <button class="btn btn--small party-spotlight @(inst.Spotlight ? "is-on" : "")"
-                            @onclick="() => inst.Spotlight = !inst.Spotlight" aria-pressed="@(inst.Spotlight ? "true" : "false")">
-                        <Icon Name="enemies" /> @L["party.spotlight"]
-                    </button>
+                    @* Both toggles are LIVE: they persist immediately (auto-save → the shown TV updates within one
+                       poll), like the ± steppers. Spotlight = the red boss treatment; Visible = held back (hidden
+                       from the TV but kept in the encounter, to reveal mid-fight). *@
+                    <div class="btn-row enc-inst-toggles">
+                        <button class="btn btn--small party-spotlight @(inst.Spotlight ? "is-on" : "")"
+                                @onclick="() => ToggleSpotlight(inst)" disabled="@_busy" aria-pressed="@(inst.Spotlight ? "true" : "false")">
+                            <Icon Name="enemies" /> @L["party.spotlight"]
+                        </button>
+                        <button class="btn btn--small enc-visible @(inst.Hidden ? "" : "is-on")"
+                                @onclick="() => ToggleVisible(inst)" disabled="@_busy" aria-pressed="@(inst.Hidden ? "false" : "true")">
+                            <Icon Name="@(inst.Hidden ? "eye-slash" : "eye")" /> @(inst.Hidden ? L["encounterEditor.hidden"] : L["encounterEditor.visible"])
+                        </button>
+                    </div>
                     @if (inst.Counters.Count > 0)
                     {
                         <div class="party-crows">
@@ -249,6 +258,10 @@ else
         return name.EnumerateRunes().First().ToString().ToUpperInvariant();
     }
 
+    // Enemy instance card classes: base + the red spotlight (boss) border + a dim when held back (hidden).
+    private static string CardClass(EncounterEnemyEdit inst) =>
+        "party-card" + (inst.Spotlight ? " party-card--spotlight" : "") + (inst.Hidden ? " party-card--hidden" : "");
+
     private void ToggleHero(string id, bool on)
     {
         _edit.HeroIds.RemoveAll(h => string.Equals(h, id, StringComparison.OrdinalIgnoreCase));
@@ -279,10 +292,49 @@ else
             Counters = [.. (template.Counters ?? []).Select(CounterEdit.FromDto)],
         });
         _addEnemyId = "";
-        await Save(); // persist so the new instance is immediately trackable via /adjust
+        // Persist so the new instance is immediately trackable via /adjust and shows on a live TV.
+        _busy = true;
+        try { await SaveSilentAsync(); }
+        finally { _busy = false; }
     }
 
-    private void RemoveInstance(EncounterEnemyEdit inst) => _edit.Enemies.Remove(inst);
+    // Live: remove the instance and persist immediately so a shown encounter drops it on the TV.
+    private async Task RemoveInstance(EncounterEnemyEdit inst)
+    {
+        if (_busy) return;
+        _busy = true;
+        _edit.Enemies.Remove(inst);
+        try { await SaveSilentAsync(); }
+        finally { _busy = false; }
+    }
+
+    // Live per-instance flags: flip and auto-save so the shown TV updates within one poll (the ± steppers'
+    // liveness, for spotlight + visible — a structural PUT rather than the counter-only adjust endpoint).
+    private async Task ToggleSpotlight(EncounterEnemyEdit inst)
+    {
+        if (_busy) return;
+        _busy = true;
+        inst.Spotlight = !inst.Spotlight;
+        try { await SaveSilentAsync(); }
+        finally { _busy = false; }
+    }
+
+    private async Task ToggleVisible(EncounterEnemyEdit inst)
+    {
+        if (_busy) return;
+        _busy = true;
+        inst.Hidden = !inst.Hidden;
+        try { await SaveSilentAsync(); }
+        finally { _busy = false; }
+    }
+
+    // Persist the whole encounter without the "Saved" toast (used by the live toggles / add / remove). The
+    // model already reflects current counter values (the ± steppers update it), so nothing is lost.
+    private async Task SaveSilentAsync()
+    {
+        var (_, error) = await Api.SaveEncounterAsync(_edit.Id, _edit);
+        if (error is not null) Ui.ReportError(error);
+    }
 
     // Live per-instance adjust: hit the server, then update just this counter's value from the response so any
     // unsaved structural edits (rename, new instances) are preserved. A shown encounter updates on the TV.

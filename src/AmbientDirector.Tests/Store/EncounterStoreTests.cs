@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
@@ -53,6 +54,7 @@ public class EncounterStoreTests
             InstanceId = "goblin-2",
             EnemyId = "goblin",
             Name = "Goblin 2",
+            Hidden = true, // held back
             Counters = [new PartyCounter { Label = "HP", Value = 6, Max = 6 }],
         });
         await store.UpsertAsync(updated);
@@ -66,10 +68,44 @@ public class EncounterStoreTests
         Assert.Equal(2, loaded.Enemies.Count);
         Assert.Equal("Goblin Boss", loaded.Enemies[0].Name);
         Assert.True(loaded.Enemies[0].Spotlight);
+        Assert.False(loaded.Enemies[0].Hidden);   // default (shown)
         Assert.Equal("goblin.png", loaded.Enemies[0].Portrait);
         Assert.Equal(2, loaded.Enemies[0].Counters.Count);
         Assert.Equal("Stress", loaded.Enemies[0].Counters[1].Label);
+        Assert.True(loaded.Enemies[1].Hidden);    // held back, round-tripped
         Assert.Single(await store.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task Hidden_defaults_false_for_instances_stored_before_the_field_existed()
+    {
+        using var db = new SqliteTestDb();
+        var store = new EncounterStore(db);
+        await store.UpsertAsync(Sample()); // current shape includes "hidden":false in the JSON
+
+        // Simulate a row saved before the Hidden field existed: strip the hidden key from the stored JSON
+        // (found case-insensitively, so this is agnostic to EF's JSON element casing). This is exactly why the
+        // field is stored inverted — EF deserializes a missing bool to default(false), i.e. shown.
+        await using (var ctx = db.CreateDbContext())
+        {
+            var raw = ctx.Database
+                .SqlQueryRaw<string>("SELECT \"Enemies\" AS \"Value\" FROM \"Encounters\" WHERE \"Id\" = {0}", "goblin-ambush")
+                .AsEnumerable().Single();
+            var arr = System.Text.Json.Nodes.JsonNode.Parse(raw)!.AsArray();
+            foreach (var node in arr)
+            {
+                var obj = node!.AsObject();
+                var key = obj.Select(kv => kv.Key)
+                    .FirstOrDefault(k => string.Equals(k, "hidden", StringComparison.OrdinalIgnoreCase));
+                if (key is not null) obj.Remove(key);
+            }
+            ctx.Database.ExecuteSqlRaw("UPDATE \"Encounters\" SET \"Enemies\" = {0} WHERE \"Id\" = {1}",
+                arr.ToJsonString(), "goblin-ambush");
+        }
+
+        // The missing "hidden" must deserialize to false — a pre-existing enemy stays shown.
+        var loaded = await store.GetAsync("goblin-ambush");
+        Assert.False(loaded!.Enemies[0].Hidden);
     }
 
     [Fact]
