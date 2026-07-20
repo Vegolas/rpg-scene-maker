@@ -26,15 +26,17 @@ public record TvBoardElementDto(string Kind, double X, double Y, double W, doubl
     string? Url, string? Text, string? Color, double? Size, string? Align, TvPartyDto? Party = null);
 
 // Live render model for a kind=party / kind=enemies board element: the player roster + table-level counters +
-// the encounter's enemy roster (issue #120) at poll time. One instance is built per /tv/state and shared by
-// both element kinds. Portrait refs are pre-resolved to the gate-validated /tv/content/board/{name} route like
-// every other board image.
+// the enemy roster at poll time. One instance is built per /tv/state and shared by both element kinds (a
+// synthesized encounter view populates all three — heroes as Players, Fear as Counters, instances as Enemies).
+// Portrait refs are pre-resolved to the gate-validated /tv/content/board/{name} route like every other board image.
 public record TvPartyDto(List<TvPartyPlayerDto> Players, List<TvPartyCounterDto> Counters, List<TvEnemyDto> Enemies);
 
 public record TvPartyPlayerDto(string Name, string? PortraitUrl, List<TvPartyCounterDto> Counters);
 
-// One enemy in the render model: text + counter tracks + the spotlight (boss) flag. No portrait in v1.
-public record TvEnemyDto(string Name, bool Spotlight, List<TvPartyCounterDto> Counters);
+// One enemy in the render model: portrait + text + counter tracks + the spotlight (boss) flag (issue #122 gave
+// enemies portraits, like players). PortraitUrl is pre-resolved to the gate-validated /tv/content/board/{name}
+// route (null when the enemy has no portrait).
+public record TvEnemyDto(string Name, string? PortraitUrl, bool Spotlight, List<TvPartyCounterDto> Counters);
 
 public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style);
 

@@ -40,9 +40,9 @@ public static class PartyValidation
         ValidateCounters(m.Counters ??= []);
     }
 
-    /// <summary>Guards an enemy — the encounter roster's twin of a member (issue #120), minus the portrait
-    /// (enemies have none). Same id/name rules, and the counter limits are shared unchanged via
-    /// <see cref="ValidateCounters"/>.</summary>
+    /// <summary>Guards an enemy bestiary template (issue #122) — a member's twin with a portrait and base
+    /// counter definitions. Same id/name/portrait rules as a member, and the counter limits are shared unchanged
+    /// via <see cref="ValidateCounters"/>.</summary>
     public static void Validate(Enemy e)
     {
         if (string.IsNullOrWhiteSpace(e.Id))
@@ -51,6 +51,8 @@ public static class PartyValidation
             throw new ValidationException("error.common.idSlug");
         if (string.IsNullOrWhiteSpace(e.Name))
             throw new ValidationException("error.common.nameRequired");
+        if (e.Portrait is not null && !ImageFileStorage.IsValidName(e.Portrait))
+            throw new ValidationException("error.common.invalidImage");
 
         // JSON "counters": null overwrites the C# default.
         ValidateCounters(e.Counters ??= []);
