@@ -597,6 +597,7 @@
     "boardEditor.notFoundBody": "Brak tablicy o identyfikatorze „{0}”. Wróć do ",
     "boardEditor.notFoundBodyEnd": ".",
     "boardEditor.nameLabel": "Nazwa",
+    "boardEditor.canvasHint": "Przeciągaj elementy na podglądzie — uchwyty zmieniają rozmiar, strzałki przesuwają zaznaczony element (Shift = większy krok), dwukrotne stuknięcie w tekst otwiera edycję.",
     "boardEditor.liveHint": "Jeśli ta tablica jest na TV, zapis od razu aktualizuje ekran.",
     "boardEditor.background": "Tło",
     "boardEditor.backgroundColor": "Kolor",

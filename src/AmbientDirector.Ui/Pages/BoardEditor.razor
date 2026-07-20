@@ -4,11 +4,13 @@
 @inject UiState Ui
 @inject ViewTransition Vt
 @inject Localizer L
+@inject IJSRuntime JS
 
-@* Board editor (MVP): a live 16:9 preview beside numeric controls — an element list with per-field X/Y/W/H,
-   text/colour/size/align and image swap, plus the board background. No on-canvas drag/resize yet (a follow-up):
-   typing a number moves the element in the preview immediately. Saving a board that's on the TV updates the
-   display live (the server bumps the TV rev). *@
+@* Board editor: a live 16:9 preview beside numeric controls — an element list with per-field X/Y/W/H,
+   text/colour/size/align and image swap, plus the board background. The preview supports direct manipulation
+   (BoardCanvasEditor): drag elements to move, drag handles to resize, arrow keys nudge the selection, and
+   selection is synced both ways with the list. Typing a number still moves the element immediately. Saving a
+   board that's on the TV updates the display live (the server bumps the TV rev). *@
 
 <PageTitle>Ambient Director — @(_edit.Name is { Length: > 0 } n ? n : L["boardEditor.titleFallback"])</PageTitle>
 
@@ -32,9 +34,12 @@ else
     <div class="board-editor">
         <div class="board-editor__preview">
             <div class="board-editor__stage">
-                <BoardCanvas Model="Preview" />
+                <BoardCanvasEditor Model="Preview" SelectedIndex="SelectedIndex"
+                                   OnSelect="HandleSelect" OnGeometry="HandleGeometry"
+                                   OnNudge="HandleNudge" OnTextTap="HandleTextTap" />
             </div>
-            <p class="hint" style="margin-top:var(--s-3, 0.75rem)">@L["boardEditor.liveHint"]</p>
+            <p class="hint" style="margin-top:var(--s-3, 0.75rem)">@L["boardEditor.canvasHint"]</p>
+            <p class="hint">@L["boardEditor.liveHint"]</p>
         </div>
 
         <div class="board-editor__controls">
@@ -82,8 +87,11 @@ else
                         @foreach (var (el, index) in _edit.Elements.Select((e, i) => (e, i)))
                         {
                             @* Key by the element instance so reorder moves the row's inputs/pickers (and their
-                               state) with the element rather than re-binding them in place. *@
-                            <div @key="el" class="board-elrow">
+                               state) with the element rather than re-binding them in place. data-index lets the
+                               JS scroll this row into view; focusin/click select the element both ways with the
+                               canvas (focusin covers focusing an input inside, click covers row whitespace). *@
+                            <div @key="el" class="board-elrow @(ReferenceEquals(el, _selected) ? "is-selected" : null)"
+                                 data-index="@index" @onfocusin="() => SelectFromRow(el)" @onclick="() => SelectFromRow(el)">
                                 <div class="board-elrow__head">
                                     <span class="board-elrow__ico"><Icon Name="@KindIcon(el.Kind)" /></span>
                                     <span class="board-elrow__title">
@@ -189,6 +197,19 @@ else
     private bool _busy;
     private BoardEdit _edit = new();
 
+    // Selection is stored as the element INSTANCE (not an index) so it survives Move()'s reorder swaps; the
+    // index the canvas overlay needs is derived on demand (null when nothing is selected or it's been removed).
+    private BoardElementEdit? _selected;
+    private int? SelectedIndex
+    {
+        get
+        {
+            if (_selected is null) return null;
+            var i = _edit.Elements.IndexOf(_selected);
+            return i < 0 ? null : i;
+        }
+    }
+
     // Which slot an upload / PDF pick is filling: the background, an existing element (by index), or a brand-new
     // image element (appended only once a stored id comes back — never an invalid imageless element).
     private enum FillTarget { None, Background, Element, NewImage }
@@ -276,7 +297,60 @@ else
         (_edit.Elements[index], _edit.Elements[target]) = (_edit.Elements[target], _edit.Elements[index]);
     }
 
-    private void RemoveAt(int index) => _edit.Elements.RemoveAt(index);
+    private void RemoveAt(int index)
+    {
+        if (index < 0 || index >= _edit.Elements.Count) return;
+        if (ReferenceEquals(_edit.Elements[index], _selected)) _selected = null; // clear a dangling selection
+        _edit.Elements.RemoveAt(index);
+    }
+
+    // ---------- selection / direct manipulation (BoardCanvasEditor) ----------
+
+    // Canvas/keyboard-originated selection: also scroll the matching list row into view. A row-originated
+    // selection (SelectFromRow) deliberately does NOT scroll — the user is already looking at that row.
+    private async Task HandleSelect(int? i)
+    {
+        if (i is { } idx && idx >= 0 && idx < _edit.Elements.Count)
+        {
+            _selected = _edit.Elements[idx];
+            await JS.InvokeVoidAsync("rpgBoardEditor.revealRow", idx);
+        }
+        else
+        {
+            _selected = null;
+        }
+    }
+
+    private void SelectFromRow(BoardElementEdit el) => _selected = el;
+
+    // A drag/resize gesture committed — C# is the authoritative clamp (X/Y 0–100, W/H 0.1–100), matching the
+    // numeric inputs. X clamps to 100 regardless of W, so an element may still hang off the right/bottom edge.
+    private void HandleGeometry((int Index, double X, double Y, double W, double H) g)
+    {
+        if (g.Index < 0 || g.Index >= _edit.Elements.Count) return;
+        var el = _edit.Elements[g.Index];
+        el.X = Math.Clamp(g.X, 0, 100);
+        el.Y = Math.Clamp(g.Y, 0, 100);
+        el.W = Math.Clamp(g.W, 0.1, 100);
+        el.H = Math.Clamp(g.H, 0.1, 100);
+    }
+
+    // Arrow-key nudge: 0.5 per press, 5 with Shift (matches the numeric inputs' 0.5 step). Only moves X/Y.
+    private void HandleNudge((int Index, int Dx, int Dy, bool Big) n)
+    {
+        if (n.Index < 0 || n.Index >= _edit.Elements.Count) return;
+        var el = _edit.Elements[n.Index];
+        var step = n.Big ? 5.0 : 0.5;
+        el.X = Math.Clamp(el.X + n.Dx * step, 0, 100);
+        el.Y = Math.Clamp(el.Y + n.Dy * step, 0, 100);
+    }
+
+    // Double-tap on the canvas jumps to editing a text element's textarea (no-op for image/party elements).
+    private async Task HandleTextTap(int i)
+    {
+        if (i >= 0 && i < _edit.Elements.Count && _edit.Elements[i].Kind == "text")
+            await JS.InvokeVoidAsync("rpgBoardEditor.focusRowText", i);
+    }
 
     // ---------- image uploads / PDF picks ----------
 

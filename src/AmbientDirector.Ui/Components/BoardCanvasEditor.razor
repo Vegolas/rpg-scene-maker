@@ -1,0 +1,99 @@
+@* Editor-only wrapper around BoardCanvas that adds direct manipulation (drag to move, handles to resize,
+   keyboard nudging) WITHOUT touching the renderer — BoardCanvas stays purely presentational. We draw an
+   invisible overlay of hit boxes, one per element, positioned with the exact same percent geometry as the
+   canvas's `.board-el` "twins". A pointer gesture is driven entirely by wwwroot/js/board-editor.js, which
+   mutates the box AND its canvas twin inline mid-gesture (so the real element visibly moves), then reports
+   the final geometry once on pointerup; C# is the authoritative clamp. Mouse + iPad touch via Pointer Events. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject Localizer L
+
+<div class="bce">
+    <BoardCanvas Model="Model" />
+    <div class="bce-overlay" @ref="_rootEl">
+        @* IMPORTANT: never @key these boxes by the element DTO instance. The page rebuilds the render model
+           (Preview => BoardRender.ToRenderModel(...)) on EVERY render, so a new TvBoardElementDto instance is
+           created each time; an instance key would look "different" every render and remount every box —
+           destroying the DOM identity board-editor.js relies on mid-gesture. Key by the positional index (stable
+           for a given board), so a selection/geometry re-render patches the box in place instead of remounting. *@
+        @for (var i = 0; i < Model.Elements.Count; i++)
+        {
+            var idx = i;
+            var el = Model.Elements[idx];
+            var selected = SelectedIndex == idx;
+            <div @key="idx" class="bce-box @(selected ? "is-selected" : null)"
+                 data-index="@idx" tabindex="0" role="button" aria-label="@BoxLabel(el.Kind, idx)"
+                 style="left:@Pct(el.X)%;top:@Pct(el.Y)%;width:@Pct(el.W)%;height:@Pct(el.H)%"
+                 @onfocusin="() => OnSelect.InvokeAsync(idx)">
+                @if (selected)
+                {
+                    @* Eight resize handles, painted only for the selected box; data-h is the drag direction. *@
+                    @foreach (var h in Handles)
+                    {
+                        <div class="bce-h bce-h--@h" data-h="@h" aria-hidden="true"></div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TvBoardDto Model { get; set; } = default!;
+    [Parameter] public int? SelectedIndex { get; set; }
+
+    // Selection changed on the canvas/keyboard — index, or null to deselect.
+    [Parameter] public EventCallback<int?> OnSelect { get; set; }
+    // A drag/resize gesture committed: the element's final percent geometry.
+    [Parameter] public EventCallback<(int Index, double X, double Y, double W, double H)> OnGeometry { get; set; }
+    // Arrow-key nudge: Dx/Dy in {-1,0,1}, Big = shift held (bigger step).
+    [Parameter] public EventCallback<(int Index, int Dx, int Dy, bool Big)> OnNudge { get; set; }
+    // Double-tap on an element (the page decides whether it's a text element worth editing).
+    [Parameter] public EventCallback<int> OnTextTap { get; set; }
+
+    private ElementReference _rootEl;
+    private DotNetObjectReference<BoardCanvasEditor>? _selfRef;
+
+    // Handle directions, matching the .bce-h--* modifiers and the data-h the JS reads.
+    private static readonly string[] Handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+    // "Text #2" etc. — reuses the page's kind labels so screen readers name the box by kind + position.
+    private string BoxLabel(string kind, int idx) => $"{KindLabel(kind)} #{idx + 1}";
+
+    private string KindLabel(string kind) => kind switch
+    {
+        "image" => L["boardEditor.kindImage"],
+        "party" => L["boardEditor.kindParty"],
+        _ => L["boardEditor.kindText"],
+    };
+
+    // Invariant "0.###" percent formatting, matching BoardCanvas.Pct so the overlay lines up 1:1 with the twins.
+    private static string Pct(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("rpgBoardEditor.init", _rootEl, _selfRef);
+        }
+    }
+
+    // ---- thin forwards from board-editor.js to the parameter callbacks ----
+
+    [JSInvokable] public Task OnCanvasSelect(int index) => OnSelect.InvokeAsync(index < 0 ? (int?)null : index);
+
+    [JSInvokable] public Task OnCanvasGeometry(int index, double x, double y, double w, double h) =>
+        OnGeometry.InvokeAsync((index, x, y, w, h));
+
+    [JSInvokable] public Task OnCanvasNudge(int index, int dx, int dy, bool big) =>
+        OnNudge.InvokeAsync((index, dx, dy, big));
+
+    [JSInvokable] public Task OnCanvasTextTap(int index) => OnTextTap.InvokeAsync(index);
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("rpgBoardEditor.dispose", _rootEl); } catch { }
+        _selfRef?.Dispose();
+    }
+}

@@ -587,6 +587,7 @@
     "boardEditor.notFoundBody": "No board with id “{0}”. Back to ",
     "boardEditor.notFoundBodyEnd": ".",
     "boardEditor.nameLabel": "Name",
+    "boardEditor.canvasHint": "Drag elements on the preview — handles resize, arrow keys nudge the selected element (Shift = bigger steps), double-tap a text to edit it.",
     "boardEditor.liveHint": "If this board is on the TV, saving updates the display live.",
     "boardEditor.background": "Background",
     "boardEditor.backgroundColor": "Colour",

@@ -131,6 +131,74 @@
   border-radius: var(--r-md);
 }
 
+/* ---- on-canvas direct manipulation (BoardCanvasEditor) ----
+   An invisible overlay of hit boxes sits exactly over the canvas twins. All selection chrome is the ONE blue
+   accent — no new colours, no glows. Geometry properties deliberately have NO transition (a box moves under the
+   finger; a transition would lag the drag). */
+.bce { position: relative; }
+
+.bce-overlay {
+  position: absolute;
+  inset: 0;
+  /* Clip hit boxes of elements hanging off the stage edge, exactly as the canvas clips its own content. */
+  overflow: hidden;
+}
+
+.bce-box {
+  position: absolute;
+  /* STATIC: touch-action can't be toggled mid-gesture, so a box always claims the gesture (a drag never scrolls
+     the page). The empty overlay area keeps its default touch-action, so panning the page from blank stage still
+     works — see board-editor.js. */
+  touch-action: none;
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Subtle grab hint on hover (desktop only — touch has no hover, and the preview stays clean until you select). */
+.bce-box:hover { outline: 1px dashed var(--border-strong); outline-offset: -1px; }
+
+/* The selected box is always chromed and raised so its handles win pointer hit-testing over overlapping later
+   elements (grab a buried element from the list rows instead — the intentional escape hatch). An unselected box
+   shows solid chrome the instant a drag starts, and the keyboard focus ring matches. */
+.bce-box.is-selected,
+.bce-box.is-dragging,
+.bce-box:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.bce-box.is-selected { z-index: 5; }
+
+.bce-h {
+  position: absolute;
+  /* 44px touch targets (--hit-min), capped by a share of the box so a small element keeps a grabbable move area
+     in its middle. The hit area is transparent; the visible affordance is the ::after dot. */
+  width: min(var(--hit-min), 55%);
+  height: min(var(--hit-min), 55%);
+  transform: translate(-50%, -50%);
+}
+.bce-h::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  border: 2px solid rgba(0, 0, 0, .55); /* dark rim keeps the dot visible over any tile art */
+  border-radius: 3px;
+}
+
+/* Each handle centred on its corner / edge-midpoint, with the matching resize cursor. */
+.bce-h--nw { left: 0;    top: 0;    cursor: nwse-resize; }
+.bce-h--n  { left: 50%;  top: 0;    cursor: ns-resize; }
+.bce-h--ne { left: 100%; top: 0;    cursor: nesw-resize; }
+.bce-h--e  { left: 100%; top: 50%;  cursor: ew-resize; }
+.bce-h--se { left: 100%; top: 100%; cursor: nwse-resize; }
+.bce-h--s  { left: 50%;  top: 100%; cursor: ns-resize; }
+.bce-h--sw { left: 0;    top: 100%; cursor: nesw-resize; }
+.bce-h--w  { left: 0;    top: 50%;  cursor: ew-resize; }
+
 .board-editor__controls { display: flex; flex-direction: column; gap: var(--s-3); }
 
 .board-editor__thumb {
@@ -156,6 +224,8 @@
   border-radius: var(--r-md);
   padding: var(--s-3);
 }
+/* Mirrors the canvas selection: the row of the element selected on the preview gets the accent border. */
+.board-elrow.is-selected { border-color: var(--accent); }
 .board-elrow__head { display: flex; align-items: center; gap: var(--s-2); }
 .board-elrow__ico { flex: 0 0 auto; color: var(--text-muted); display: grid; place-items: center; }
 .board-elrow__title { flex: 1 1 auto; min-width: 0; font: var(--text-md); }
