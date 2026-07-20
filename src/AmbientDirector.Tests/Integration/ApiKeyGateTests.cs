@@ -106,6 +106,8 @@ public class ApiKeyGateTests
     [InlineData("/events/list")]
     [InlineData("/screens/list")]
     [InlineData("/boards/list")]                        // Phase 2 boards
+    [InlineData("/party/list")]                         // Phase 3 party tracker
+    [InlineData("/party/players/x/adjust")]             // Phase 3 — the Stream Deck adjust command is gated too
     [InlineData("/lightfx/list")]
     [InlineData("/images/sources")]
     [InlineData("/setup/config")]

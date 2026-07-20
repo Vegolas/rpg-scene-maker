@@ -147,7 +147,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `index.html` (the panel reads `/screens/list` and picks a board by id client-side).
 - **`BoardStore` / `BoardEndpoints`** — persistence + CRUD for **boards** (`Board`, [Board.cs](src/AmbientDirector.Api/Models/Board.cs)):
   persisted, composable player-facing TV content — a fixed **16:9 stage** described entirely in percent
-  coordinates (background solid colour or stored image, plus positioned `image`/`text` elements; **element
+  coordinates (background solid colour or stored image, plus positioned `image`/`text`/`party` elements —
+  a `party` element is a geometry-only placeholder that renders the live roster, see `PartyStore`; **element
   list order is the z-order**, there is deliberately no Z field). Not to be confused with `Screens`
   (panel-side shortcut launchers): a board is *content pushed to* the `/tv` display via
   `/tv/show?board={id}`. `/boards/*` ([BoardEndpoints.cs](src/AmbientDirector.Api/Endpoints/BoardEndpoints.cs))
@@ -164,6 +165,25 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   follow-up), with [`BoardCanvas.razor`](src/AmbientDirector.Ui/Components/BoardCanvas.razor) as the one
   shared renderer (TV, editor preview, list cards, remote rail — text sizes in `cqh` container units so it
   scales identically everywhere).
+- **`PartyStore` / `PartyEndpoints`** — the **party tracker** (#88, Phase 3): live table stats on the TV.
+  The **players** domain is `PartyMember` ([PartyMember.cs](src/AmbientDirector.Api/Models/PartyMember.cs);
+  named `PartyMember`, not `Player`, to dodge the audio `…Player` collision — the wire/route vocabulary is
+  still "players") with a name, a stored `Portrait` (owned like a board image) and **generic** counters
+  `PartyCounter` = `{label, value, max, style}` (style null/`pips`/`number`); the Daggerheart HP/Stress/Armor/
+  Hope loadout is a **UI-side preset**, never hardcoded here. Table-wide stats that belong to no one player
+  (Daggerheart's Fear) live on the single-row **`PartyConfig`** ([PartyConfig.cs](src/AmbientDirector.Api/Data/PartyConfig.cs),
+  the `LightingConfig` idiom), reusing the same `PartyCounter`. `/party/*`
+  ([PartyEndpoints.cs](src/AmbientDirector.Api/Endpoints/PartyEndpoints.cs)) covers `list` (a `PartyDto` of
+  players + table counters), player put/delete, table-counter put, and two GetOrPost **adjust** commands
+  (`/party/players/{id}/adjust` and `/party/counters/adjust`, `?counter=<label>&delta=` or `&value=`, exactly
+  one — so a Stream Deck button can do `-1 HP`); adjust clamps into `[0, max ?? 999]`. Like `/boards` there is
+  deliberately **no** `GET /party/players/{id}` and nothing at bare `/party`, so the panel's `/party` +
+  `/party/{id}` pages fall through to index.html, and `/party` is in `IsProtectedPath`. Any player/counter
+  change calls `TouchIfPartyShown` — a rev bump **only if** the currently-shown board has a `party` element —
+  so an open TV re-fetches within one 2 s poll (no pointless bumps otherwise). The TV gate is extended for
+  this: `/tv/content/board/{name}` also serves a **current member's portrait** key-free, but **only while a
+  party-element board is shown** (membership checked before any disk access, like the board-files check).
+  Party AI ops are deferred to #89 (adding them to only one AI surface would fail `AiToolSurfaceParityTests`).
 - **`ISoundboardPlayer` / `SoundboardPlayer` / `IWavePlayerFactory` / `SoundDecoder` / `SoundStore` / `SoundFileStorage`** —
   the soundboard, behind the `ISoundboardPlayer` seam ([ISoundboardPlayer.cs](src/AmbientDirector.Api/Services/ISoundboardPlayer.cs):
   `Play`/`Stop`/`StopVoice`/`StopAll`/`PlayingIds`, mirroring how `ILightService` abstracts Tuya/Hue).
@@ -244,9 +264,9 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   commands; `?image=` or `?board=`, exactly one) and `show/recent`. **Gate split**: only `/tv/show*` +
   `/tv/clear` are in `IsProtectedPath`; `/tv`, `/tv/state` and `/tv/content/*` stay OPEN so a shared player
   screen never needs the admin key — the only key-free data is what the GM deliberately pushed:
-  `/tv/content/board/{name}` serves **only file names the currently-shown board references** (membership
-  checked before any disk access, so it is never a file-existence oracle; the general `/images` route stays
-  gated). Nothing is mapped at bare `/tv` (like `/screens`) so the panel's `/tv` page falls through to
+  `/tv/content/board/{name}` serves **only file names the currently-shown board references** (plus a shown
+  party board's live member portraits — see `PartyStore`; membership checked before any disk access, so it is
+  never a file-existence oracle; the general `/images` route stays gated). Nothing is mapped at bare `/tv` (like `/screens`) so the panel's `/tv` page falls through to
   `index.html`.
 - **First-run onboarding (#75)** — a guided setup overlay the panel shows on a fresh install. State lives in a
   nullable `OnboardingDoneUtc` column on the single-row `LightingConfig`: `GET /setup/onboarding` returns `show`
@@ -358,7 +378,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   than returning ad-hoc error bodies; for a new exception *type*, add a `switch` arm to `ErrorClassifier`. See
   the error-localization notes under `LocaleService` above.
 - **Optional API key**: when `Security:ApiKey` is set, `/scenes /lights /music /sounds /events /screens
-  /boards /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` — plus the TV **push** commands
+  /boards /party /lightfx /images /setup /logs /diagnostics /mcp /assistant /i18n` — plus the TV **push** commands
   `/tv/show*` and `/tv/clear` (the rest of the player-facing `/tv` surface stays open, see `TvState`) — require it
   (`X-Api-Key` header or `?apiKey=`; the Spotify OAuth callback is exempt). The panel stores it in browser
   localStorage. Keep new protected prefixes in `IsProtectedPath` in [Program.cs](src/AmbientDirector.Api/Program.cs).
@@ -376,9 +396,11 @@ as JSON columns; ids use `NOCASE` collation), `Sounds` (soundboard metadata; ids
 (one-shot triggered effects; `Flash` and `Timeline` JSON columns; ids `NOCASE`), `Screens` (shortcut boards;
 `Tiles` JSON column plus a `Compact` layout flag; ids `NOCASE`), `Boards` (player-facing TV layouts;
 background colour/image plus an `Elements` JSON column; ids `NOCASE`), `LightFxs` (reusable Light FX library; `Keyframes` JSON column; ids
+`NOCASE`), `PartyMembers` (party-tracker players; name/portrait/sortOrder plus a `Counters` JSON column; ids
 `NOCASE`), a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`, plus a nullable
-`OnboardingDoneUtc` stamp for the first-run wizard), a single-row `FreesoundConfig` (the Freesound API token)
+`OnboardingDoneUtc` stamp for the first-run wizard), a single-row `PartyConfig` (the party tracker's
+table-level counters in a `Counters` JSON column — Fear etc.), a single-row `FreesoundConfig` (the Freesound API token)
 and a single-row
 `AssistantConversation` (the in-panel assistant's persisted transcript + history, each a JSON string). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.

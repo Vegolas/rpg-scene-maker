@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<Board> Boards => Set<Board>();
     public DbSet<LightFx> LightFxs => Set<LightFx>();
+    public DbSet<PartyMember> PartyMembers => Set<PartyMember>();
+    public DbSet<PartyConfig> PartyConfigs => Set<PartyConfig>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
     public DbSet<AssistantConfig> AssistantConfigs => Set<AssistantConfig>();
@@ -100,6 +102,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             fx.Property(f => f.Id).UseCollation("NOCASE");
             // The keyframe sequence is a small ordered list of value objects — one JSON column (like Scene.Lights).
             fx.OwnsMany(f => f.Keyframes, b => b.ToJson());
+        });
+
+        modelBuilder.Entity<PartyMember>(member =>
+        {
+            member.HasKey(m => m.Id);
+            // Member ids appear in hand-typed /party/players/{id}/adjust URLs, so match them case-insensitively.
+            member.Property(m => m.Id).UseCollation("NOCASE");
+            // A member's counters are a small ordered list of value objects — one JSON column (like Scene.Lights).
+            member.OwnsMany(m => m.Counters, b => b.ToJson());
+        });
+
+        modelBuilder.Entity<PartyConfig>(config =>
+        {
+            config.HasKey(c => c.Id);
+            config.Property(c => c.Id).ValueGeneratedNever();
+            // PartyCounter is an owned type shared with PartyMember — same pattern as LightSettings, owned by
+            // both Scene.Light and LightingConfig.DefaultLight. Table-level counters (Fear etc.) in one column.
+            config.OwnsMany(c => c.Counters, b => b.ToJson());
         });
 
         modelBuilder.Entity<LightingConfig>(config =>

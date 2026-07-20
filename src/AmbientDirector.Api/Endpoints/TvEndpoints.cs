@@ -1,5 +1,6 @@
 using AmbientDirector.Api.Contracts;
 using AmbientDirector.Api.Errors;
+using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
 
 namespace AmbientDirector.Api.Endpoints;
@@ -20,7 +21,7 @@ public static class TvEndpoints
         // trusts the authoritative rev echoed here (it resets to 1 on a restart, so no monotonic assumption);
         // we keep it dead simple and return the full state every time. `state`/`boards` come first so `rev`
         // can carry a default (required minimal-API parameters must precede optional ones).
-        tv.MapGet("/state", async (TvState state, BoardStore boards, long rev = 0) =>
+        tv.MapGet("/state", async (TvState state, BoardStore boards, PartyStore party, long rev = 0) =>
         {
             var (currentRev, content) = state.Snapshot();
             if (content is null)
@@ -34,6 +35,25 @@ public static class TvEndpoints
                     // content WITHOUT mutating state — a GET must stay side-effect-free (a later push/clear or
                     // the delete's own ForgetBoard is what bumps the rev).
                     return new TvStateDto(currentRev, null);
+
+                // A kind=party element renders the LIVE roster (not board state). Load it ONCE here and attach
+                // the same render model to every party element on the board (there is normally one); a board
+                // with no party element skips the query entirely. Portrait refs resolve to the same
+                // gate-validated per-name board route as image elements (the gate allows them dynamically).
+                TvPartyDto? partyDto = null;
+                if (board.Elements.Any(e => e.Kind == "party"))
+                {
+                    var members = await party.GetMembersAsync();
+                    var tableCounters = await party.GetTableCountersAsync();
+                    partyDto = new TvPartyDto(
+                        [.. members.Select(m => new TvPartyPlayerDto(
+                            m.Name,
+                            string.IsNullOrEmpty(m.Portrait)
+                                ? null
+                                : $"/tv/content/board/{Uri.EscapeDataString(m.Portrait)}?rev={currentRev}",
+                            [.. m.Counters.Select(c => new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style))]))],
+                        [.. tableCounters.Select(c => new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style))]);
+                }
 
                 var boardDto = new TvBoardDto(
                     board.BackgroundColor,
@@ -49,7 +69,9 @@ public static class TvEndpoints
                         e.Kind == "text" ? e.Text : null,
                         e.Kind == "text" ? e.Color : null,
                         e.Kind == "text" ? e.Size : null,
-                        e.Kind == "text" ? e.Align : null))]);
+                        e.Kind == "text" ? e.Align : null,
+                        // A party element carries the live roster; every other kind leaves it null.
+                        e.Kind == "party" ? partyDto : null))]);
 
                 // A board carries its render model in Content.Board; Content.Url is null (nothing to stream).
                 return new TvStateDto(currentRev, new TvContentDto("board", null, content.Label, boardDto));
@@ -74,19 +96,22 @@ public static class TvEndpoints
         });
 
         // Streams one image referenced by the CURRENTLY SHOWN board. THIS IS THE KEY-FREE GATE INVARIANT: the
-        // open TV surface may serve ONLY content the currently-pushed board references — never the general
-        // /images route to keyless clients. 404 unless (a) a board is currently shown, (b) that board still
-        // exists, and (c) `name` is one of its ReferencedFiles(). The membership check runs BEFORE any disk
+        // open TV surface may serve ONLY what the currently-pushed board renders — its own referenced files
+        // (background + image elements), PLUS, when the board renders the live party, the portraits of the
+        // current members — never the general /images route to keyless clients. 404 unless (a) a board is
+        // currently shown, (b) that board still exists, and (c) `name` is one of its ReferencedFiles() OR a
+        // current member's portrait on a party-element board. ALL of that membership check runs BEFORE any disk
         // access, so this route can never become a file-existence oracle for unreferenced images. Everything
         // else is 404 (never 401 — a keyless TV must never need a key; not-found is the safe answer).
-        tv.MapGet("/content/board/{name}", async (string name, TvState state, ImageFileStorage images, BoardStore boards) =>
+        tv.MapGet("/content/board/{name}", async (string name, TvState state, ImageFileStorage images, BoardStore boards, PartyStore party) =>
         {
             if (state.Current is not { Kind: "board" } content)
                 return Results.NotFound();
             var board = await boards.GetAsync(content.Ref);
             if (board is null)
                 return Results.NotFound();
-            if (!board.ReferencedFiles().Contains(name, StringComparer.OrdinalIgnoreCase))
+            if (!board.ReferencedFiles().Contains(name, StringComparer.OrdinalIgnoreCase)
+                && !await IsCurrentPartyPortraitAsync(board, name, party))
                 return Results.NotFound();
             // Only now touch the filesystem — FullPathForName also traversal-guards the name.
             var full = images.FullPathForName(name);
@@ -135,5 +160,18 @@ public static class TvEndpoints
         // without adding another prefix rule. Panel-only, so it exposes the raw stored ref (file name / board id).
         tv.MapGet("/show/recent", (TvState state) =>
             state.Recent.Select(c => new TvRecentItemDto(c.Kind, c.Ref, c.Label, c.PushedAtUtc)));
+    }
+
+    // The dynamic half of the key-free gate: true when the shown board renders the party AND `name` is a
+    // current member's portrait. Portraits are LIVE data, not board files (they're deliberately absent from
+    // Board.ReferencedFiles()), so they're gated here instead — served key-free only while a party-element
+    // board is on the display. Runs entirely BEFORE any filesystem access, like the ReferencedFiles() check.
+    static async Task<bool> IsCurrentPartyPortraitAsync(Board board, string name, PartyStore party)
+    {
+        if (!board.Elements.Any(e => e.Kind == "party"))
+            return false;
+        var members = await party.GetMembersAsync();
+        return members.Any(m => !string.IsNullOrEmpty(m.Portrait)
+            && string.Equals(m.Portrait, name, StringComparison.OrdinalIgnoreCase));
     }
 }
