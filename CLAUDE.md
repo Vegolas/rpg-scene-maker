@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Boards, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; **Boards** (pl "Tablice") is the composable-TV-content editor, see `BoardStore`; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
+- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Boards, Party, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; **Boards** (pl "Tablice") is the composable-TV-content editor, see `BoardStore`; **Party** (pl "Drużyna") is the touch ± roster tracker (`/party`) + per-player editor (`/party/{id}`), see `PartyStore`; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
   through [ApiClient.cs](src/AmbientDirector.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
@@ -184,6 +184,13 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   this: `/tv/content/board/{name}` also serves a **current member's portrait** key-free, but **only while a
   party-element board is shown** (membership checked before any disk access, like the board-files check).
   Party AI ops are deferred to #89 (adding them to only one AI surface would fail `AiToolSurfaceParityTests`).
+  **Panel side**: the **Party** tab (pl "Drużyna") is the fast, touch-first mid-session tracker at `/party` —
+  table counters up top and a card per player with ± step buttons on every counter (each tap hits `/party/.../adjust`;
+  a shown party board updates live) — plus a per-player editor at `/party/{id}` (name, **ArtField** portrait, order,
+  the counter set with pips/number style, and the UI-only **Add Daggerheart set** / **Add Fear** presets). The one
+  `BoardCanvas` renderer draws a `kind="party"` element everywhere from a live render model: inlined by the API on the
+  TV, and built in the panel (editor preview, board list cards, remote rail) from `/party/list` via
+  `PartyRender.ToRenderModel` (threaded through `BoardRender.ToRenderModel`).
 - **`ISoundboardPlayer` / `SoundboardPlayer` / `IWavePlayerFactory` / `SoundDecoder` / `SoundStore` / `SoundFileStorage`** —
   the soundboard, behind the `ISoundboardPlayer` seam ([ISoundboardPlayer.cs](src/AmbientDirector.Api/Services/ISoundboardPlayer.cs):
   `Play`/`Stop`/`StopVoice`/`StopAll`/`PlayingIds`, mirroring how `ILightService` abstracts Tuya/Hue).

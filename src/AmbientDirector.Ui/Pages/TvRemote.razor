@@ -128,6 +128,9 @@
     private TvStateDto? _state;
     private List<TvRecentItemDto> _recent = [];
     private List<BoardDto> _boards = [];
+    // The live party roster (mapped once on load) so a board rail tile draws the real roster for any kind="party"
+    // element. The now-showing preview instead uses the server-inlined render model from /tv/state (no change).
+    private TvPartyDto? _partyRender;
     private long _rev;
     private string _label = "";
     private bool _busy;
@@ -141,6 +144,8 @@
     {
         await Api.GetApiKeyAsync(); // cache the key so the recent/board tile /images urls carry it
         _boards = await Api.GetBoardsAsync();
+        var party = await Api.GetPartyAsync();
+        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl);
         await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 2000, 2000);
     }
@@ -155,8 +160,8 @@
         StateHasChanged();
     }
 
-    // A board's mini preview for the rail — key-bearing /images urls, the same shape the TV draws.
-    private TvBoardDto Render(BoardDto board) => BoardRender.ToRenderModel(board, Api.ImageUrl);
+    // A board's mini preview for the rail — key-bearing /images urls + the live party, the same shape the TV draws.
+    private TvBoardDto Render(BoardDto board) => BoardRender.ToRenderModel(board, Api.ImageUrl, _partyRender);
 
     // A recent board tile shows the live board name (a rename since the push is reflected), falling back to the
     // label stored at push time when the board no longer exists.

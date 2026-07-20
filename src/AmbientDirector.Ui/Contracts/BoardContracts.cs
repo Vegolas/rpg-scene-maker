@@ -56,19 +56,23 @@ public class BoardElementEdit
 
 // One shared board → render-model mapper so a SINGLE component (BoardCanvas) draws boards everywhere. The TV
 // gets its render model straight from the API (image refs already resolved to the open /tv/content/board/{name}
-// routes); the panel builds the very same TvBoardDto shape from a board it holds, mapping stored image file
-// names through Api.ImageUrl (key-bearing /images/{name} urls) instead. Pass Api.ImageUrl as imageUrl.
+// routes, party element already carrying the live roster); the panel builds the very same TvBoardDto shape from
+// a board it holds, mapping stored image file names through Api.ImageUrl (key-bearing /images/{name} urls) and
+// attaching the party render model it fetched from /party/list (via PartyRender). Pass Api.ImageUrl as imageUrl,
+// and the live party (built with PartyRender.ToRenderModel) so kind="party" elements draw the real roster.
 public static class BoardRender
 {
-    public static TvBoardDto ToRenderModel(BoardDto board, Func<string?, string?> imageUrl) =>
+    public static TvBoardDto ToRenderModel(BoardDto board, Func<string?, string?> imageUrl, TvPartyDto? party = null) =>
         new(board.BackgroundColor,
             imageUrl(board.BackgroundImage),
             [.. (board.Elements ?? []).Select(e => new TvBoardElementDto(
                 e.Kind, e.X, e.Y, e.W, e.H,
-                // image element → a ready-to-fetch url; text element → text fields, url null (mirrors the API).
+                // image element → a ready-to-fetch url; text element → text fields; party element → the live
+                // roster; url null for all but image (mirrors the API's TvBoardElementDto projection).
                 e.Kind == "image" ? imageUrl(e.Image) : null,
                 e.Kind == "text" ? e.Text : null,
                 e.Kind == "text" ? e.Color : null,
                 e.Kind == "text" ? e.Size : null,
-                e.Kind == "text" ? e.Align : null))]);
+                e.Kind == "text" ? e.Align : null,
+                e.Kind == "party" ? party : null))]);
 }

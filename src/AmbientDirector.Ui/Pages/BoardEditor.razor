@@ -85,9 +85,9 @@ else
                                state) with the element rather than re-binding them in place. *@
                             <div @key="el" class="board-elrow">
                                 <div class="board-elrow__head">
-                                    <span class="board-elrow__ico"><Icon Name="@(el.Kind == "image" ? "screens" : "edit")" /></span>
+                                    <span class="board-elrow__ico"><Icon Name="@KindIcon(el.Kind)" /></span>
                                     <span class="board-elrow__title">
-                                        @(el.Kind == "image" ? L["boardEditor.kindImage"] : L["boardEditor.kindText"])
+                                        @KindLabel(el.Kind)
                                         <small class="hint">#@(index + 1)</small>
                                     </span>
                                     <button class="reorder" @onclick="() => Move(index, -1)" disabled="@(index == 0)" aria-label='@L["boardEditor.moveUp"]'><Icon Name="move-up" /></button>
@@ -121,6 +121,11 @@ else
                                         </label>
                                         <button class="btn btn--small" @onclick="() => OpenPdf(FillTarget.Element, index)" disabled="@_busy"><Icon Name="pdf" /> @L["boardEditor.fromPdf"]</button>
                                     </div>
+                                }
+                                else if (el.Kind == "party")
+                                {
+                                    @* A party element is geometry-only — its content is the live roster, edited on the Party tab. *@
+                                    <p class="hint" style="margin:0.6rem 0 0">@L["boardEditor.partyHint"]</p>
                                 }
                                 else
                                 {
@@ -156,6 +161,7 @@ else
                         <Icon Name="add" /> @L["boardEditor.addImage"]
                     </label>
                     <button class="btn btn--small" @onclick="() => OpenPdf(FillTarget.NewImage, -1)" disabled="@_busy"><Icon Name="pdf" /> @L["boardEditor.fromPdf"]</button>
+                    <button class="btn btn--small" @onclick="AddParty"><Icon Name="party" /> @L["boardEditor.addParty"]</button>
                 </div>
             </div>
         </div>
@@ -193,9 +199,15 @@ else
     private (string, string)[] AlignOptions =>
         [("left", L["boardEditor.alignLeft"]), ("center", L["boardEditor.alignCenter"]), ("right", L["boardEditor.alignRight"])];
 
+    // The live party roster, mapped once on load, so a kind="party" element previews the real players (the same
+    // render model the TV builds server-side). Null when offline → BoardCanvas draws its quiet placeholder.
+    private TvPartyDto? _partyRender;
+
     protected override async Task OnInitializedAsync()
     {
         await Api.GetApiKeyAsync(); // cache the key so preview/thumbnail image urls carry it
+        var party = await Api.GetPartyAsync();
+        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl);
         var dto = (await Api.GetBoardsAsync())
             .FirstOrDefault(b => string.Equals(b.Id, Id, StringComparison.OrdinalIgnoreCase));
         if (dto is null)
@@ -209,7 +221,22 @@ else
     }
 
     // Re-mapped from the edit model every render, so any numeric/text/colour change previews immediately.
-    private TvBoardDto Preview => BoardRender.ToRenderModel(_edit.ToDto(), Api.ImageUrl);
+    private TvBoardDto Preview => BoardRender.ToRenderModel(_edit.ToDto(), Api.ImageUrl, _partyRender);
+
+    // Element header glyph + label per kind (text/image/party).
+    private static string KindIcon(string kind) => kind switch
+    {
+        "image" => "screens",
+        "party" => "party",
+        _ => "edit",
+    };
+
+    private string KindLabel(string kind) => kind switch
+    {
+        "image" => L["boardEditor.kindImage"],
+        "party" => L["boardEditor.kindParty"],
+        _ => L["boardEditor.kindText"],
+    };
 
     // ---------- geometry inputs ----------
 
@@ -238,6 +265,9 @@ else
         Kind = "text", X = 10, Y = 10, W = 40, H = 12, Size = 5, Align = "left", Color = "#FFFFFF",
         Text = L["boardEditor.newTextDefault"],
     });
+
+    // A party element is geometry-only (the server nulls image/text/colour); it renders the live roster.
+    private void AddParty() => _edit.Elements.Add(new BoardElementEdit { Kind = "party", X = 10, Y = 10, W = 80, H = 80 });
 
     private void Move(int index, int delta)
     {

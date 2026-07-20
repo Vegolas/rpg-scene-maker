@@ -24,6 +24,82 @@
             {
                 <div class="board-el__text" style="@TextStyle(el)">@el.Text</div>
             }
+            else if (el.Kind == "party")
+            {
+                @if (el.Party is { } p)
+                {
+                    // One counter's value: a row of pips (dots, filled up to Value) for a "pips"/small-bounded
+                    // counter, else tabular-nums text (Value, or Value/Max when a max is set). Shared by the
+                    // table strip and each player's rows; sized in container units so it scales with the stage.
+                    RenderFragment<TvPartyCounterDto> counterValue = c =>
+                    @<span class="bparty__val">
+                        @if (IsPips(c))
+                        {
+                            var pipMax = Math.Min(c.Max ?? 0, PipCap);
+                            var filled = Math.Clamp(c.Value, 0, pipMax);
+                            <span class="bparty__pips">
+                                @for (var i = 0; i < pipMax; i++)
+                                {
+                                    <span class="bparty__pip@(i < filled ? " is-on" : "")"></span>
+                                }
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="bparty__num">@(c.Max is { } m ? $"{c.Value}/{m}" : c.Value.ToString())</span>
+                        }
+                    </span>;
+                    <div class="board-el__party">
+                        @if (p.Counters.Count > 0)
+                        {
+                            <div class="bparty__table">
+                                @foreach (var c in p.Counters)
+                                {
+                                    <div class="bparty__tcounter">
+                                        <span class="bparty__label">@c.Label</span>
+                                        @counterValue(c)
+                                    </div>
+                                }
+                            </div>
+                        }
+                        <div class="bparty__grid">
+                            @foreach (var pl in p.Players)
+                            {
+                                <div class="bparty__player">
+                                    <div class="bparty__portrait">
+                                        @if (pl.PortraitUrl is { } purl && !_failed.Contains(purl))
+                                        {
+                                            <img src="@purl" alt="" @onerror="() => _failed.Add(purl)" />
+                                        }
+                                        else
+                                        {
+                                            <span class="bparty__initial">@Initial(pl.Name)</span>
+                                        }
+                                    </div>
+                                    <div class="bparty__pname">@pl.Name</div>
+                                    @if (pl.Counters.Count > 0)
+                                    {
+                                        <div class="bparty__crows">
+                                            @foreach (var c in pl.Counters)
+                                            {
+                                                <div class="bparty__crow">
+                                                    <span class="bparty__label">@c.Label</span>
+                                                    @counterValue(c)
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @* Panel contexts that didn't supply live data render a quiet placeholder, never a broken box. *@
+                    <div class="board-el__party board-el__party--empty"><Icon Name="party" /></div>
+                }
+            }
         </div>
     }
 </div>
@@ -35,6 +111,9 @@
     // the full url (which carries ?rev=/?apiKey=), so a re-pushed or edited board's new url retries the fetch.
     private readonly HashSet<string> _failed = new(StringComparer.Ordinal);
 
+    // "pips" can't render more dots than a TV can read; the API caps a pips max at 24, so we mirror that here.
+    private const int PipCap = 24;
+
     private static string Pct(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string TextStyle(TvBoardElementDto el)
@@ -43,5 +122,18 @@
         var align = string.IsNullOrEmpty(el.Align) ? "left" : el.Align;
         var color = string.IsNullOrEmpty(el.Color) ? "#eef2f8" : el.Color; // near-white (matches --text token)
         return $"--sz:{Pct(size)};text-align:{align};color:{color}";
+    }
+
+    // A counter draws as pips when it says so, or (style unset) when it has a small, TV-renderable max; else a
+    // number. Mirrors the API's renderer rule (PartyValidation) and Party.razor's panel-side copy.
+    private static bool IsPips(TvPartyCounterDto c) =>
+        string.Equals(c.Style, "pips", StringComparison.Ordinal) || (c.Style is null && c.Max is >= 1 and <= PipCap);
+
+    // The portrait fallback: the first (rune-safe, so an emoji name doesn't split a surrogate) letter of the name.
+    private static string Initial(string name)
+    {
+        name = name.Trim();
+        if (name.Length == 0) return "?";
+        return name.EnumerateRunes().First().ToString().ToUpperInvariant();
     }
 }

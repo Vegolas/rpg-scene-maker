@@ -1,0 +1,193 @@
+@page "/party/{Id}"
+@inject ApiClient Api
+@inject UiState Ui
+@inject ViewTransition Vt
+@inject Localizer L
+
+@* Player editor: mirrors BoardEditor — load the whole roster, pick this player by id client-side, edit name /
+   portrait / order and the counter list, then save the whole player back. Portrait uses the standard ArtField
+   picker (upload/crop/search/PDF). The Daggerheart set is a UI-only preset (the API stores generic counters).
+   Inputs are kept valid client-side (e.g. pips clamps max into 1–24) but the server remains authoritative. *@
+
+<PageTitle>Ambient Director — @(_edit.Name is { Length: > 0 } n ? n : L["partyEditor.title"])</PageTitle>
+
+<div class="btn-row" style="margin-bottom:0.2rem">
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("party")'><Icon Name="back" /> @L["party.title"]</button>
+</div>
+
+@if (_loading)
+{
+    <p class="empty-note">@L["party.loading"]</p>
+}
+else if (_notFound)
+{
+    <div class="page-head"><h1>@L["partyEditor.notFoundTitle"]</h1></div>
+    <p class="empty-note">@L.Format("partyEditor.notFoundBody", Id)<a href="party">@L["party.title"]</a>@L["partyEditor.notFoundBodyEnd"]</p>
+}
+else
+{
+    <div class="page-head"><h1>@(_edit.Name is { Length: > 0 } ? _edit.Name : L["partyEditor.title"])</h1></div>
+
+    <div class="party-editor">
+        <div class="panel">
+            <div class="field">
+                <label for="p-name">@L["partyEditor.nameLabel"]</label>
+                <input id="p-name" type="text" value="@_edit.Name"
+                       @oninput="e => _edit.Name = e.Value?.ToString() ?? string.Empty" />
+            </div>
+            <div class="field" style="margin-bottom:0">
+                <label for="p-order">@L["partyEditor.sortOrder"]</label>
+                <input id="p-order" class="party-order" type="number" step="1" min="0" max="9999" value="@_edit.SortOrder"
+                       @onchange="e => _edit.SortOrder = ClampInt(e.Value, _edit.SortOrder, 0, 9999)" />
+            </div>
+        </div>
+
+        <SectionHeading>@L["partyEditor.portrait"]</SectionHeading>
+        <div class="panel">
+            <ArtField Image="_edit.Portrait" ImageChanged="v => _edit.Portrait = v" />
+        </div>
+
+        <SectionHeading>@L["partyEditor.counters"]</SectionHeading>
+        <div class="panel">
+            @if (_edit.Counters.Count == 0)
+            {
+                <p class="hint" style="margin:0">@L["partyEditor.noCounters"]</p>
+            }
+            else
+            {
+                <div class="party-ceditor">
+                    @foreach (var (c, index) in _edit.Counters.Select((c, i) => (c, i)))
+                    {
+                        @* Key by the counter instance so a remove doesn't re-bind the inputs of the row below. *@
+                        <div @key="c" class="party-crow-edit">
+                            <input class="party-input party-input--label" type="text" value="@c.Label"
+                                   placeholder='@L["partyEditor.labelLabel"]'
+                                   @oninput="e => c.Label = e.Value?.ToString() ?? string.Empty" />
+                            <label class="party-mini">
+                                <span>@L["partyEditor.valueLabel"]</span>
+                                <input type="number" min="0" max="999" value="@c.Value"
+                                       @onchange="e => c.Value = ClampInt(e.Value, c.Value, 0, 999)" />
+                            </label>
+                            <label class="party-mini">
+                                <span>@L["partyEditor.maxLabel"]</span>
+                                <input type="number" min="1" max="999" value="@(c.Max?.ToString() ?? "")"
+                                       @onchange="e => SetMax(c, e.Value)" />
+                            </label>
+                            <div class="party-style">
+                                <span class="art-label">@L["partyEditor.styleLabel"]</span>
+                                <Segmented TValue="string" Options="StyleOptions" Value="@c.Style"
+                                           ValueChanged="v => SetStyle(c, v)" />
+                            </div>
+                            <button class="btn btn--icon btn--danger party-crow-edit__del" @onclick="() => _edit.Counters.RemoveAt(index)"
+                                    aria-label='@L["boardEditor.removeElement"]'><Icon Name="close" /></button>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="btn-row" style="margin-top:var(--s-4,1rem)">
+                <button class="btn btn--small" @onclick="AddCounter"><Icon Name="add" /> @L["party.addCounter"]</button>
+                <button class="btn btn--small" @onclick="AddDaggerheart">@L["partyEditor.addDaggerheart"]</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="editor-actions">
+        <button class="btn btn--primary" @onclick="Save" disabled="@_busy">@L["common.save"]</button>
+    </div>
+    <div class="btn-row" style="margin-top:0.7rem">
+        <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["partyEditor.delete"]</ConfirmButton>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _busy;
+    private PlayerEdit _edit = new();
+
+    private (string, string)[] StyleOptions =>
+        [("pips", L["partyEditor.stylePips"]), ("number", L["partyEditor.styleNumber"])];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.GetApiKeyAsync(); // cache the key so the ArtField portrait thumbnail url carries it
+        var party = await Api.GetPartyAsync();
+        var dto = party?.Players.FirstOrDefault(p => string.Equals(p.Id, Id, StringComparison.OrdinalIgnoreCase));
+        if (dto is null)
+        {
+            _notFound = true;
+            _loading = false;
+            return;
+        }
+        _edit = PlayerEdit.FromDto(dto);
+        _loading = false;
+    }
+
+    private void AddCounter() => _edit.Counters.Add(new CounterEdit { Label = "", Value = 0, Max = 6, Style = "pips" });
+
+    // The Daggerheart loadout — a UI-only preset (the API stores generic counters). Appends HP/Stress/Armor/Hope,
+    // skipping labels that already exist (case-insensitive) so re-clicking never duplicates.
+    private void AddDaggerheart()
+    {
+        AddPreset(L["party.preset.hp"], 0, 6);
+        AddPreset(L["party.preset.stress"], 0, 6);
+        AddPreset(L["party.preset.armor"], 0, 3);
+        AddPreset(L["party.preset.hope"], 2, 6);
+    }
+
+    private void AddPreset(string label, int value, int max)
+    {
+        if (_edit.Counters.Any(c => string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase))) return;
+        _edit.Counters.Add(new CounterEdit { Label = label, Value = value, Max = max, Style = "pips" });
+    }
+
+    private static void SetStyle(CounterEdit c, string style)
+    {
+        c.Style = style;
+        // pips needs a bounded, TV-renderable max (1–24) — clamp/default it when switching to pips.
+        if (style == "pips") c.Max = Math.Clamp(c.Max ?? 6, 1, 24);
+    }
+
+    private static void SetMax(CounterEdit c, object? raw)
+    {
+        var text = raw?.ToString();
+        if (string.IsNullOrWhiteSpace(text)) c.Max = null;
+        else if (int.TryParse(text, out var v)) c.Max = Math.Clamp(v, 1, 999);
+        if (c.Style == "pips") c.Max = Math.Min(c.Max ?? 6, 24);
+    }
+
+    private static int ClampInt(object? raw, int fallback, int min, int max) =>
+        int.TryParse(raw?.ToString(), out var v) ? Math.Clamp(v, min, max) : fallback;
+
+    private async Task Save()
+    {
+        if (_busy) return;
+        if (string.IsNullOrWhiteSpace(_edit.Name))
+        {
+            Ui.ReportError(L["party.toast.nameFirst"]);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var (_, error) = await Api.SavePlayerAsync(_edit.Id, _edit.ToDto());
+            if (error is not null) { Ui.ReportError(error); return; }
+            Ui.ReportOk(L.Format("partyEditor.toast.saved", _edit.Name.Trim()));
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteConfirmed()
+    {
+        _busy = true;
+        try
+        {
+            var (ok, error) = await Api.DeletePlayerAsync(_edit.Id);
+            if (ok) await Vt.NavigateAsync("party");
+            else Ui.ReportError(error ?? L["partyEditor.toast.deleteFailed"]);
+        }
+        finally { _busy = false; }
+    }
+}

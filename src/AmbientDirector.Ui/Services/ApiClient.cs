@@ -840,6 +840,36 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         return CommandAsync(path, okMessage);
     }
 
+    // ---------- party (players + counters tracker) ----------
+
+    /// <summary>The whole roster + table-level counters; silent on failure like the other list reads (null →
+    /// the page treats it as loaded-empty).</summary>
+    public Task<PartyDto?> GetPartyAsync() => GetAsync<PartyDto>("party/list");
+
+    /// <summary>Upsert a player (the id rides in the route, the whole player in the body); the tracker/editor
+    /// show the returned error inline / via toast. There is deliberately no GET /party/players/{id} — the panel
+    /// loads the list and picks by id client-side, so this is the only player write.</summary>
+    public Task<(PartyPlayerDto? Result, string? Error)> SavePlayerAsync(string id, PartyPlayerDto player) =>
+        FetchAsync<PartyPlayerDto>(HttpMethod.Put, $"party/players/{Uri.EscapeDataString(id)}", player);
+
+    public Task<(bool Ok, string? Error)> DeletePlayerAsync(string id) =>
+        DeleteAsync($"party/players/{Uri.EscapeDataString(id)}");
+
+    /// <summary>Replace the table-level counter list (Fear etc.); returns the saved list. The editor shows the
+    /// returned error inline.</summary>
+    public Task<(List<PartyCounterDto>? Result, string? Error)> SaveTableCountersAsync(List<PartyCounterDto> counters) =>
+        FetchAsync<List<PartyCounterDto>>(HttpMethod.Put, "party/counters", counters);
+
+    /// <summary>Tap-to-adjust one player's counter by ±delta (no body); returns the updated player.</summary>
+    public Task<(PartyPlayerDto? Result, string? Error)> AdjustPlayerCounterAsync(string id, string label, int delta) =>
+        FetchAsync<PartyPlayerDto>(HttpMethod.Post,
+            $"party/players/{Uri.EscapeDataString(id)}/adjust?counter={Uri.EscapeDataString(label)}&delta={delta}");
+
+    /// <summary>Tap-to-adjust a table-level counter by ±delta (no body); returns the updated counter list.</summary>
+    public Task<(List<PartyCounterDto>? Result, string? Error)> AdjustTableCounterAsync(string label, int delta) =>
+        FetchAsync<List<PartyCounterDto>>(HttpMethod.Post,
+            $"party/counters/adjust?counter={Uri.EscapeDataString(label)}&delta={delta}");
+
     // ---------- light fx (reusable effect library) ----------
 
     public async Task<List<LightFxDto>> GetLightFxAsync() =>

@@ -91,10 +91,16 @@ else
     private bool _busy;
     private string _name = "";
 
+    // The live party roster (mapped once on load) so a board card's mini preview draws the real roster for any
+    // kind="party" element — the same render model the TV builds. Null when offline → BoardCanvas placeholder.
+    private TvPartyDto? _partyRender;
+
     protected override async Task OnInitializedAsync()
     {
         Ui.SearchChanged += OnSearchChanged;
         await Api.GetApiKeyAsync(); // cache the key so preview image urls carry it
+        var party = await Api.GetPartyAsync();
+        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl);
         _boards = await Api.GetBoardsAsync();
     }
 
@@ -113,8 +119,9 @@ else
 
     public void Dispose() => Ui.SearchChanged -= OnSearchChanged;
 
-    // Build the render model for a card's mini preview — key-bearing /images urls, the same shape the TV draws.
-    private TvBoardDto Render(BoardDto board) => BoardRender.ToRenderModel(board, Api.ImageUrl);
+    // Build the render model for a card's mini preview — key-bearing /images urls + the live party, the same
+    // shape the TV draws.
+    private TvBoardDto Render(BoardDto board) => BoardRender.ToRenderModel(board, Api.ImageUrl, _partyRender);
 
     private static int ElementCount(BoardDto board) => board.Elements?.Count ?? 0;
 

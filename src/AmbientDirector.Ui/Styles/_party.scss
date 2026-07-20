@@ -1,0 +1,351 @@
+/* ============================================================
+   Party (Drużyna) — the roster tracker + its board element.
+   Two halves in one partial:
+   (a) the canvas render (.board-el__party / .bparty__*) drawn by
+       the shared BoardCanvas on the TV, editor preview, list cards
+       and remote rail — sized in container units (cqh/cqw) so ONE
+       element scales identically from a full TV to a tiny card;
+   (b) the panel tracker + editor (.party-*) built on the design
+       tokens (mimics _boards.scss's structure).
+   ============================================================ */
+
+/* ---- (a) canvas render — BoardCanvas kind="party" (container units) ---- */
+
+.board-el__party {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.6cqh;
+  color: #eef2f8; /* near-white, matches the text element / --text token */
+  font-family: var(--font);
+  overflow: hidden;
+}
+
+/* Quiet placeholder for panel contexts that didn't supply live data — never a broken box. */
+.board-el__party--empty {
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, .22);
+
+  .ico { width: 14cqh; height: 14cqh; }
+}
+
+/* table-level counters row (Fear etc.), chips over the board background */
+.bparty__table {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.6cqw;
+  align-items: center;
+}
+.bparty__tcounter {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.2cqw;
+  padding: .8cqh 1.6cqw;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 1.6cqh;
+}
+
+.bparty__grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(24cqw, 1fr));
+  gap: 1.6cqw;
+  align-content: start;
+  overflow: hidden;
+}
+
+.bparty__player {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqh;
+  min-width: 0;
+  padding: 1.4cqh 1.4cqw;
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 1.8cqh;
+}
+.bparty__portrait {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 1.4cqh;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .06);
+  display: grid;
+  place-items: center;
+
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
+.bparty__initial {
+  font-weight: 800;
+  font-size: 9cqh;
+  color: rgba(255, 255, 255, .82);
+}
+.bparty__pname {
+  font-weight: 700;
+  font-size: 3.4cqh;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .6); /* legible over any board art */
+}
+.bparty__crows {
+  display: flex;
+  flex-direction: column;
+  gap: .8cqh;
+}
+.bparty__crow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2cqw;
+  line-height: 1;
+}
+.bparty__label {
+  font-weight: 800;
+  font-size: 2.1cqh;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: rgba(238, 242, 248, .85);
+}
+.bparty__num {
+  font-weight: 700;
+  font-size: 2.8cqh;
+  font-variant-numeric: tabular-nums;
+}
+.bparty__pips {
+  display: inline-flex;
+  align-items: center;
+  gap: .8cqw;
+}
+.bparty__pip {
+  width: 1.9cqh;
+  height: 1.9cqh;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .22); /* empty */
+}
+.bparty__pip.is-on { background: rgba(255, 255, 255, .92); } /* filled */
+
+/* ---- (b) panel tracker (Party.razor) + editor (PartyEditor.razor) ---- */
+
+/* players grid of cards */
+.party-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.party-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-3);
+}
+.party-card__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding-right: var(--hit-min); /* room for the edit affordance */
+}
+.party-portrait {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--well);
+  display: grid;
+  place-items: center;
+
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
+.party-initial { font: var(--text-xl); color: var(--text-muted); }
+.party-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: var(--text-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* edit affordance (mirrors the scene/sound card-edit) */
+.party-card .card-edit {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: var(--hit-min);
+  height: var(--hit-min);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.party-card .card-edit:hover { color: var(--text); background: rgba(255, 255, 255, .07); }
+.party-card .card-edit:active { transform: translateY(-50%) scale(.9); }
+.party-card .card-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* per-counter rows (≥48px so they're tappable during play) */
+.party-crows { display: flex; flex-direction: column; gap: var(--s-2); }
+.party-crow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 48px;
+}
+.party-clabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: var(--text-label);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.party-nocounters { margin: 0; font: var(--text-sm); color: var(--text-faint); }
+
+/* the ± adjust group: two big square step buttons flanking the value */
+.party-adjust { display: flex; align-items: center; gap: var(--s-2); }
+.party-step {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: var(--card-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+
+  .ico { width: 22px; height: 22px; }
+}
+.party-step:hover { background: var(--border); border-color: var(--border-strong); }
+.party-step:active { transform: translateY(1px); }
+.party-step:disabled { opacity: .5; cursor: default; }
+
+.party-cval {
+  min-width: 60px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.party-num { font: var(--text-lg); font-variant-numeric: tabular-nums; }
+.party-pips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+.party-pip {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--input);
+  border: 1px solid var(--border-strong);
+}
+.party-pip.is-on { background: var(--text); border-color: var(--text); }
+
+/* table-level counters strip */
+.party-tstrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4);
+}
+.party-tcounter { display: flex; flex-direction: column; gap: var(--s-1); }
+.party-tlabel {
+  font: var(--text-label);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.party-editbtn { margin-left: auto; }
+
+/* counter editor rows (shared by the table-counter editor + the player editor) */
+.party-ceditor { display: flex; flex-direction: column; gap: var(--s-3); }
+.party-crow-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: var(--well);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.party-crow-edit__del { margin-left: auto; }
+
+.party-input {
+  min-height: var(--hit-min);
+  padding: 0 var(--s-3);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: var(--text-md);
+}
+.party-input:focus { outline: none; border-color: var(--accent); }
+.party-input--label { flex: 1 1 160px; min-width: 120px; }
+
+.party-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 84px;
+
+  > span {
+    font: var(--text-tag);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  input[type="number"] {
+    width: 100%;
+    min-height: var(--hit-min);
+    padding: 0 var(--s-2);
+    background: var(--input);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font: var(--text-md);
+    font-variant-numeric: tabular-nums;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+}
+.party-style {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+
+  .art-label { margin: 0; }
+}
+
+/* new-player row */
+.party-new {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+
+  .party-input { flex: 1 1 200px; }
+}
+
+/* player editor column layout */
+.party-editor { display: flex; flex-direction: column; gap: var(--s-3); }
+.party-order { max-width: 140px; }

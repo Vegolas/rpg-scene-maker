@@ -68,6 +68,70 @@ public class LightFormatTests
         Assert.Equal(key, LightFormat.TempWordKey(temperature));
 }
 
+public class PartyRenderTests
+{
+    // Stand-in for Api.ImageUrl: prefixes a name so the test can see a portrait was routed through it (the real
+    // one attaches the key-bearing /images path); null stays null.
+    private static string? Img(string? name) => name is null ? null : $"/images/{name}?apiKey=k";
+
+    [Fact]
+    public void ToRenderModel_maps_players_counters_and_routes_portraits_through_imageUrl()
+    {
+        var party = new PartyDto(
+            [
+                new PartyPlayerDto("kira", "Kira", "kira.png", 0,
+                    [new PartyCounterDto("HP", 7, 10, "number"), new PartyCounterDto("Hope", 3, 6, "pips")]),
+                new PartyPlayerDto("aldous", "Aldous", null, 1, null),
+            ],
+            [new PartyCounterDto("Fear", 4, 12, "pips")]);
+
+        var model = PartyRender.ToRenderModel(party, Img);
+
+        Assert.Equal(2, model.Players.Count);
+        var kira = model.Players[0];
+        Assert.Equal("Kira", kira.Name);
+        Assert.Equal("/images/kira.png?apiKey=k", kira.PortraitUrl); // routed through imageUrl
+        Assert.Equal(2, kira.Counters.Count);
+        Assert.Equal("HP", kira.Counters[0].Label);
+        Assert.Equal(7, kira.Counters[0].Value);
+        Assert.Equal(10, kira.Counters[0].Max);
+        Assert.Equal("number", kira.Counters[0].Style);
+
+        // A null portrait stays null; a null counters list degrades to empty (never a null-deref at render).
+        Assert.Null(model.Players[1].PortraitUrl);
+        Assert.Empty(model.Players[1].Counters);
+
+        // Table-level counters carried through unchanged.
+        Assert.Single(model.Counters);
+        Assert.Equal("Fear", model.Counters[0].Label);
+        Assert.Equal(4, model.Counters[0].Value);
+    }
+}
+
+public class CounterEditTests
+{
+    // A null wire style (renderer decides) surfaces as an explicit Segmented value the editor can bind.
+    [Theory]
+    [InlineData(null, 6, "pips")]    // small max → pips
+    [InlineData(null, null, "number")] // unbounded → number
+    [InlineData(null, 30, "number")] // too-large max for pips → number
+    [InlineData("number", 6, "number")] // an explicit style is preserved
+    public void FromDto_resolves_an_explicit_style(string? wireStyle, int? max, string expected)
+    {
+        var edit = CounterEdit.FromDto(new PartyCounterDto("HP", 3, max, wireStyle));
+        Assert.Equal(expected, edit.Style);
+    }
+
+    [Fact]
+    public void ToDto_trims_the_label_and_writes_the_explicit_style()
+    {
+        var dto = new CounterEdit { Label = "  HP  ", Value = 3, Max = 6, Style = "pips" }.ToDto();
+        Assert.Equal("HP", dto.Label);
+        Assert.Equal("pips", dto.Style);
+        Assert.Equal(6, dto.Max);
+    }
+}
+
 public class UiExtensionsTests
 {
     private static ActivationDto Result(string light, string music, string sound) =>
