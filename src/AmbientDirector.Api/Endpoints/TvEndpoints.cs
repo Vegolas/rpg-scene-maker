@@ -36,15 +36,18 @@ public static class TvEndpoints
                     // the delete's own ForgetBoard is what bumps the rev).
                     return new TvStateDto(currentRev, null);
 
-                // A kind=party element renders the LIVE roster (not board state). Load it ONCE here and attach
-                // the same render model to every party element on the board (there is normally one); a board
-                // with no party element skips the query entirely. Portrait refs resolve to the same
-                // gate-validated per-name board route as image elements (the gate allows them dynamically).
+                // A kind=party / kind=enemies element renders the LIVE roster (not board state). Load it ONCE
+                // here and attach the SAME render model instance to every such element on the board (there is
+                // normally one of each); a board with neither skips the query entirely. Both kinds share one
+                // query and one instance — the party element reads Players/Counters, the enemies element reads
+                // Enemies. Portrait refs resolve to the same gate-validated per-name board route as image
+                // elements (the gate allows them dynamically).
                 TvPartyDto? partyDto = null;
-                if (board.Elements.Any(e => e.Kind == "party"))
+                if (board.Elements.Any(e => e.Kind is "party" or "enemies"))
                 {
                     var members = await party.GetMembersAsync();
                     var tableCounters = await party.GetTableCountersAsync();
+                    var enemies = await party.GetEnemiesAsync();
                     partyDto = new TvPartyDto(
                         [.. members.Select(m => new TvPartyPlayerDto(
                             m.Name,
@@ -52,7 +55,11 @@ public static class TvEndpoints
                                 ? null
                                 : $"/tv/content/board/{Uri.EscapeDataString(m.Portrait)}?rev={currentRev}",
                             [.. m.Counters.Select(c => new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style))]))],
-                        [.. tableCounters.Select(c => new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style))]);
+                        [.. tableCounters.Select(c => new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style))],
+                        [.. enemies.Select(en => new TvEnemyDto(
+                            en.Name,
+                            en.Spotlight,
+                            [.. en.Counters.Select(c => new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style))]))]);
                 }
 
                 var boardDto = new TvBoardDto(
@@ -70,8 +77,9 @@ public static class TvEndpoints
                         e.Kind == "text" ? e.Color : null,
                         e.Kind == "text" ? e.Size : null,
                         e.Kind == "text" ? e.Align : null,
-                        // A party element carries the live roster; every other kind leaves it null.
-                        e.Kind == "party" ? partyDto : null))]);
+                        // A party/enemies element carries the same live-roster instance; every other kind
+                        // leaves it null. The renderer reads Players/Counters for "party", Enemies for "enemies".
+                        e.Kind is "party" or "enemies" ? partyDto : null))]);
 
                 // A board carries its render model in Content.Board; Content.Url is null (nothing to stream).
                 return new TvStateDto(currentRev, new TvContentDto("board", null, content.Label, boardDto));
@@ -162,13 +170,15 @@ public static class TvEndpoints
             state.Recent.Select(c => new TvRecentItemDto(c.Kind, c.Ref, c.Label, c.PushedAtUtc)));
     }
 
-    // The dynamic half of the key-free gate: true when the shown board renders the party AND `name` is a
+    // The dynamic half of the key-free gate: true when the shown board renders a LIVE ROSTER AND `name` is a
     // current member's portrait. Portraits are LIVE data, not board files (they're deliberately absent from
-    // Board.ReferencedFiles()), so they're gated here instead — served key-free only while a party-element
-    // board is on the display. Runs entirely BEFORE any filesystem access, like the ReferencedFiles() check.
+    // Board.ReferencedFiles()), so they're gated here instead — served key-free only while a live-roster board
+    // (a party OR enemies element) is on the display. Party and enemies are treated the same everywhere: the
+    // gate is about which board is shown, not which element draws the portrait, and on an encounter board the
+    // two coexist. Runs entirely BEFORE any filesystem access, like the ReferencedFiles() check.
     static async Task<bool> IsCurrentPartyPortraitAsync(Board board, string name, PartyStore party)
     {
-        if (!board.Elements.Any(e => e.Kind == "party"))
+        if (!board.Elements.Any(e => e.Kind is "party" or "enemies"))
             return false;
         var members = await party.GetMembersAsync();
         return members.Any(m => !string.IsNullOrEmpty(m.Portrait)

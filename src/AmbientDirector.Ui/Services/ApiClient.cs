@@ -900,6 +900,21 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         FetchAsync<List<PartyCounterDto>>(HttpMethod.Post,
             $"party/counters/adjust?counter={Uri.EscapeDataString(label)}&delta={delta}");
 
+    // ---------- enemies (encounter roster) — the player methods' twin, minus the portrait ----------
+
+    /// <summary>Upsert an enemy (id in the route, the whole enemy in the body); the tracker/editor show the
+    /// returned error inline / via toast. Like players there is deliberately no GET /party/enemies/{id}.</summary>
+    public Task<(PartyEnemyDto? Result, string? Error)> SaveEnemyAsync(string id, PartyEnemyDto enemy) =>
+        FetchAsync<PartyEnemyDto>(HttpMethod.Put, $"party/enemies/{Uri.EscapeDataString(id)}", enemy);
+
+    public Task<(bool Ok, string? Error)> DeleteEnemyAsync(string id) =>
+        DeleteAsync($"party/enemies/{Uri.EscapeDataString(id)}");
+
+    /// <summary>Tap-to-adjust one enemy's counter by ±delta (no body); returns the updated enemy.</summary>
+    public Task<(PartyEnemyDto? Result, string? Error)> AdjustEnemyCounterAsync(string id, string label, int delta) =>
+        FetchAsync<PartyEnemyDto>(HttpMethod.Post,
+            $"party/enemies/{Uri.EscapeDataString(id)}/adjust?counter={Uri.EscapeDataString(label)}&delta={delta}");
+
     // ---------- light fx (reusable effect library) ----------
 
     public async Task<List<LightFxDto>> GetLightFxAsync() =>

@@ -16,17 +16,22 @@ public record TvStateDto(long Rev, TvContentDto? Content);
 public record TvBoardDto(string? BackgroundColor, string? BackgroundUrl, List<TvBoardElementDto> Elements);
 
 // One element of a board's render model. For kind "image", Url is the image url and the text fields are null;
-// for kind "text", Url is null and Text/Color/Size/Align carry the content; for kind "party", Party carries the
-// live roster and the other content fields are null. Geometry is percent-of-stage.
+// for kind "text", Url is null and Text/Color/Size/Align carry the content; for kind "party" AND kind "enemies"
+// (both live-roster elements), Party carries the live roster and the other content fields are null — "party"
+// reads Players/Counters, "enemies" reads Enemies. Geometry is percent-of-stage.
 public record TvBoardElementDto(string Kind, double X, double Y, double W, double H,
     string? Url, string? Text, string? Color, double? Size, string? Align, TvPartyDto? Party = null);
 
-// Live render model for a kind=party board element: the roster + table-level counters at render time. Portrait
-// refs are pre-resolved to ready-to-fetch urls — the TV's open /tv/content/board/{name} route (with ?rev= as a
-// cache-buster) from the API, or (in the panel) key-bearing /images urls built via PartyRender.ToRenderModel.
-public record TvPartyDto(List<TvPartyPlayerDto> Players, List<TvPartyCounterDto> Counters);
+// Live render model for a kind=party / kind=enemies board element: the player roster + table-level counters +
+// the encounter's enemy roster (issue #120) at render time. Portrait refs are pre-resolved to ready-to-fetch
+// urls — the TV's open /tv/content/board/{name} route (with ?rev= as a cache-buster) from the API, or (in the
+// panel) key-bearing /images urls built via PartyRender.ToRenderModel.
+public record TvPartyDto(List<TvPartyPlayerDto> Players, List<TvPartyCounterDto> Counters, List<TvEnemyDto> Enemies);
 
 public record TvPartyPlayerDto(string Name, string? PortraitUrl, List<TvPartyCounterDto> Counters);
+
+// One enemy in the render model: text + counter tracks + the spotlight (boss) flag. No portrait in v1.
+public record TvEnemyDto(string Name, bool Spotlight, List<TvPartyCounterDto> Counters);
 
 public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style);
 

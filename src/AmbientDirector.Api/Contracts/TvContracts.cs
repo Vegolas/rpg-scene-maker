@@ -19,16 +19,22 @@ public record TvBoardDto(string? BackgroundColor, string? BackgroundUrl, List<Tv
 
 // One element of a board's render model. For kind "image", Url is the /tv/content/board/{name} route and the
 // text fields are null; for kind "text", Url is null and Text/Color/Size/Align carry the content; for kind
-// "party", Party carries the live roster and the other content fields are null. Geometry is percent-of-stage
-// (see Models/Board.cs).
+// "party" AND kind "enemies" (both live-roster elements), Party carries the live roster and the other content
+// fields are null — the enemies element reads the roster's Enemies, the party element its Players/Counters.
+// Geometry is percent-of-stage (see Models/Board.cs).
 public record TvBoardElementDto(string Kind, double X, double Y, double W, double H,
     string? Url, string? Text, string? Color, double? Size, string? Align, TvPartyDto? Party = null);
 
-// Live render model for a kind=party board element: the roster + table-level counters at poll time. Portrait
-// refs are pre-resolved to the gate-validated /tv/content/board/{name} route like every other board image.
-public record TvPartyDto(List<TvPartyPlayerDto> Players, List<TvPartyCounterDto> Counters);
+// Live render model for a kind=party / kind=enemies board element: the player roster + table-level counters +
+// the encounter's enemy roster (issue #120) at poll time. One instance is built per /tv/state and shared by
+// both element kinds. Portrait refs are pre-resolved to the gate-validated /tv/content/board/{name} route like
+// every other board image.
+public record TvPartyDto(List<TvPartyPlayerDto> Players, List<TvPartyCounterDto> Counters, List<TvEnemyDto> Enemies);
 
 public record TvPartyPlayerDto(string Name, string? PortraitUrl, List<TvPartyCounterDto> Counters);
+
+// One enemy in the render model: text + counter tracks + the spotlight (boss) flag. No portrait in v1.
+public record TvEnemyDto(string Name, bool Spotlight, List<TvPartyCounterDto> Counters);
 
 public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style);
 

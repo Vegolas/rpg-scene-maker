@@ -49,6 +49,59 @@ public class PartyStore(IDbContextFactory<AppDbContext> dbFactory)
         return await db.PartyMembers.Where(m => m.Id == id).ExecuteDeleteAsync() > 0;
     }
 
+    // ---- enemies: the encounter's opposing roster (issue #120), the twin of the member methods above ----
+
+    public async Task<List<Enemy>> GetEnemiesAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        // Roster order: SortOrder ascending, ties broken by id (a stable, deterministic tiebreak).
+        return await db.Enemies.AsNoTracking()
+            .OrderBy(e => e.SortOrder).ThenBy(e => e.Id).ToListAsync();
+    }
+
+    public async Task<Enemy?> GetEnemyAsync(string id)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Enemies.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id);
+    }
+
+    public async Task UpsertEnemyAsync(Enemy enemy)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var existing = await db.Enemies.SingleOrDefaultAsync(e => e.Id == enemy.Id);
+        if (existing is null)
+        {
+            db.Enemies.Add(enemy);
+        }
+        else
+        {
+            existing.Name = enemy.Name;
+            existing.Spotlight = enemy.Spotlight;
+            existing.SortOrder = enemy.SortOrder;
+            existing.Counters = enemy.Counters;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<bool> DeleteEnemyAsync(string id)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Enemies.Where(e => e.Id == id).ExecuteDeleteAsync() > 0;
+    }
+
+    /// <summary>Adjust one of an enemy's counters by a delta or to an absolute value, clamped into range, and
+    /// return the updated enemy. Throws <see cref="NotFoundException"/> for an unknown enemy or counter.</summary>
+    public async Task<Enemy> AdjustEnemyCounterAsync(string id, string label, int? delta, int? value)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var enemy = await db.Enemies.SingleOrDefaultAsync(e => e.Id == id)
+            ?? throw new NotFoundException("error.party.enemyNotFound", id);
+        // In-place mutation of a tracked owned-JSON entity is detected by change tracking and rewrites the column.
+        AdjustInList(enemy.Counters ??= [], label, delta, value);
+        await db.SaveChangesAsync();
+        return enemy;
+    }
+
     public async Task<List<PartyCounter>> GetTableCountersAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();

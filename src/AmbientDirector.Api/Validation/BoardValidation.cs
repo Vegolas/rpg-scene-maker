@@ -15,9 +15,9 @@ public static class BoardValidation
     // balloon the stored JSON.
     private const int MaxTextLength = 2000;
 
-    // The element kinds the renderer knows how to draw. "party" carries geometry only — it renders the live
-    // roster (loaded at TV-render time from PartyStore), not stored board state.
-    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "image", "text", "party" };
+    // The element kinds the renderer knows how to draw. "party" and "enemies" carry geometry only — they render
+    // the live roster (loaded at TV-render time from PartyStore), not stored board state.
+    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "image", "text", "party", "enemies" };
 
     private static readonly HashSet<string> Aligns = new(StringComparer.Ordinal) { "left", "center", "right" };
 
@@ -86,9 +86,10 @@ public static class BoardValidation
                     break;
 
                 case "party":
-                    // A party element is a live placeholder: it carries geometry only (validated above), and the
-                    // roster + counters are fetched at render time (not board state). Null out every content
-                    // field so nothing stale is stored — like the image arm clears the text-only fields.
+                case "enemies":
+                    // A party/enemies element is a live placeholder: it carries geometry only (validated above),
+                    // and the roster + counters are fetched at render time (not board state). Null out every
+                    // content field so nothing stale is stored — like the image arm clears the text-only fields.
                     element.Image = null;
                     element.Text = null;
                     element.Color = null;

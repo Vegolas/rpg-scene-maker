@@ -17,7 +17,8 @@ public static class PartyEndpoints
 
         // Literal segment, so it wins over any "/{id}" route.
         party.MapGet("/list", async (PartyStore store) =>
-            new PartyDto(await store.GetMembersAsync(), await store.GetTableCountersAsync()));
+            new PartyDto(await store.GetMembersAsync(), await store.GetTableCountersAsync(),
+                await store.GetEnemiesAsync()));
 
         party.MapPut("/players/{id}", async (string id, PartyMember member, PartyStore store,
             ImageFileStorage images, TvState tvState, BoardStore boards) =>
@@ -86,20 +87,58 @@ public static class PartyEndpoints
             return Results.Ok(updated);
         });
 
-        // Deliberately NO "GET /party/players/{id}" (and nothing at the bare "/party"): the Blazor panel's
-        // party page lives at /party and each member editor at /party/{id}, so a full-page load of either must
-        // fall through to index.html. The panel reads the whole roster from /party/list and picks the member by
-        // id client-side. (MapFallbackToFile only serves GET, so the PUT/DELETE above are safe.)
+        // ---- enemies: the encounter's opposing roster (issue #120), the twin of the /players routes above ----
+
+        party.MapPut("/enemies/{id}", async (string id, Enemy enemy, PartyStore store,
+            TvState tvState, BoardStore boards) =>
+        {
+            enemy.Id = id;
+            PartyValidation.Validate(enemy);
+            // No portrait cleanup: enemies carry no image (unlike a member's portrait), so there is nothing to
+            // own or release here.
+            await store.UpsertEnemyAsync(enemy);
+            await TouchIfPartyShownAsync(tvState, boards);
+            return Results.Ok(enemy);
+        });
+
+        party.MapDelete("/enemies/{id}", async (string id, PartyStore store,
+            TvState tvState, BoardStore boards) =>
+        {
+            if (!await store.DeleteEnemyAsync(id)) return Results.NotFound();
+            await TouchIfPartyShownAsync(tvState, boards);
+            return Results.NoContent();
+        });
+
+        // Tap-to-adjust an enemy's counter — same shape as the per-member adjust (GET+POST, ?delta= / ?value=
+        // XOR), so a Stream Deck button can do /party/enemies/goblin/adjust?counter=HP&delta=-1.
+        party.MapMethods("/enemies/{id}/adjust", EndpointHelpers.GetOrPost,
+            async (string id, string? counter, int? delta, int? value, PartyStore store,
+                TvState tvState, BoardStore boards) =>
+        {
+            if (string.IsNullOrWhiteSpace(counter))
+                throw new ValidationException("error.party.adjustCounter");
+            if (delta.HasValue == value.HasValue) // both, or neither
+                throw new ValidationException("error.party.adjustTarget");
+            var updated = await store.AdjustEnemyCounterAsync(id, counter.Trim(), delta, value);
+            await TouchIfPartyShownAsync(tvState, boards);
+            return Results.Ok(updated);
+        });
+
+        // Deliberately NO "GET /party/players/{id}" or "GET /party/enemies/{id}" (and nothing at the bare
+        // "/party"): the Blazor panel's party page lives at /party, each member editor at /party/{id} and each
+        // enemy editor at /party/enemies/{id}, so a full-page load of any of them must fall through to
+        // index.html. The panel reads the whole roster from /party/list and picks the member/enemy by id
+        // client-side. (MapFallbackToFile only serves GET, so the PUT/DELETE above are safe.)
     }
 
-    // Any party change is instantly visible on the TV IF the currently-shown board renders the party:
-    // bump the rev (via TouchBoard) so the open display re-fetches within one 2 s poll. A shown image or a
-    // board without a party element is untouched — no pointless re-renders.
+    // Any party change (player OR enemy) is instantly visible on the TV IF the currently-shown board renders a
+    // live roster: bump the rev (via TouchBoard) so the open display re-fetches within one 2 s poll. A shown
+    // image or a board with neither a party nor an enemies element is untouched — no pointless re-renders.
     static async Task TouchIfPartyShownAsync(TvState tv, BoardStore boards)
     {
         if (tv.Current is not { Kind: "board" } current) return;
         var board = await boards.GetAsync(current.Ref);
-        if (board is not null && board.Elements.Any(e => e.Kind == "party"))
+        if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies"))
             tv.TouchBoard(board.Id);
     }
 }

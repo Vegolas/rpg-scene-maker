@@ -52,4 +52,49 @@ public class BoardValidationPartyTests
         var ex = Assert.ThrowsAny<ValidationException>(() => BoardValidation.Validate(board));
         Assert.Equal("error.board.elementBounds", ex.Code);
     }
+
+    // ---- kind "enemies" (issue #120): the party element's twin — same geometry-only live-placeholder rules ----
+
+    [Fact]
+    public void Accepts_an_enemies_element_and_nulls_its_content_fields()
+    {
+        var board = new Board
+        {
+            Id = "encounter",
+            Name = "Encounter",
+            Elements =
+            [
+                new BoardElement
+                {
+                    Kind = "enemies", X = 70, Y = 2, W = 28, H = 96,
+                    // Junk content fields an enemies element must not carry — validation strips them.
+                    Image = "x.png", Text = "hi", Color = "#ffffff", Size = 5, Align = "center",
+                },
+            ],
+        };
+
+        BoardValidation.Validate(board); // must not throw
+
+        var element = board.Elements[0];
+        Assert.Equal("enemies", element.Kind);
+        Assert.Null(element.Image);
+        Assert.Null(element.Text);
+        Assert.Null(element.Color);
+        Assert.Null(element.Size);
+        Assert.Null(element.Align);
+    }
+
+    [Fact]
+    public void Still_rejects_an_unknown_kind()
+    {
+        var board = new Board
+        {
+            Id = "encounter",
+            Name = "Encounter",
+            Elements = [new BoardElement { Kind = "monsters", X = 10, Y = 10, W = 40, H = 80 }],
+        };
+
+        var ex = Assert.ThrowsAny<ValidationException>(() => BoardValidation.Validate(board));
+        Assert.Equal("error.board.unknownKind", ex.Code);
+    }
 }

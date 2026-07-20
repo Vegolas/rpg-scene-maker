@@ -22,7 +22,7 @@
 }
 else
 {
-    var party = _party ?? new PartyDto([], []);
+    var party = _party ?? new PartyDto([], [], []);
 
     // One counter's value in the tracker: pips (dots) for a "pips" counter, else tabular text. Same rule as
     // BoardCanvas (kept in sync by hand — the panel sizes in px, the canvas in container units).
@@ -173,6 +173,67 @@ else
         </div>
         <p class="hint" style="margin-top:var(--s-3)">@L["party.createHint"]</p>
     </div>
+
+    @* ---- enemies (the encounter's opposing roster) — the players' twin: a card per enemy with a spotlight
+         toggle + ± counter rows, plus an add-enemy flow. No portrait (enemies have none). ---- *@
+    <SectionHeading>@L["party.enemiesTitle"]</SectionHeading>
+    @if (party.Enemies.Count == 0)
+    {
+        <p class="empty-note">@L["party.enemiesEmpty"]</p>
+    }
+    else
+    {
+        <div class="party-grid">
+            @foreach (var e in party.Enemies)
+            {
+                <div @key="e.Id" class="party-card@(e.Spotlight ? " party-card--spotlight" : "")">
+                    <div class="party-card__head">
+                        <span class="party-name">@e.Name</span>
+                        <span class="card-edit" role="button" tabindex="0" aria-label='@L.Format("party.editAria", e.Name)'
+                              @onclick="() => EditEnemy(e.Id)" @onkeydown="ev => OnEditEnemyKey(ev, e.Id)"><Icon Name="edit" /></span>
+                    </div>
+                    <button class="btn btn--small party-spotlight @(e.Spotlight ? "is-on" : "")"
+                            @onclick="() => ToggleSpotlight(e)" disabled="@IsSpotlightBusy(e.Id)"
+                            aria-pressed="@(e.Spotlight ? "true" : "false")">
+                        <Icon Name="enemies" /> @L["party.spotlight"]
+                    </button>
+                    @if (e.Counters is { Count: > 0 })
+                    {
+                        <div class="party-crows">
+                            @foreach (var c in e.Counters)
+                            {
+                                <div class="party-crow">
+                                    <span class="party-clabel">@c.Label</span>
+                                    <div class="party-adjust">
+                                        <button class="party-step" @onclick="() => AdjustEnemy(e.Id, c.Label, -1)"
+                                                disabled="@IsEnemyRowBusy(e.Id, c.Label)" aria-label='@L["party.decrease"]'><Icon Name="minus" /></button>
+                                        @counterValue(c)
+                                        <button class="party-step" @onclick="() => AdjustEnemy(e.Id, c.Label, 1)"
+                                                disabled="@IsEnemyRowBusy(e.Id, c.Label)" aria-label='@L["party.increase"]'><Icon Name="add" /></button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="party-nocounters">@L["party.noCounters"]</p>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @* ---- new enemy ---- *@
+    <div class="panel" style="margin-top:var(--s-3)">
+        <div class="party-new">
+            <input class="party-input" type="text" value="@_newEnemyName"
+                   placeholder='@L["party.enemyNamePlaceholder"]'
+                   @oninput="e => _newEnemyName = e.Value?.ToString() ?? string.Empty"
+                   @onkeydown="OnNewEnemyKey" />
+            <button class="btn btn--primary" @onclick="CreateEnemy" disabled="@_busy">@L["party.addEnemy"]</button>
+        </div>
+    </div>
 }
 
 @code {
@@ -182,8 +243,11 @@ else
     private bool _editingCounters;
     private List<CounterEdit> _counters = [];              // working copy while editing the table counters
     private string _newName = "";
+    private string _newEnemyName = "";
     private string? _pendingCounter;                       // a table-counter adjust in flight (label)
     private readonly HashSet<string> _pendingRows = new(StringComparer.Ordinal); // per-player-counter adjusts in flight
+    private readonly HashSet<string> _pendingEnemyRows = new(StringComparer.Ordinal); // per-enemy-counter adjusts in flight
+    private readonly HashSet<string> _pendingSpotlight = new(StringComparer.Ordinal); // per-enemy spotlight toggles in flight
 
     private (string, string)[] StyleOptions =>
         [("pips", L["partyEditor.stylePips"]), ("number", L["partyEditor.styleNumber"])];
@@ -321,6 +385,96 @@ else
     private async Task OnEditKey(KeyboardEventArgs e, string id)
     {
         if (e.Key is "Enter" or " ") await Edit(id);
+    }
+
+    // ---------- enemies: tap-to-adjust, spotlight toggle, add ----------
+
+    private async Task AdjustEnemy(string id, string label, int delta)
+    {
+        var key = RowKey(id, label);
+        if (_pendingEnemyRows.Contains(key)) return;
+        _pendingEnemyRows.Add(key);
+        try
+        {
+            var (result, error) = await Api.AdjustEnemyCounterAsync(id, label, delta);
+            if (error is not null) { Ui.ReportError(error); return; }
+            if (result is not null) ReplaceEnemy(result);
+        }
+        finally { _pendingEnemyRows.Remove(key); }
+    }
+
+    private bool IsEnemyRowBusy(string id, string label) => _pendingEnemyRows.Contains(RowKey(id, label));
+
+    // Flip the spotlight (boss) flag and PUT the whole enemy back — a shown party/enemies board updates live.
+    private async Task ToggleSpotlight(PartyEnemyDto enemy)
+    {
+        if (_pendingSpotlight.Contains(enemy.Id)) return;
+        _pendingSpotlight.Add(enemy.Id);
+        try
+        {
+            var flipped = enemy with { Spotlight = !enemy.Spotlight };
+            var (result, error) = await Api.SaveEnemyAsync(flipped.Id, flipped);
+            if (error is not null) { Ui.ReportError(error); return; }
+            if (result is not null) ReplaceEnemy(result);
+        }
+        finally { _pendingSpotlight.Remove(enemy.Id); }
+    }
+
+    private bool IsSpotlightBusy(string id) => _pendingSpotlight.Contains(id);
+
+    // Swap just this enemy's card state for the returned enemy (leaves the rest of the roster untouched).
+    private void ReplaceEnemy(PartyEnemyDto updated)
+    {
+        if (_party is null) return;
+        var enemies = _party.Enemies
+            .Select(e => string.Equals(e.Id, updated.Id, StringComparison.OrdinalIgnoreCase) ? updated : e)
+            .ToList();
+        _party = _party with { Enemies = enemies };
+    }
+
+    private async Task OnNewEnemyKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CreateEnemy();
+    }
+
+    private async Task CreateEnemy()
+    {
+        if (_busy) return;
+        if (string.IsNullOrWhiteSpace(_newEnemyName))
+        {
+            Ui.ReportError(L["party.toast.nameFirst"]);
+            return;
+        }
+        var existing = _party?.Enemies.Select(e => e.Id).ToList() ?? [];
+        var id = SceneNaming.MakeUnique(SceneNaming.Slugify(_newEnemyName), existing);
+        if (string.IsNullOrEmpty(id))
+        {
+            Ui.ReportError(L["party.toast.badId"]);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var nextOrder = existing.Count > 0 ? _party!.Enemies.Max(e => e.SortOrder) + 1 : 0;
+            // UI-side Daggerheart enemy preset (HP 4/4, Stress 0/3 pips) — never server-side; the API stores
+            // only generic counters.
+            var counters = new List<PartyCounterDto>
+            {
+                new(L["party.preset.hp"], 4, 4, "pips"),
+                new(L["party.preset.stress"], 0, 3, "pips"),
+            };
+            var (_, error) = await Api.SaveEnemyAsync(id, new PartyEnemyDto(id, _newEnemyName.Trim(), false, nextOrder, counters));
+            if (error is not null) { Ui.ReportError(error); return; }
+            await Vt.NavigateAsync($"party/enemies/{id}"); // drop into the editor to tune counters
+        }
+        finally { _busy = false; }
+    }
+
+    private Task EditEnemy(string id) => Vt.NavigateAsync($"party/enemies/{id}");
+
+    private async Task OnEditEnemyKey(KeyboardEventArgs e, string id)
+    {
+        if (e.Key is "Enter" or " ") await EditEnemy(id);
     }
 
     // ---------- shared counter-input helpers (kept valid client-side; the server stays authoritative) ----------

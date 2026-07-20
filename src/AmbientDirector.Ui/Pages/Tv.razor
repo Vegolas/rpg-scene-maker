@@ -13,30 +13,25 @@
 <PageTitle>Ambient Director — TV</PageTitle>
 
 <div class="tv-stage">
-    @if (_display is { } d)
+    @* Both layers render in ONE keyed loop (display first = under, incoming second = on top). Keying by Seq
+       across the single loop is what lets Blazor REUSE a layer's DOM node when the incoming layer is promoted
+       to the display slot (OnIncomingLoaded) — the surviving Seq stays put instead of being destroyed and
+       recreated. The old two-separate-@if-blocks layout defeated that: promotion recreated the board, briefly
+       painting both copies (a doubled party) and remounting BoardCanvas (reloading images — a visible jump). *@
+    @foreach (var layer in ActiveLayers())
     {
-        @if (d.Kind == "board")
+        var visible = ReferenceEquals(layer, _incoming) ? _incomingLoaded : !_clearing;
+        @if (layer.Kind == "board")
         {
-            <div @key="d.Seq" class="tv-layer tv-board-wrap @(_clearing ? "" : "is-visible")">
-                <BoardCanvas Model="d.Board!" />
+            <div @key="layer.Seq" class="tv-layer tv-board-wrap @(visible ? "is-visible" : "")">
+                <BoardCanvas Model="layer.Board!" />
             </div>
         }
         else
         {
-            <img @key="d.Seq" class="tv-layer tv-img @(_clearing ? "" : "is-visible")" src="@d.Url" alt="" />
-        }
-    }
-    @if (_incoming is { } inc)
-    {
-        @if (inc.Kind == "board")
-        {
-            <div @key="inc.Seq" class="tv-layer tv-board-wrap @(_incomingLoaded ? "is-visible" : "")">
-                <BoardCanvas Model="inc.Board!" />
-            </div>
-        }
-        else
-        {
-            <img @key="inc.Seq" class="tv-layer tv-img @(_incomingLoaded ? "is-visible" : "")" src="@inc.Url" alt=""
+            @* @onload/@onerror only ever fire for the incoming image (a cached, already-shown display image
+               does not re-raise load); OnIncomingLoaded/Error guard on _token/_incoming anyway. *@
+            <img @key="layer.Seq" class="tv-layer tv-img @(visible ? "is-visible" : "")" src="@layer.Url" alt=""
                  @onload="OnIncomingLoaded" @onerror="OnIncomingError" />
         }
     }
@@ -68,6 +63,14 @@
     private int _token;            // invalidates delayed swaps when a newer push/clear arrives
     private bool _boardPromoting;  // guards the one-shot "board has no load event" promote from OnAfterRender
     private Timer? _timer;
+
+    // Layers to paint, bottom→top: the shown layer under the incoming one. Rendered in a single keyed loop so a
+    // promotion reuses the surviving layer's node (see the markup comment) rather than recreating it.
+    private IEnumerable<Layer> ActiveLayers()
+    {
+        if (_display is not null) yield return _display;
+        if (_incoming is not null) yield return _incoming;
+    }
 
     protected override async Task OnInitializedAsync()
     {

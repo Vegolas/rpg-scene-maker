@@ -28,6 +28,10 @@
                    placeholder='@L["boards.namePlaceholder"]' />
         </div>
         <p class="hint" style="margin-top:0.6rem">@L["boards.createHint"]</p>
+        <label class="board-check" style="margin-top:0.6rem">
+            <input type="checkbox" checked="@_encounterPreset" @onchange="e => _encounterPreset = e.Value is true" />
+            <span>@L["boards.encounterPreset"]</span>
+        </label>
         <div class="btn-row" style="margin-top:0.6rem">
             <button class="btn btn--primary" @onclick="Create" disabled="@_busy">@L["boards.createBtn"]</button>
             <button class="btn" @onclick="() => _creating = false" disabled="@_busy">@L["common.cancel"]</button>
@@ -90,6 +94,7 @@ else
     private bool _creating;
     private bool _busy;
     private string _name = "";
+    private bool _encounterPreset;   // seed a party-left / VS-centre / enemies-right layout on create
 
     // The live party roster (mapped once on load) so a board card's mini preview draws the real roster for any
     // kind="party" element — the same render model the TV builds. Null when offline → BoardCanvas placeholder.
@@ -137,6 +142,7 @@ else
     {
         _creating = true;
         _name = "";
+        _encounterPreset = false;
     }
 
     private async Task Show(BoardDto board)
@@ -164,8 +170,9 @@ else
         _busy = true;
         try
         {
-            // Persist a minimal board, then drop straight into the editor to lay it out.
-            var (_, error) = await Api.SaveBoardAsync(id, new BoardEdit { Id = id, Name = _name.Trim() });
+            // Persist a minimal board (or the seeded encounter layout), then drop straight into the editor to
+            // lay it out.
+            var (_, error) = await Api.SaveBoardAsync(id, new BoardEdit { Id = id, Name = _name.Trim(), Elements = _encounterPreset ? EncounterLayout() : [] });
             if (error is not null)
             {
                 Ui.ReportError(error);
@@ -175,4 +182,14 @@ else
         }
         finally { _busy = false; }
     }
+
+    // The pre-configured encounter layout: party roster on the left, a big "VS" mark in the centre, the enemy
+    // roster on the right. Deliberately NO image element for the encounter art — an image element can't be
+    // seeded without an already-stored upload, so the GM drops the art into the open centre in the editor.
+    private static List<BoardElementEdit> EncounterLayout() =>
+    [
+        new() { Kind = "party", X = 0.5, Y = 2, W = 31, H = 96 },
+        new() { Kind = "text", X = 44, Y = 42, W = 12, H = 16, Text = "VS", Color = "#FF4D2E", Size = 12, Align = "center" },
+        new() { Kind = "enemies", X = 75.5, Y = 2, W = 24, H = 96 },
+    ];
 }

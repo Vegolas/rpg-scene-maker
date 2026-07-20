@@ -94,6 +94,17 @@
 .board-card__count { font: var(--text-sm); color: var(--text-muted); padding: 0 var(--s-3); }
 .board-card__actions { padding: var(--s-2) var(--s-3) var(--s-3); margin-top: auto; }
 
+/* Encounter-preset checkbox row in the create panel (mirrors the scene sound-picker checkbox sizing). */
+.board-check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  user-select: none;
+  cursor: pointer;
+
+  input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--accent); flex: 0 0 auto; }
+}
+
 /* Dashed "new board" card, centered blue +. */
 .board-card--new {
   min-height: 170px;

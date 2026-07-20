@@ -11,6 +11,38 @@
     }
     @foreach (var el in Model.Elements)
     {
+        // One counter's value: a row of pips (dots, filled up to Value) for a "pips"/small-bounded counter, else
+        // tabular-nums text (Value, or Value/Max when a max is set). Hoisted above the kind branches so BOTH the
+        // party element (table strip + each player's rows) AND the enemies element (each enemy's rows) share the
+        // one fragment; sized in container units so it scales with the stage. Filled pips are tinted per track by
+        // label (the #120 design's HP/Stress/Armor/Hope palette) via a `--pip` custom property the CSS reads.
+        RenderFragment<TvPartyCounterDto> counterValue = c =>
+        @<span class="bparty__val">
+            @if (IsPips(c))
+            {
+                var pipMax = Math.Min(c.Max ?? 0, PipCap);
+                var filled = Math.Clamp(c.Value, 0, pipMax);
+                var shape = PipShape(c.Label);
+                @* A known Daggerheart track (shape != null) renders a themed glyph — broken heart (HP), heart
+                   (Stress), broken shield (Armor), diamond (Hope); coloured filled / dim-empty in CSS. Every
+                   other track (unknown/custom, and Fear) keeps the plain dot in the --pip track colour. *@
+                <span class="bparty__pips" style="--pip:@PipColor(c.Label)">
+                    @for (var i = 0; i < pipMax; i++)
+                    {
+                        <span class="@PipClass(shape, i < filled)">
+                            @if (shape is not null)
+                            {
+                                <svg viewBox="0 0 256 256" aria-hidden="true">@((MarkupString)PipGlyph(shape))</svg>
+                            }
+                        </span>
+                    }
+                </span>
+            }
+            else
+            {
+                <span class="bparty__num">@(c.Max is { } m ? $"{c.Value}/{m}" : c.Value.ToString())</span>
+            }
+        </span>;
         <div class="board-el" style="left:@Pct(el.X)%;top:@Pct(el.Y)%;width:@Pct(el.W)%;height:@Pct(el.H)%">
             @if (el.Kind == "image")
             {
@@ -28,27 +60,6 @@
             {
                 @if (el.Party is { } p)
                 {
-                    // One counter's value: a row of pips (dots, filled up to Value) for a "pips"/small-bounded
-                    // counter, else tabular-nums text (Value, or Value/Max when a max is set). Shared by the
-                    // table strip and each player's rows; sized in container units so it scales with the stage.
-                    RenderFragment<TvPartyCounterDto> counterValue = c =>
-                    @<span class="bparty__val">
-                        @if (IsPips(c))
-                        {
-                            var pipMax = Math.Min(c.Max ?? 0, PipCap);
-                            var filled = Math.Clamp(c.Value, 0, pipMax);
-                            <span class="bparty__pips">
-                                @for (var i = 0; i < pipMax; i++)
-                                {
-                                    <span class="bparty__pip@(i < filled ? " is-on" : "")"></span>
-                                }
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="bparty__num">@(c.Max is { } m ? $"{c.Value}/{m}" : c.Value.ToString())</span>
-                        }
-                    </span>;
                     <div class="board-el__party">
                         @if (p.Counters.Count > 0)
                         {
@@ -62,7 +73,10 @@
                                 }
                             </div>
                         }
-                        <div class="bparty__grid">
+                        @* Design hero cards (#120 "TV Board" versus mode): portrait on the LEFT, then a column
+                           with the name and one row per counter. A vertical stack of equal-height cards fills the
+                           element box — matching the mock's left party column. *@
+                        <div class="bparty__list">
                             @foreach (var pl in p.Players)
                             {
                                 <div class="bparty__player">
@@ -76,19 +90,21 @@
                                             <span class="bparty__initial">@Initial(pl.Name)</span>
                                         }
                                     </div>
-                                    <div class="bparty__pname">@pl.Name</div>
-                                    @if (pl.Counters.Count > 0)
-                                    {
-                                        <div class="bparty__crows">
-                                            @foreach (var c in pl.Counters)
-                                            {
-                                                <div class="bparty__crow">
-                                                    <span class="bparty__label">@c.Label</span>
-                                                    @counterValue(c)
-                                                </div>
-                                            }
-                                        </div>
-                                    }
+                                    <div class="bparty__info">
+                                        <div class="bparty__pname">@pl.Name</div>
+                                        @if (pl.Counters.Count > 0)
+                                        {
+                                            <div class="bparty__crows">
+                                                @foreach (var c in pl.Counters)
+                                                {
+                                                    <div class="bparty__crow">
+                                                        <span class="bparty__label">@c.Label</span>
+                                                        @counterValue(c)
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
                                 </div>
                             }
                         </div>
@@ -98,6 +114,50 @@
                 {
                     @* Panel contexts that didn't supply live data render a quiet placeholder, never a broken box. *@
                     <div class="board-el__party board-el__party--empty"><Icon Name="party" /></div>
+                }
+            }
+            else if (el.Kind == "enemies")
+            {
+                @if (el.Party is { Enemies.Count: > 0 } p)
+                {
+                    @* A vertical stack of enemy cards filling the element box — name (+ SPOTLIGHT chip for a boss)
+                       and the same counter rows the party element uses (shared counterValue + .bparty__label /
+                       pip classes; enemy pips are tinted red in _party.scss via ".benemies .bparty__pip"). *@
+                    <div class="benemies">
+                        @foreach (var en in p.Enemies)
+                        {
+                            <div class="benemies__card@(en.Spotlight ? " benemies__card--spotlight" : "")">
+                                <div class="benemies__namerow">
+                                    <span class="benemies__name">@en.Name</span>
+                                    @if (en.Spotlight)
+                                    {
+                                        @* Deliberate LITERAL, not localized: "SPOTLIGHT" is stylized Daggerheart
+                                           flavour on player-facing content (like a "VS" mark), and BoardCanvas
+                                           renders on the KEY-FREE TV where /i18n sits behind the API gate — so it
+                                           must not depend on Localizer. *@
+                                        <span class="benemies__chip">SPOTLIGHT</span>
+                                    }
+                                </div>
+                                @if (en.Counters.Count > 0)
+                                {
+                                    <div class="benemies__crows">
+                                        @foreach (var c in en.Counters)
+                                        {
+                                            <div class="benemies__crow">
+                                                <span class="bparty__label">@c.Label</span>
+                                                @counterValue(c)
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    @* Panel offline or an empty enemy roster → a quiet placeholder, never a broken box. *@
+                    <div class="board-el__party board-el__party--empty"><Icon Name="enemies" /></div>
                 }
             }
         </div>
@@ -128,6 +188,49 @@
     // number. Mirrors the API's renderer rule (PartyValidation) and Party.razor's panel-side copy.
     private static bool IsPips(TvPartyCounterDto c) =>
         string.Equals(c.Style, "pips", StringComparison.Ordinal) || (c.Style is null && c.Max is >= 1 and <= PipCap);
+
+    // Themed pip glyph per Daggerheart track (keyed by label): HP a broken heart, Stress a (black) heart, Armor
+    // a broken shield, Hope a diamond. Null → the track has no glyph and renders as a plain dot (unknown/custom
+    // tracks, and Fear on the table strip). Shared by the party and enemies elements, so an enemy's HP/Stress
+    // glyphs read the same as a hero's (per the #120 request); the spotlight red stays on the card, not the pips.
+    // The pip's CSS classes: the base, the optional per-shape modifier (glyph tracks), and is-on when filled.
+    private static string PipClass(string? shape, bool on) =>
+        "bparty__pip" + (shape is null ? "" : $" bparty__pip--{shape}") + (on ? " is-on" : "");
+
+    private static string? PipShape(string label) => label.Trim().ToLowerInvariant() switch
+    {
+        "hp" or "health" => "hp",
+        "stress" => "stress",
+        "armor" or "armour" => "armor",
+        "hope" => "hope",
+        _ => null,
+    };
+
+    // Dot colour for pips WITHOUT a glyph (unknown/custom tracks render neutral; Fear reads red). Glyph pips are
+    // coloured per shape in CSS, not here. Content colours, exempt from the one blue chrome accent like scene colours.
+    private static string PipColor(string label) =>
+        string.Equals(label.Trim(), "fear", StringComparison.OrdinalIgnoreCase) ? "#ff4d2e" : "#cfd6e2";
+
+    // Inner SVG (viewBox 0 0 256 256) for each themed pip glyph. The "broken" HP/Armor glyphs cut a jagged crack
+    // with a fill-rule:evenodd hole so the card shows through (no hardcoded background). Hand-authored simple
+    // shapes — they read at pip size (~20px) and can't ship a malformed Phosphor path.
+    private const string HeartGlyph =
+        "<path d=\"M128,222 C128,222 26,158 26,90 C26,58 50,34 82,34 C104,34 120,48 128,64 C136,48 152,34 174,34 C206,34 230,58 230,90 C230,158 128,222 128,222 Z\"/>";
+    private const string BrokenHeartGlyph =
+        "<path fill-rule=\"evenodd\" d=\"M128,222 C128,222 26,158 26,90 C26,58 50,34 82,34 C104,34 120,48 128,64 C136,48 152,34 174,34 C206,34 230,58 230,90 C230,158 128,222 128,222 Z M132,62 L112,116 L138,128 L114,182 L128,218 L142,182 L118,128 L144,116 L124,62 Z\"/>";
+    private const string BrokenShieldGlyph =
+        "<path fill-rule=\"evenodd\" d=\"M128,26 C128,26 70,48 48,54 C48,120 80,190 128,226 C176,190 208,120 208,54 C186,48 128,26 128,26 Z M132,44 L112,110 L138,122 L114,178 L128,212 L142,178 L118,122 L144,110 L124,44 Z\"/>";
+    private const string DiamondGlyph =
+        "<rect x=\"70\" y=\"70\" width=\"116\" height=\"116\" rx=\"14\" transform=\"rotate(45 128 128)\"/>";
+
+    private static string PipGlyph(string shape) => shape switch
+    {
+        "hp" => BrokenHeartGlyph,
+        "stress" => HeartGlyph,
+        "armor" => BrokenShieldGlyph,
+        "hope" => DiamondGlyph,
+        _ => "",
+    };
 
     // The portrait fallback: the first (rune-safe, so an emoji name doesn't split a surrogate) letter of the name.
     private static string Initial(string name)

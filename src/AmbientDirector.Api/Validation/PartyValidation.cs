@@ -40,6 +40,22 @@ public static class PartyValidation
         ValidateCounters(m.Counters ??= []);
     }
 
+    /// <summary>Guards an enemy — the encounter roster's twin of a member (issue #120), minus the portrait
+    /// (enemies have none). Same id/name rules, and the counter limits are shared unchanged via
+    /// <see cref="ValidateCounters"/>.</summary>
+    public static void Validate(Enemy e)
+    {
+        if (string.IsNullOrWhiteSpace(e.Id))
+            throw new ValidationException("error.common.idRequired");
+        if (!LightValidation.IsSlug(e.Id))
+            throw new ValidationException("error.common.idSlug");
+        if (string.IsNullOrWhiteSpace(e.Name))
+            throw new ValidationException("error.common.nameRequired");
+
+        // JSON "counters": null overwrites the C# default.
+        ValidateCounters(e.Counters ??= []);
+    }
+
     /// <summary>Validate + normalize a counter list in place — shared by a member and the table-level counters
     /// endpoint. Labels must be present, short and unique (they are the case-insensitive adjust key); style is
     /// null/"pips"/"number"; max is null or 1–999 (required and ≤24 for pips); value is clamped into

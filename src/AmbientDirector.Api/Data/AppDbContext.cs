@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Board> Boards => Set<Board>();
     public DbSet<LightFx> LightFxs => Set<LightFx>();
     public DbSet<PartyMember> PartyMembers => Set<PartyMember>();
+    public DbSet<Enemy> Enemies => Set<Enemy>();
     public DbSet<PartyConfig> PartyConfigs => Set<PartyConfig>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
@@ -111,6 +112,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             member.Property(m => m.Id).UseCollation("NOCASE");
             // A member's counters are a small ordered list of value objects — one JSON column (like Scene.Lights).
             member.OwnsMany(m => m.Counters, b => b.ToJson());
+        });
+
+        modelBuilder.Entity<Enemy>(enemy =>
+        {
+            enemy.HasKey(e => e.Id);
+            // Enemy ids appear in hand-typed /party/enemies/{id}/adjust URLs, so match them case-insensitively.
+            enemy.Property(e => e.Id).UseCollation("NOCASE");
+            // An enemy's counters are a small ordered list of value objects — one JSON column (like PartyMember).
+            enemy.OwnsMany(e => e.Counters, b => b.ToJson());
         });
 
         modelBuilder.Entity<PartyConfig>(config =>

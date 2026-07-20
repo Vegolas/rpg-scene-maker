@@ -135,6 +135,11 @@ else
                                     @* A party element is geometry-only — its content is the live roster, edited on the Party tab. *@
                                     <p class="hint" style="margin:0.6rem 0 0">@L["boardEditor.partyHint"]</p>
                                 }
+                                else if (el.Kind == "enemies")
+                                {
+                                    @* An enemies element is geometry-only too — its content is the live enemy roster, edited on the Party tab. *@
+                                    <p class="hint" style="margin:0.6rem 0 0">@L["boardEditor.enemiesHint"]</p>
+                                }
                                 else
                                 {
                                     <div class="field" style="margin:0.6rem 0 0">
@@ -170,6 +175,7 @@ else
                     </label>
                     <button class="btn btn--small" @onclick="() => OpenPdf(FillTarget.NewImage, -1)" disabled="@_busy"><Icon Name="pdf" /> @L["boardEditor.fromPdf"]</button>
                     <button class="btn btn--small" @onclick="AddParty"><Icon Name="party" /> @L["boardEditor.addParty"]</button>
+                    <button class="btn btn--small" @onclick="AddEnemies"><Icon Name="enemies" /> @L["boardEditor.addEnemies"]</button>
                 </div>
             </div>
         </div>
@@ -244,11 +250,12 @@ else
     // Re-mapped from the edit model every render, so any numeric/text/colour change previews immediately.
     private TvBoardDto Preview => BoardRender.ToRenderModel(_edit.ToDto(), Api.ImageUrl, _partyRender);
 
-    // Element header glyph + label per kind (text/image/party).
+    // Element header glyph + label per kind (text/image/party/enemies).
     private static string KindIcon(string kind) => kind switch
     {
         "image" => "screens",
         "party" => "party",
+        "enemies" => "enemies",
         _ => "edit",
     };
 
@@ -256,6 +263,7 @@ else
     {
         "image" => L["boardEditor.kindImage"],
         "party" => L["boardEditor.kindParty"],
+        "enemies" => L["boardEditor.kindEnemies"],
         _ => L["boardEditor.kindText"],
     };
 
@@ -289,6 +297,10 @@ else
 
     // A party element is geometry-only (the server nulls image/text/colour); it renders the live roster.
     private void AddParty() => _edit.Elements.Add(new BoardElementEdit { Kind = "party", X = 10, Y = 10, W = 80, H = 80 });
+
+    // An enemies element is geometry-only too; it renders the live enemy roster. Defaults to a right-hand column
+    // (the encounter layout: party left, art centre, enemies right).
+    private void AddEnemies() => _edit.Elements.Add(new BoardElementEdit { Kind = "enemies", X = 70, Y = 2, W = 28, H = 96 });
 
     private void Move(int index, int delta)
     {
