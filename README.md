@@ -13,7 +13,7 @@ A local REST API (C# / .NET 10 Minimal API) **plus a touch control panel (Blazor
 
 Every command endpoint accepts **both GET and POST**, so the built-in Stream Deck *System → Website* action works — no plugin required.
 
-https://github.com/user-attachments/assets/38f4f217-9fa5-43f2-8306-23a74364a963
+https://github.com/user-attachments/assets/05fb2764-3ad1-487f-9dbe-22114ec4d79d
 
 ## Platform support
 
@@ -269,9 +269,13 @@ Run scenes straight from your session notes. The [Obsidian plugin](integrations/
 
 **[It's now available in the official Obsidian community plugins list](https://community.obsidian.md/plugins/ambient-director)**
 
+https://github.com/user-attachments/assets/38f4f217-9fa5-43f2-8306-23a74364a963
+
 </details>
 
 ## Scenes
+
+
 
 Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 
