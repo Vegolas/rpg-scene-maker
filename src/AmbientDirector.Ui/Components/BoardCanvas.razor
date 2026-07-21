@@ -14,25 +14,26 @@
         // One counter's value: a row of pips (dots, filled up to Value) for a "pips"/small-bounded counter, else
         // tabular-nums text (Value, or Value/Max when a max is set). Hoisted above the kind branches so BOTH the
         // party element (table strip + each player's rows) AND the enemies element (each enemy's rows) share the
-        // one fragment; sized in container units so it scales with the stage. Filled pips are tinted per track by
-        // label (the #120 design's HP/Stress/Armor/Hope palette) via a `--pip` custom property the CSS reads.
+        // one fragment; sized in container units so it scales with the stage. Each counter arrives with its Glyph
+        // + Color already resolved from the active game system (issue #128) — BoardCanvas draws them, it no longer
+        // matches labels — so a Polish "Stres" themes exactly like an English "Stress".
         RenderFragment<TvPartyCounterDto> counterValue = c =>
         @<span class="bparty__val">
             @if (IsPips(c))
             {
                 var pipMax = Math.Min(c.Max ?? 0, PipCap);
                 var filled = Math.Clamp(c.Value, 0, pipMax);
-                var shape = PipShape(c.Label);
-                @* A known Daggerheart track (shape != null) renders a themed glyph — broken heart (HP), heart
-                   (Stress), broken shield (Armor), diamond (Hope); coloured filled / dim-empty in CSS. Every
-                   other track (unknown/custom, and Fear) keeps the plain dot in the --pip track colour. *@
-                <span class="bparty__pips" style="--pip:@PipColor(c.Label)">
+                var svg = GlyphSvg(c.Glyph);
+                @* A counter with a curated glyph (svg != null) renders that themed pip — a broken heart, dark
+                   heart, broken shield, diamond, …; filled from --pip / self-styled and dim-empty in CSS. Every
+                   other counter (no glyph — custom tracks, and Fear) keeps the plain dot in its --pip colour. *@
+                <span class="bparty__pips" style="--pip:@PipVar(c)">
                     @for (var i = 0; i < pipMax; i++)
                     {
-                        <span class="@PipClass(shape, i < filled)">
-                            @if (shape is not null)
+                        <span class="@PipClass(c.Glyph, svg is not null, i < filled)">
+                            @if (svg is not null)
                             {
-                                <svg viewBox="0 0 256 256" aria-hidden="true">@((MarkupString)PipGlyph(shape))</svg>
+                                <svg viewBox="0 0 256 256" aria-hidden="true">@((MarkupString)svg)</svg>
                             }
                         </span>
                     }
@@ -135,13 +136,14 @@
                                         <span class="benemies__portrait"><img src="@eurl" alt="" @onerror="() => _failed.Add(eurl)" /></span>
                                     }
                                     <span class="benemies__name">@en.Name</span>
-                                    @if (en.Spotlight)
+                                    @if (en.Spotlight && !string.IsNullOrEmpty(en.SpotlightLabel))
                                     {
-                                        @* Deliberate LITERAL, not localized: "SPOTLIGHT" is stylized Daggerheart
-                                           flavour on player-facing content (like a "VS" mark), and BoardCanvas
-                                           renders on the KEY-FREE TV where /i18n sits behind the API gate — so it
-                                           must not depend on Localizer. *@
-                                        <span class="benemies__chip">SPOTLIGHT</span>
+                                        @* Deliberate LITERAL, not localized: the chip text is the active game
+                                           system's SpotlightLabel (Daggerheart's "SPOTLIGHT"), resolved server-
+                                           side into the render model (#128). BoardCanvas renders on the KEY-FREE TV
+                                           where /i18n sits behind the API gate, so it must not depend on Localizer;
+                                           null label (no system) drops the chip entirely. *@
+                                        <span class="benemies__chip">@en.SpotlightLabel</span>
                                     }
                                 </div>
                                 @if (en.Counters.Count > 0)
@@ -195,31 +197,22 @@
     private static bool IsPips(TvPartyCounterDto c) =>
         string.Equals(c.Style, "pips", StringComparison.Ordinal) || (c.Style is null && c.Max is >= 1 and <= PipCap);
 
-    // Themed pip glyph per Daggerheart track (keyed by label): HP a broken heart, Stress a (black) heart, Armor
-    // a broken shield, Hope a diamond. Null → the track has no glyph and renders as a plain dot (unknown/custom
-    // tracks, and Fear on the table strip). Shared by the party and enemies elements, so an enemy's HP/Stress
-    // glyphs read the same as a hero's (per the #120 request); the spotlight red stays on the card, not the pips.
-    // The pip's CSS classes: the base, the optional per-shape modifier (glyph tracks), and is-on when filled.
-    private static string PipClass(string? shape, bool on) =>
-        "bparty__pip" + (shape is null ? "" : $" bparty__pip--{shape}") + (on ? " is-on" : "");
+    // The pip's CSS classes: the base, an optional glyph modifier keyed by the curated glyph NAME the render
+    // model carries (bparty__pip--heart-broken etc. in _party.scss — issue #128, no longer a matched label), and
+    // is-on when filled. A counter with no (or an unrecognised) glyph renders as a plain dot — no modifier,
+    // coloured by --pip. Shared by the party and enemies elements, so an enemy's HP/Stress reads like a hero's.
+    private static string PipClass(string? glyph, bool hasGlyph, bool on) =>
+        "bparty__pip" + (hasGlyph ? $" bparty__pip--{glyph}" : "") + (on ? " is-on" : "");
 
-    private static string? PipShape(string label) => label.Trim().ToLowerInvariant() switch
-    {
-        "hp" or "health" => "hp",
-        "stress" => "stress",
-        "armor" or "armour" => "armor",
-        "hope" => "hope",
-        _ => null,
-    };
+    // The pip fill colour, handed to CSS as the --pip custom property: the counter's resolved content Colour, or
+    // a neutral default for a plain custom dot. Colour-carrying glyphs (heart-broken/shield-broken/diamond) fill
+    // from --pip; heart-dark is self-styled in CSS and ignores it (its Colour is null anyway). Content colours,
+    // exempt from the one blue chrome accent like scene colours.
+    private static string PipVar(TvPartyCounterDto c) => c.Color ?? "#cfd6e2";
 
-    // Dot colour for pips WITHOUT a glyph (unknown/custom tracks render neutral; Fear reads red). Glyph pips are
-    // coloured per shape in CSS, not here. Content colours, exempt from the one blue chrome accent like scene colours.
-    private static string PipColor(string label) =>
-        string.Equals(label.Trim(), "fear", StringComparison.OrdinalIgnoreCase) ? "#ff4d2e" : "#cfd6e2";
-
-    // Inner SVG (viewBox 0 0 256 256) for each themed pip glyph. The "broken" HP/Armor glyphs cut a jagged crack
-    // with a fill-rule:evenodd hole so the card shows through (no hardcoded background). Hand-authored simple
-    // shapes — they read at pip size (~20px) and can't ship a malformed Phosphor path.
+    // Inner SVG (viewBox 0 0 256 256) for each curated glyph name (GameSystemGlyphs). The "broken" heart/shield
+    // glyphs cut a jagged crack with a fill-rule:evenodd hole so the card shows through (no hardcoded background).
+    // Hand-authored simple shapes — they read at pip size (~20px) and can't ship a malformed Phosphor path.
     private const string HeartGlyph =
         "<path d=\"M128,222 C128,222 26,158 26,90 C26,58 50,34 82,34 C104,34 120,48 128,64 C136,48 152,34 174,34 C206,34 230,58 230,90 C230,158 128,222 128,222 Z\"/>";
     private const string BrokenHeartGlyph =
@@ -229,13 +222,15 @@
     private const string DiamondGlyph =
         "<rect x=\"70\" y=\"70\" width=\"116\" height=\"116\" rx=\"14\" transform=\"rotate(45 128 128)\"/>";
 
-    private static string PipGlyph(string shape) => shape switch
+    // The themed pip SVG for a curated glyph name, or null when the counter has no (or an unrecognised) glyph —
+    // then it renders as a plain dot. Names match GameSystemGlyphs.Known / the .bparty__pip--<name> CSS.
+    private static string? GlyphSvg(string? glyph) => glyph switch
     {
-        "hp" => BrokenHeartGlyph,
-        "stress" => HeartGlyph,
-        "armor" => BrokenShieldGlyph,
-        "hope" => DiamondGlyph,
-        _ => "",
+        "heart-broken" => BrokenHeartGlyph,
+        "heart-dark" => HeartGlyph,
+        "shield-broken" => BrokenShieldGlyph,
+        "diamond" => DiamondGlyph,
+        _ => null,
     };
 
     // The portrait fallback: the first (rune-safe, so an emoji name doesn't split a surrogate) letter of the name.

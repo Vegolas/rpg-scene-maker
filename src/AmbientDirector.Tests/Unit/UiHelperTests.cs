@@ -74,6 +74,26 @@ public class PartyRenderTests
     // one attaches the key-bearing /images path); null stays null.
     private static string? Img(string? name) => name is null ? null : $"/images/{name}?apiKey=k";
 
+    // Daggerheart's reference definition (docs/GAME-SYSTEMS.md) — the glyph/colour a Daggerheart table renders.
+    private static readonly GameSystemDto Daggerheart = new(
+        Id: "daggerheart",
+        NameKey: "system.daggerheart.name",
+        MemberCounters:
+        [
+            new("hp", "party.preset.hp", 0, 6, "pips", "heart-broken", "#ff4d5e"),
+            new("stress", "party.preset.stress", 0, 6, "pips", "heart-dark", null),
+            new("armor", "party.preset.armor", 0, 3, "pips", "shield-broken", "#cdd4e0"),
+            new("hope", "party.preset.hope", 2, 6, "pips", "diamond", "#eef2f8"),
+        ],
+        EnemyCounters:
+        [
+            new("hp", "party.preset.hp", 0, 6, "pips", "heart-broken", "#ff4d5e"),
+            new("stress", "party.preset.stress", 0, 3, "pips", "heart-dark", null),
+        ],
+        TableCounters: [new("fear", "party.preset.fear", 0, 12, "pips", null, "#ff4d2e")],
+        Quickbar: ["fear"],
+        SpotlightLabel: "SPOTLIGHT");
+
     [Fact]
     public void ToRenderModel_maps_players_counters_and_routes_portraits_through_imageUrl()
     {
@@ -122,6 +142,63 @@ public class PartyRenderTests
         Assert.Null(model.Enemies[1].PortraitUrl);
         Assert.False(model.Enemies[1].Spotlight);
         Assert.Empty(model.Enemies[1].Counters);
+    }
+
+    [Fact]
+    public void ToRenderModel_resolves_glyphs_by_key_ignoring_localized_labels_issue_128()
+    {
+        // POLISH labels + semantic keys, plus one custom (keyless) counter. The pre-#128 label matching lost the
+        // glyphs on a Polish table; by key they theme identically to English.
+        var party = new PartyDto(
+            [
+                new PartyPlayerDto("kira", "Kira", null, 0,
+                [
+                    new PartyCounterDto("Życie", 3, 6, "pips", "hp"),
+                    new PartyCounterDto("Stres", 1, 6, "pips", "stress"),
+                    new PartyCounterDto("Pancerz", 2, 3, "pips", "armor"),
+                    new PartyCounterDto("Nadzieja", 4, 6, "pips", "hope"),
+                    new PartyCounterDto("Szczęście", 1, 6, "pips"), // custom, no key
+                ]),
+            ],
+            [new PartyCounterDto("Strach", 3, 12, "pips", "fear")],
+            [new PartyEnemyDto("goblin", "Goblin", null, 0, [new PartyCounterDto("HP", 6, 6, "pips", "hp")])],
+            "daggerheart");
+
+        var model = PartyRender.ToRenderModel(party, Img, Daggerheart);
+
+        var pc = model.Players[0].Counters;
+        AssertGlyph(pc[0], "heart-broken", "#ff4d5e");
+        AssertGlyph(pc[1], "heart-dark", null);          // heart-dark is self-styled (no colour)
+        AssertGlyph(pc[2], "shield-broken", "#cdd4e0");
+        AssertGlyph(pc[3], "diamond", "#eef2f8");
+        AssertGlyph(pc[4], null, null);                  // custom counter → neutral dot
+
+        AssertGlyph(model.Counters[0], null, "#ff4d2e"); // table Fear: a red dot, no glyph
+        AssertGlyph(model.Enemies[0].Counters[0], "heart-broken", "#ff4d5e"); // resolved in the ENEMY scope
+        Assert.Equal("SPOTLIGHT", model.Enemies[0].SpotlightLabel);
+    }
+
+    [Fact]
+    public void ToRenderModel_without_a_system_leaves_counters_neutral_and_drops_the_spotlight_label_issue_128()
+    {
+        var party = new PartyDto(
+            [new PartyPlayerDto("kira", "Kira", null, 0, [new PartyCounterDto("HP", 3, 6, "pips", "hp")])],
+            [new PartyCounterDto("Fear", 3, 12, "pips", "fear")],
+            [new PartyEnemyDto("goblin", "Goblin", null, 0, [new PartyCounterDto("HP", 6, 6, "pips", "hp")])],
+            null);
+
+        var model = PartyRender.ToRenderModel(party, Img, null);
+
+        AssertGlyph(model.Players[0].Counters[0], null, null);
+        AssertGlyph(model.Counters[0], null, null);
+        AssertGlyph(model.Enemies[0].Counters[0], null, null);
+        Assert.Null(model.Enemies[0].SpotlightLabel);
+    }
+
+    private static void AssertGlyph(TvPartyCounterDto counter, string? glyph, string? color)
+    {
+        Assert.Equal(glyph, counter.Glyph);
+        Assert.Equal(color, counter.Color);
     }
 }
 

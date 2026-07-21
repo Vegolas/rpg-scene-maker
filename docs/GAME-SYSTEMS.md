@@ -1,7 +1,7 @@
 # Game systems — architecture spec & contributor contract
 
-> **Status**: phase 1 implemented (see [Phases](#phases--issue-slicing)); phases 2–3 tracked as GitHub issues.
-> This document is self-contained on purpose: an agent or contributor picking up phase 2/3 (or adding a new
+> **Status**: phases 1–2 implemented (see [Phases](#phases--issue-slicing)); phase 3 tracked as a GitHub issue.
+> This document is self-contained on purpose: an agent or contributor picking up phase 3 (or adding a new
 > system) should need only this file plus the code it points at — no prior conversation context.
 
 Ambient Director's "game layer" (party tracker, bestiary, encounters, table counters, TV counter rendering)
@@ -230,9 +230,9 @@ façade, like all setup).
   point). Its existing 5 s poll adds `/party/list` (or the value from the adjust response) only while a
   system with a non-empty quickbar is active.
 
-## Render pipeline (phase 2)
+## Render pipeline (phase 2) — implemented (#128)
 
-Today `BoardCanvas.razor` decides glyphs by **English label matching** and hardcodes Fear's red + the
+Before phase 2, `BoardCanvas.razor` decided glyphs by **English label matching** and hardcoded Fear's red + the
 `SPOTLIGHT` literal. Phase 2 makes the render model carry presentation, resolved server-side from the active
 system, so BoardCanvas is system-agnostic:
 
@@ -254,14 +254,17 @@ system, so BoardCanvas is system-agnostic:
 
 Each phase is one PR that keeps `dotnet build` + `dotnet test` green and changes no behavior beyond its scope.
 
-1. **Contract + selection + keys** — `IGameSystem`/`CounterPreset`/`GameSystemGlyphs`/`GameSystemRegistry`,
+1. **Contract + selection + keys** — ✅ done (#127). `IGameSystem`/`CounterPreset`/`GameSystemGlyphs`/`GameSystemRegistry`,
    `DaggerheartSystem`, `PartyConfig.SystemId` + migration, `GameSystemUpgrade` auto-stamp + key backfill,
    `PartyCounter.Key` (+ validation + adjust-by-key + UI mirrors incl. `CounterEdit`), `/systems` endpoints
    (+ `IsProtectedPath`), Settings section, Encounters-tab gate, `PartyDto.System`, locale keys (en+pl),
    tests, CLAUDE.md + this spec. **Behavioral change**: only the gate + the new setting; presets/rendering
    untouched.
-2. **Server-resolved render presentation** — render DTO `Glyph`/`Color`/`SpotlightLabel`, API + panel-side
-   resolution, BoardCanvas cleanup. Visual no-op for English Daggerheart; fixes Polish glyphs.
+2. **Server-resolved render presentation** — ✅ done (#128). Render DTO `Glyph`/`Color` (`TvPartyCounterDto`) +
+   `SpotlightLabel` (`TvEnemyDto`), API resolution in `TvEndpoints` (counter `Key` → active system's preset per
+   scope) + panel-side resolution in `PartyRender` (via `GameSystemsDto.Active`, fetched by the Boards/BoardEditor/
+   TvRemote pages), `BoardCanvas` keyed by glyph names, `_party.scss` classes renamed to glyph names. Visual
+   no-op for English Daggerheart; fixes the long-standing Polish-glyph bug. No new locale keys.
 3. **Presets from the system + quickbar + the sample** — editors/create flows read the active
    `GameSystemDto`, QuickControls quickbar chips, `Dnd5eSystem`, `GameSystemContractTests`, contributor
    guide section below finalized.

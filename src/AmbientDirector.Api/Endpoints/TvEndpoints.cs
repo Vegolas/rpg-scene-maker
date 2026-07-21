@@ -2,6 +2,7 @@ using AmbientDirector.Api.Contracts;
 using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
+using AmbientDirector.Api.Services.Systems;
 
 namespace AmbientDirector.Api.Endpoints;
 
@@ -29,7 +30,7 @@ public static class TvEndpoints
         // we keep it dead simple and return the full state every time. `state`/`boards` come first so `rev`
         // can carry a default (required minimal-API parameters must precede optional ones).
         tv.MapGet("/state", async (TvState state, BoardStore boards, PartyStore party, EncounterStore encounters,
-            long rev = 0) =>
+            GameSystemRegistry registry, long rev = 0) =>
         {
             var (currentRev, content) = state.Snapshot();
             if (content is null)
@@ -44,7 +45,7 @@ public static class TvEndpoints
                     // the delete's own ForgetBoard is what bumps the rev).
                     return new TvStateDto(currentRev, null);
 
-                var boardDto = await BuildBoardDtoAsync(board, party, currentRev);
+                var boardDto = await BuildBoardDtoAsync(board, party, registry, currentRev);
                 // A board carries its render model in Content.Board; Content.Url is null (nothing to stream).
                 return new TvStateDto(currentRev, new TvContentDto("board", null, content.Label, boardDto));
             }
@@ -55,7 +56,7 @@ public static class TvEndpoints
                 if (encounter is null)
                     return new TvStateDto(currentRev, null); // self-healing, like the board case above
 
-                var encounterDto = await BuildEncounterDtoAsync(encounter, party, currentRev);
+                var encounterDto = await BuildEncounterDtoAsync(encounter, party, registry, currentRev);
                 // Reported as kind "board" on the wire so the TV draws it through BoardCanvas UNCHANGED — the
                 // synthesized render model IS a board. The internal TvContent.Kind stays "encounter" (for the
                 // gate / show / recent); this is the render instruction, not the pushed-content kind.
@@ -175,30 +176,46 @@ public static class TvEndpoints
     private static string? BoardImageUrl(string? name, long rev) =>
         string.IsNullOrEmpty(name) ? null : $"/tv/content/board/{Uri.EscapeDataString(name)}?rev={rev}";
 
-    private static TvPartyCounterDto Counter(PartyCounter c) => new(c.Label, c.Value, c.Max, c.Style);
+    // Resolve one counter's render presentation (issue #128): its semantic Key → the matching preset in the
+    // given scope (member/enemy/table) of the active system → the preset's curated Glyph + content Color. No
+    // presets (no active system), no key, or no match → both null (a neutral dot). This is the whole of the
+    // "server resolves presentation" step — BoardCanvas then draws straight from Glyph/Color.
+    private static TvPartyCounterDto Counter(PartyCounter c, IReadOnlyList<CounterPreset>? presets)
+    {
+        var preset = presets is null || string.IsNullOrEmpty(c.Key)
+            ? null
+            : presets.FirstOrDefault(p => string.Equals(p.Key, c.Key, StringComparison.OrdinalIgnoreCase));
+        return new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style, preset?.Glyph, preset?.Color);
+    }
 
-    private static TvEnemyDto EnemyDto(string name, string? portrait, bool spotlight, List<PartyCounter> counters, long rev) =>
-        new(name, BoardImageUrl(portrait, rev), spotlight, [.. counters.Select(Counter)]);
+    private static TvEnemyDto EnemyDto(string name, string? portrait, bool spotlight, List<PartyCounter> counters,
+        IGameSystem? system, long rev) =>
+        new(name, BoardImageUrl(portrait, rev), spotlight,
+            [.. counters.Select(c => Counter(c, system?.EnemyCounters))], system?.SpotlightLabel);
 
-    private static TvPartyPlayerDto PlayerDto(PartyMember m, long rev) =>
-        new(m.Name, BoardImageUrl(m.Portrait, rev), [.. m.Counters.Select(Counter)]);
+    private static TvPartyPlayerDto PlayerDto(PartyMember m, IGameSystem? system, long rev) =>
+        new(m.Name, BoardImageUrl(m.Portrait, rev), [.. m.Counters.Select(c => Counter(c, system?.MemberCounters))]);
 
     // A saved board's render model. A kind=party / kind=enemies element renders the LIVE roster (not board
     // state). Load it ONCE and attach the SAME render model instance to every such element (there is normally
     // one of each); a board with neither skips the query entirely. The party element reads Players/Counters, the
     // enemies element reads Enemies (the bestiary templates — base stats, no per-instance spotlight).
-    private static async Task<TvBoardDto> BuildBoardDtoAsync(Board board, PartyStore party, long rev)
+    private static async Task<TvBoardDto> BuildBoardDtoAsync(Board board, PartyStore party,
+        GameSystemRegistry registry, long rev)
     {
         TvPartyDto? partyDto = null;
         if (board.Elements.Any(e => e.Kind is "party" or "enemies"))
         {
+            // The active system (issue #128) resolves each counter's glyph/colour; loaded once, only when a
+            // live-roster element actually needs it (an image-only board skips this query, like the roster one).
+            var system = registry.Find(await party.GetSystemIdAsync());
             var members = await party.GetMembersAsync();
             var tableCounters = await party.GetTableCountersAsync();
             var enemies = await party.GetEnemiesAsync();
             partyDto = new TvPartyDto(
-                [.. members.Select(m => PlayerDto(m, rev))],
-                [.. tableCounters.Select(Counter)],
-                [.. enemies.Select(en => EnemyDto(en.Name, en.Portrait, false, en.Counters, rev))]);
+                [.. members.Select(m => PlayerDto(m, system, rev))],
+                [.. tableCounters.Select(c => Counter(c, system?.TableCounters))],
+                [.. enemies.Select(en => EnemyDto(en.Name, en.Portrait, false, en.Counters, system, rev))]);
         }
 
         return new TvBoardDto(
@@ -220,18 +237,20 @@ public static class TvEndpoints
     // table counters (Fear), and an enemies element on the right carrying the encounter's own instances. Both
     // elements share the SAME render model instance (BoardCanvas reads Players/Counters for "party", Enemies for
     // "enemies"), so the two coords come straight from the #120 preset — no BoardCanvas change.
-    private static async Task<TvBoardDto> BuildEncounterDtoAsync(Encounter encounter, PartyStore party, long rev)
+    private static async Task<TvBoardDto> BuildEncounterDtoAsync(Encounter encounter, PartyStore party,
+        GameSystemRegistry registry, long rev)
     {
+        var system = registry.Find(await party.GetSystemIdAsync());
         var members = await party.GetMembersAsync();
         var tableCounters = await party.GetTableCountersAsync();
         var heroes = ResolveHeroes(encounter, members);
 
         var partyDto = new TvPartyDto(
-            [.. heroes.Select(m => PlayerDto(m, rev))],
-            [.. tableCounters.Select(Counter)],
+            [.. heroes.Select(m => PlayerDto(m, system, rev))],
+            [.. tableCounters.Select(c => Counter(c, system?.TableCounters))],
             // Held-back instances are skipped on the TV but kept in the encounter (issue #122 follow-up).
             [.. encounter.Enemies.Where(en => !en.Hidden)
-                .Select(en => EnemyDto(en.Name, en.Portrait, en.Spotlight, en.Counters, rev))]);
+                .Select(en => EnemyDto(en.Name, en.Portrait, en.Spotlight, en.Counters, system, rev))]);
 
         List<TvBoardElementDto> elements =
         [

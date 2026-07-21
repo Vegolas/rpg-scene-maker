@@ -145,7 +145,10 @@
         await Api.GetApiKeyAsync(); // cache the key so the recent/board tile /images urls carry it
         _boards = await Api.GetBoardsAsync();
         var party = await Api.GetPartyAsync();
-        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl);
+        // The active game system (issue #128) resolves each rail tile's counter glyph/colour to match the TV;
+        // fetched here (not from UiState) so it is correct even on a deep-link load racing the layout's fetch.
+        var systems = await Api.GetGameSystemsAsync();
+        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl, systems?.Active);
         await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 2000, 2000);
     }

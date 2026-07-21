@@ -98,23 +98,35 @@ public class CounterEdit
 // Builds the same TvPartyDto shape the TV gets inline, from the panel's own /party/list data — so the ONE
 // BoardCanvas renderer draws a party element identically in the editor preview, list cards and remote rail.
 // Portrait file names are mapped through Api.ImageUrl (key-bearing /images/{name} urls), exactly like
-// BoardRender maps board images; pass Api.ImageUrl as imageUrl.
+// BoardRender maps board images; pass Api.ImageUrl as imageUrl. The active game system (issue #128; from
+// /systems/list — GameSystemsDto.Active) resolves each counter's glyph/colour + the spotlight label EXACTLY as
+// the API does server-side, so a panel preview matches the TV; null system → neutral dots, no chip.
 public static class PartyRender
 {
-    public static TvPartyDto ToRenderModel(PartyDto party, Func<string?, string?> imageUrl) =>
+    public static TvPartyDto ToRenderModel(PartyDto party, Func<string?, string?> imageUrl, GameSystemDto? system = null) =>
         new(
             [.. party.Players.Select(p => new TvPartyPlayerDto(
                 p.Name,
                 imageUrl(p.Portrait),
-                [.. (p.Counters ?? []).Select(ToRenderCounter)]))],
-            [.. party.Counters.Select(ToRenderCounter)],
+                [.. (p.Counters ?? []).Select(c => ToRenderCounter(c, system?.MemberCounters))]))],
+            [.. party.Counters.Select(c => ToRenderCounter(c, system?.TableCounters))],
             // Bestiary templates rendered on a legacy board's enemies element: portrait + tracks, no per-instance
-            // spotlight (that lives on an encounter instance, not the template — so always false here).
+            // spotlight (that lives on an encounter instance, not the template — so always false here; the label
+            // still rides along to match the API's enemy projection).
             [.. party.Enemies.Select(e => new TvEnemyDto(
                 e.Name,
                 imageUrl(e.Portrait),
                 false,
-                [.. (e.Counters ?? []).Select(ToRenderCounter)]))]);
+                [.. (e.Counters ?? []).Select(c => ToRenderCounter(c, system?.EnemyCounters))],
+                system?.SpotlightLabel))]);
 
-    private static TvPartyCounterDto ToRenderCounter(PartyCounterDto c) => new(c.Label, c.Value, c.Max, c.Style);
+    // Resolve one counter's glyph/colour: its semantic Key → the matching preset in the given scope of the
+    // active system → the preset's Glyph + Color. No presets, no key, or no match → both null (neutral dot).
+    private static TvPartyCounterDto ToRenderCounter(PartyCounterDto c, List<CounterPresetDto>? presets)
+    {
+        var preset = presets is null || string.IsNullOrEmpty(c.Key)
+            ? null
+            : presets.FirstOrDefault(p => string.Equals(p.Key, c.Key, StringComparison.OrdinalIgnoreCase));
+        return new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style, preset?.Glyph, preset?.Color);
+    }
 }

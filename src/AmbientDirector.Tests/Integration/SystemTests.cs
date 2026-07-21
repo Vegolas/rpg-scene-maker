@@ -21,6 +21,23 @@ public class SystemTests
         counters.EnumerateArray().Single(c =>
             c.TryGetProperty("key", out var k) && k.ValueKind == JsonValueKind.String && k.GetString() == key);
 
+    // Render-model counters (TvPartyCounterDto) carry no key on the wire — find them by their (localized) label.
+    private static JsonElement CounterByLabel(JsonElement counters, string label) =>
+        counters.EnumerateArray().Single(c => c.GetProperty("label").GetString() == label);
+
+    // Assert a render counter resolved to the expected curated glyph name + content colour (null = JSON null).
+    private static void AssertGlyph(JsonElement counter, string? glyph, string? color)
+    {
+        if (glyph is null)
+            Assert.Equal(JsonValueKind.Null, counter.GetProperty("glyph").ValueKind);
+        else
+            Assert.Equal(glyph, counter.GetProperty("glyph").GetString());
+        if (color is null)
+            Assert.Equal(JsonValueKind.Null, counter.GetProperty("color").ValueKind);
+        else
+            Assert.Equal(color, counter.GetProperty("color").GetString());
+    }
+
     [Fact]
     public async Task List_returns_daggerheart_definition_and_null_current_on_a_fresh_install()
     {
@@ -185,5 +202,108 @@ public class SystemTests
         using var request = new HttpRequestMessage(HttpMethod.Get, "/systems/list");
         request.Headers.Add("X-Api-Key", "s3cret");
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
+    }
+
+    // ---- issue #128: the /tv render model carries the system's counter glyphs/colours + spotlight, resolved
+    // server-side from the active system, so the key-free TV needs no game knowledge ----
+
+    [Fact]
+    public async Task Tv_board_render_resolves_counter_glyphs_and_colors_from_the_active_system()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+
+        (await client.PostAsync("/systems/current?id=daggerheart", null)).EnsureSuccessStatusCode();
+
+        // A player whose tracks carry the semantic keys under POLISH labels (proving glyphs no longer depend on
+        // the label — the pre-#128 bug), plus one custom keyless counter; and a bestiary enemy with hp/stress.
+        (await client.PutAsJsonAsync("/party/players/kira", new
+        {
+            name = "Kira",
+            counters = new object[]
+            {
+                new { label = "Życie", key = "hp", value = 3, max = 6, style = "pips" },
+                new { label = "Stres", key = "stress", value = 1, max = 6, style = "pips" },
+                new { label = "Pancerz", key = "armor", value = 2, max = 3, style = "pips" },
+                new { label = "Nadzieja", key = "hope", value = 4, max = 6, style = "pips" },
+                new { label = "Szczęście", value = 1, max = 6, style = "pips" },
+            },
+        })).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync("/party/enemies/goblin", new
+        {
+            name = "Goblin",
+            counters = new object[]
+            {
+                new { label = "HP", key = "hp", value = 6, max = 6, style = "pips" },
+                new { label = "Stress", key = "stress", value = 0, max = 3, style = "pips" },
+            },
+        })).EnsureSuccessStatusCode();
+
+        // A board with BOTH live-roster elements (they share the one render model): party left, enemies right.
+        (await client.PutAsJsonAsync("/boards/table", new
+        {
+            name = "Table",
+            elements = new object[]
+            {
+                new { kind = "party", x = 0.0, y = 0.0, w = 40.0, h = 100.0 },
+                new { kind = "enemies", x = 60.0, y = 0.0, w = 40.0, h = 100.0 },
+            },
+        })).EnsureSuccessStatusCode();
+        (await client.GetAsync("/tv/show?board=table")).EnsureSuccessStatusCode();
+
+        var els = (await client.GetFromJsonAsync<JsonElement>("/tv/state"))
+            .GetProperty("content").GetProperty("board").GetProperty("elements");
+
+        // Party element: the four Daggerheart tracks theme by key regardless of the Polish labels; the custom
+        // (keyless) counter stays a neutral dot, and the seeded table Fear is a red dot with no glyph.
+        var players = els[0].GetProperty("party").GetProperty("players")[0].GetProperty("counters");
+        AssertGlyph(CounterByLabel(players, "Życie"), "heart-broken", "#ff4d5e");
+        AssertGlyph(CounterByLabel(players, "Stres"), "heart-dark", null);
+        AssertGlyph(CounterByLabel(players, "Pancerz"), "shield-broken", "#cdd4e0");
+        AssertGlyph(CounterByLabel(players, "Nadzieja"), "diamond", "#eef2f8");
+        AssertGlyph(CounterByLabel(players, "Szczęście"), null, null);
+        AssertGlyph(CounterByLabel(els[0].GetProperty("party").GetProperty("counters"), "Fear"), null, "#ff4d2e");
+
+        // Enemies element: enemy tracks resolve against the ENEMY presets (same glyphs for Daggerheart).
+        var enemies = els[1].GetProperty("party").GetProperty("enemies")[0].GetProperty("counters");
+        AssertGlyph(CounterByLabel(enemies, "HP"), "heart-broken", "#ff4d5e");
+        AssertGlyph(CounterByLabel(enemies, "Stress"), "heart-dark", null);
+    }
+
+    [Fact]
+    public async Task Tv_encounter_render_carries_the_spotlight_label_only_while_a_system_is_active()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+
+        (await client.PutAsJsonAsync("/encounters/fight", new
+        {
+            name = "Fight",
+            enemies = new object[]
+            {
+                new
+                {
+                    instanceId = "boss", enemyId = "lich", name = "The Lich", spotlight = true,
+                    counters = new object[] { new { label = "HP", key = "hp", value = 20, max = 20, style = "pips" } },
+                },
+            },
+        })).EnsureSuccessStatusCode();
+        (await client.GetAsync("/tv/show?encounter=fight")).EnsureSuccessStatusCode();
+
+        // No system: the boss flag is set, but there is no chip text (null hides the chip) and hp stays neutral.
+        var noSys = (await client.GetFromJsonAsync<JsonElement>("/tv/state"))
+            .GetProperty("content").GetProperty("board").GetProperty("elements")[1]
+            .GetProperty("party").GetProperty("enemies")[0];
+        Assert.True(noSys.GetProperty("spotlight").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, noSys.GetProperty("spotlightLabel").ValueKind);
+        AssertGlyph(CounterByLabel(noSys.GetProperty("counters"), "HP"), null, null);
+
+        // Activate Daggerheart: the chip text arrives as the system literal and hp themes (label-independent).
+        (await client.PostAsync("/systems/current?id=daggerheart", null)).EnsureSuccessStatusCode();
+        var withSys = (await client.GetFromJsonAsync<JsonElement>("/tv/state"))
+            .GetProperty("content").GetProperty("board").GetProperty("elements")[1]
+            .GetProperty("party").GetProperty("enemies")[0];
+        Assert.Equal("SPOTLIGHT", withSys.GetProperty("spotlightLabel").GetString());
+        AssertGlyph(CounterByLabel(withSys.GetProperty("counters"), "HP"), "heart-broken", "#ff4d5e");
     }
 }

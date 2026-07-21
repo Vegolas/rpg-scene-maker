@@ -6,7 +6,16 @@ namespace AmbientDirector.Ui.Contracts;
 // system's id or null (none chosen / explicitly cleared — the wire never shows the stored tri-state).
 // NameKey/LabelKey are i18n keys resolved through the Localizer; SpotlightLabel is a literal for the key-free
 // TV (never localized).
-public record GameSystemsDto(List<GameSystemDto> Systems, string? Current);
+public record GameSystemsDto(List<GameSystemDto> Systems, string? Current)
+{
+    // The active system's full definition, or null when none is chosen. A UI-side convenience (the API resolves
+    // the same thing through GameSystemRegistry.Find); the render builders take this to resolve counter
+    // glyphs/colours + the spotlight label, matching the server-inlined TV render model (issue #128).
+    public GameSystemDto? Active =>
+        Current is null
+            ? null
+            : Systems.FirstOrDefault(s => string.Equals(s.Id, Current, StringComparison.OrdinalIgnoreCase));
+}
 
 public record GameSystemDto(
     string Id,

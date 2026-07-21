@@ -266,7 +266,7 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   the TV remote.
 - **`IGameSystem` / `GameSystemRegistry` / `SystemEndpoints`** — the pluggable **RPG game-system contract**
   (#127, design spec: [docs/GAME-SYSTEMS.md](docs/GAME-SYSTEMS.md) — read it before touching this layer;
-  phases 2–3 are #128/#129). An [`IGameSystem`](src/AmbientDirector.Api/Services/Systems/IGameSystem.cs) is a
+  phase 2 render presentation is done (#128), phase 3 is #129). An [`IGameSystem`](src/AmbientDirector.Api/Services/Systems/IGameSystem.cs) is a
   data-only DI singleton (id, `NameKey` i18n key, member/enemy/table `CounterPreset`s with curated
   `GameSystemGlyphs` names, a `Quickbar` of table-counter keys, a `SpotlightLabel` TV literal) discovered via
   `GameSystemRegistry` (the `IEnumerable<IImageSearchSource>` idiom; unique-slug-id asserted at startup).
@@ -283,7 +283,12 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   nav tab only** (`UiState.GameSystem`, the `AssistantConfigured` idiom — navigation-only, API/TV/deep links
   unaffected), Settings → General has the system dropdown, and `/party/list` (+ both AI surfaces' `list_party`)
   carries the active `system` id. Daggerheart's presets/colors are pinned in the spec's reference table — a
-  Daggerheart table must render identically across the refactor phases.
+  Daggerheart table must render identically across the refactor phases. **Render presentation (phase 2, #128)**:
+  the TV render model resolves each counter's `Glyph`/`Color` (`TvPartyCounterDto`) and the enemy `SpotlightLabel`
+  (`TvEnemyDto`) from the active system — the API in `TvEndpoints` (counter `Key` → the active system's preset in
+  the member/enemy/table scope), the panel in `PartyRender.ToRenderModel` from `GameSystemsDto.Active` (fetched by
+  the Boards/BoardEditor/TvRemote pages) — so `BoardCanvas` is system-agnostic (its pip glyph SVGs + `_party.scss`
+  classes are keyed by curated glyph names, no label matching) and a Polish table themes like an English one.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
   (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single piece of content the

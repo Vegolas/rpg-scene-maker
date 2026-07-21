@@ -35,10 +35,19 @@ public record TvPartyPlayerDto(string Name, string? PortraitUrl, List<TvPartyCou
 
 // One enemy in the render model: portrait + text + counter tracks + the spotlight (boss) flag (issue #122 gave
 // enemies portraits, like players). PortraitUrl is pre-resolved to the gate-validated /tv/content/board/{name}
-// route (null when the enemy has no portrait).
-public record TvEnemyDto(string Name, string? PortraitUrl, bool Spotlight, List<TvPartyCounterDto> Counters);
+// route (null when the enemy has no portrait). SpotlightLabel (issue #128) is the active game system's literal
+// chip text (Daggerheart's "SPOTLIGHT") shown when Spotlight is set — a LITERAL, resolved server-side so the
+// key-free TV never reaches /i18n; null (no system, or a system with no label) hides the chip entirely.
+public record TvEnemyDto(string Name, string? PortraitUrl, bool Spotlight, List<TvPartyCounterDto> Counters,
+    string? SpotlightLabel = null);
 
-public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style);
+// One counter track in the render model. Glyph + Color (issue #128) are the resolved presentation: the API maps
+// the counter's semantic Key to the active game system's preset (member/enemy/table scope) and inlines the
+// preset's curated Glyph name (GameSystemGlyphs — null = plain dot) and content Color (hex — null = the glyph's
+// self-styled default / neutral dot). No key, no match, or no active system → both null (a neutral dot), so
+// BoardCanvas needs no game knowledge and a Polish table renders the same glyphs as an English one.
+public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style,
+    string? Glyph = null, string? Color = null);
 
 // One entry of GET /tv/show/recent (a protected, panel-only convenience). Exposes the raw Ref (a stored image
 // file name for kind "image", a board id for kind "board") so the panel can re-push it (POST /tv/show).

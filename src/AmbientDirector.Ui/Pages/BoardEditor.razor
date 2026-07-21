@@ -235,7 +235,10 @@ else
     {
         await Api.GetApiKeyAsync(); // cache the key so preview/thumbnail image urls carry it
         var party = await Api.GetPartyAsync();
-        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl);
+        // The active game system (issue #128) resolves the preview counters' glyph/colour to match the TV; fetched
+        // here (not from UiState) so it is correct even on a deep-link load racing the layout's own fetch.
+        var systems = await Api.GetGameSystemsAsync();
+        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl, systems?.Active);
         var dto = (await Api.GetBoardsAsync())
             .FirstOrDefault(b => string.Equals(b.Id, Id, StringComparison.OrdinalIgnoreCase));
         if (dto is null)

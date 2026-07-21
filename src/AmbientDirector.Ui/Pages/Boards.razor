@@ -104,7 +104,11 @@ else
         Ui.SearchChanged += OnSearchChanged;
         await Api.GetApiKeyAsync(); // cache the key so preview image urls carry it
         var party = await Api.GetPartyAsync();
-        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl);
+        // The active game system (issue #128) resolves each counter's glyph/colour so a card preview matches the
+        // TV; null (offline / no system) → neutral dots. Fetched here rather than read from UiState so the render
+        // is correct even on a deep-link load that races the layout's own /systems/list fetch.
+        var systems = await Api.GetGameSystemsAsync();
+        _partyRender = party is null ? null : PartyRender.ToRenderModel(party, Api.ImageUrl, systems?.Active);
         _boards = await Api.GetBoardsAsync();
     }
 
