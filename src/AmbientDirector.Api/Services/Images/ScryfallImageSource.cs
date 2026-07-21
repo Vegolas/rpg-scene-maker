@@ -39,15 +39,19 @@ public sealed class ScryfallImageSource : IImageSearchSource
     public string Name => "Scryfall";
     public string Attribution => "Card art via Scryfall. Magic: The Gathering © Wizards of the Coast.";
 
-    public async Task<ImageSearchResponseDto> SearchAsync(string query, CancellationToken ct)
+    public async Task<ImageSearchResponseDto> SearchAsync(string query, ImageSearchOptions options, CancellationToken ct)
     {
-        // Cache successful searches (Scryfall etiquette + keeps us well under their ~10 req/s limit).
-        var cacheKey = $"imgsearch:scryfall:{query.Trim().ToLowerInvariant()}";
+        // Cache successful searches (Scryfall etiquette + keeps us well under their ~10 req/s limit). The
+        // options are part of the key: IncludeExtras changes the query Scryfall runs, and FullImage changes
+        // which image URLs each hit maps to — so a bare-query result must never satisfy an options request.
+        var cacheKey = $"imgsearch:scryfall:{(options.FullImage ? 'F' : 'a')}{(options.IncludeExtras ? 'X' : '_')}:{query.Trim().ToLowerInvariant()}";
         if (_cache.TryGetValue(cacheKey, out ImageSearchResponseDto? cached) && cached is not null)
             return cached;
 
+        // include:extras pulls in tokens, art-series cards, emblems, etc. that Scryfall hides by default.
+        var q = options.IncludeExtras ? $"{query} include:extras" : query;
         // unique=art collapses reprints that share the same artwork.
-        var url = $"https://api.scryfall.com/cards/search?q={Uri.EscapeDataString(query)}&unique=art";
+        var url = $"https://api.scryfall.com/cards/search?q={Uri.EscapeDataString(q)}&unique=art";
         HttpResponseMessage response;
         try
         {
@@ -63,7 +67,7 @@ public sealed class ScryfallImageSource : IImageSearchSource
             var body = await response.Content.ReadAsStringAsync(ct);
             var result = response.StatusCode switch
             {
-                HttpStatusCode.OK => MapSearch(body),
+                HttpStatusCode.OK => MapSearch(body, options.FullImage),
                 // 404 means "no cards matched" — a normal empty result, not a failure.
                 HttpStatusCode.NotFound => new ImageSearchResponseDto(Id, 0, false, []),
                 // 400 means the search syntax was rejected — surface Scryfall's own explanation.
@@ -82,7 +86,7 @@ public sealed class ScryfallImageSource : IImageSearchSource
         // ResponseHeadersRead so the endpoint streams the body and enforces the size cap itself.
         _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
 
-    private ImageSearchResponseDto MapSearch(string body)
+    private ImageSearchResponseDto MapSearch(string body, bool fullImage)
     {
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -96,7 +100,7 @@ public sealed class ScryfallImageSource : IImageSearchSource
         {
             foreach (var card in data.EnumerateArray())
             {
-                foreach (var hit in MapCard(card))
+                foreach (var hit in MapCard(card, fullImage))
                 {
                     if (results.Count >= MaxResults) { truncated = true; break; }
                     results.Add(hit);
@@ -108,13 +112,13 @@ public sealed class ScryfallImageSource : IImageSearchSource
         return new ImageSearchResponseDto(Id, total, sourceHasMore || truncated, results);
     }
 
-    // A card yields one result from its own art_crop, or — for double-faced cards with no top-level image —
-    // one result per face that has its own art_crop. A card with no art_crop anywhere yields nothing.
-    private static IEnumerable<ImageResultDto> MapCard(JsonElement card)
+    // A card yields one result from its own image_uris, or — for double-faced cards with no top-level image —
+    // one result per face that has them. A card with no usable image anywhere yields nothing.
+    private static IEnumerable<ImageResultDto> MapCard(JsonElement card, bool fullImage)
     {
-        if (TryArtCrop(card, out var art))
+        if (TryImages(card, fullImage, out var thumb, out var url))
         {
-            yield return new ImageResultDto(Str(card, "name") ?? "", Str(card, "artist"), art, art);
+            yield return new ImageResultDto(Str(card, "name") ?? "", Str(card, "artist"), thumb, url);
             yield break;
         }
 
@@ -124,26 +128,48 @@ public sealed class ScryfallImageSource : IImageSearchSource
             var cardArtist = Str(card, "artist");
             foreach (var face in faces.EnumerateArray())
             {
-                if (TryArtCrop(face, out var faceArt))
+                if (TryImages(face, fullImage, out var faceThumb, out var faceUrl))
                     yield return new ImageResultDto(
                         Str(face, "name") ?? cardName ?? "",
                         Str(face, "artist") ?? cardArtist,
-                        faceArt, faceArt);
+                        faceThumb, faceUrl);
             }
         }
     }
 
-    private static bool TryArtCrop(JsonElement el, out string artCrop)
+    // Resolve the grid thumbnail + the image to import from a card/face's image_uris. Art mode uses the
+    // tight art_crop for both (the historical behaviour). Full-card mode previews a mid-size scan and imports
+    // a high-res JPEG for the user to crop in-app; each falls back down the chain so an odd card without a
+    // given size still yields something.
+    private static bool TryImages(JsonElement el, bool fullImage, out string thumb, out string url)
     {
-        artCrop = "";
-        if (el.TryGetProperty("image_uris", out var imgs) && imgs.ValueKind == JsonValueKind.Object
-            && imgs.TryGetProperty("art_crop", out var ac) && ac.ValueKind == JsonValueKind.String
-            && ac.GetString() is { Length: > 0 } value)
+        thumb = "";
+        url = "";
+        if (!el.TryGetProperty("image_uris", out var imgs) || imgs.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (fullImage)
         {
-            artCrop = value;
-            return true;
+            thumb = Pick(imgs, "normal", "large", "small", "png", "art_crop");
+            url = Pick(imgs, "large", "png", "normal", "art_crop");
         }
-        return false;
+        else
+        {
+            thumb = url = Pick(imgs, "art_crop");
+        }
+        return url.Length > 0;
+    }
+
+    // First non-empty string URL among the given image_uris keys, in preference order ("" if none).
+    private static string Pick(JsonElement imgs, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (imgs.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String
+                && v.GetString() is { Length: > 0 } value)
+                return value;
+        }
+        return "";
     }
 
     private static string? Str(JsonElement el, string prop) =>

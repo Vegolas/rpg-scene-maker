@@ -942,6 +942,8 @@
     "artSearch.source": "Source",
     "artSearch.placeholder": "Search card art…",
     "artSearch.searchBtn": "Search",
+    "artSearch.opt.fullImage": "Full card image (crop it yourself)",
+    "artSearch.opt.extras": "Include extras (tokens, art cards…)",
     "artSearch.searching": "Searching…",
     "artSearch.hint": "Search for card art to use as tile art.",
     "artSearch.empty": "No results — try a different search.",

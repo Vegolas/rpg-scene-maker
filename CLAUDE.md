@@ -242,9 +242,14 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `HttpClient` with the Scryfall-required `User-Agent`/`Accept` set in its ctor) — it hits
   `api.scryfall.com/cards/search?...&unique=art`, maps each card (or each face of a double-faced card) to its
   `art_crop`, caps at 60 hits, treats a 404 as empty results, maps a 400 to `error.imageSearch.badQuery`, and
-  memo-caches successful searches for 15 min in `IMemoryCache`. `/images/*`
+  memo-caches successful searches for 15 min in `IMemoryCache`. `SearchAsync` takes an **`ImageSearchOptions`**
+  (`FullImage`, `IncludeExtras`; the picker's two toggles): `FullImage` maps each hit to the whole card scan
+  instead of the tight crop (thumbnail `normal`, imported `large`, falling back down the size chain — the app
+  crops it in-app), and `IncludeExtras` appends `include:extras` so tokens/art-series/emblems Scryfall hides
+  by default appear. Both are part of the cache key (they change the query or the mapped URLs), and both
+  full-card sizes live on the same `cards.scryfall.io` host so import needs no allowlist change. `/images/*`
   ([ImageEndpoints.cs](src/AmbientDirector.Api/Endpoints/ImageEndpoints.cs)) adds `GET /sources` (over the
-  injected `IEnumerable<IImageSearchSource>`), `GET /search?source=&q=`, and `POST /import` ({ url } — fetches
+  injected `IEnumerable<IImageSearchSource>`), `GET /search?source=&q=&full=&extras=`, and `POST /import` ({ url } — fetches
   an allowlisted https URL, re-checks the host after redirects, derives the extension from `Content-Type`
   (URL-ext fallback), enforces the 10 MB cap on both `Content-Length` and the streamed copy, then saves via
   `ImageFileStorage.SaveAsync`). Upstream Scryfall/CDN failures throw **`ImageSourceException`** → 502

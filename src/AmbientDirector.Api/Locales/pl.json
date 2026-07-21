@@ -956,6 +956,8 @@
     "artSearch.source": "Źródło",
     "artSearch.placeholder": "Szukaj grafiki kart…",
     "artSearch.searchBtn": "Szukaj",
+    "artSearch.opt.fullImage": "Cały obrazek karty (przytniesz sam)",
+    "artSearch.opt.extras": "Dołącz dodatkowe (żetony, grafiki…)",
     "artSearch.searching": "Szukanie…",
     "artSearch.hint": "Wyszukaj grafikę karty, aby użyć jej jako grafiki kafelka.",
     "artSearch.empty": "Brak wyników — spróbuj innej frazy.",

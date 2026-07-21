@@ -57,13 +57,16 @@ public static class ImageEndpoints
 
         // Search one source and return a page of hits: { source, total, hasMore, results[] }. GET only — a
         // literal route, so it beats the GET /images/{name} byte server. The panel calls it directly.
-        images.MapGet("/search", async (string? source, string? q,
+        // Optional flags: full=true imports the whole card image (croppable in-app) instead of the tight art
+        // crop; extras=true broadens results to card types Scryfall hides by default (tokens, art series, …).
+        images.MapGet("/search", async (string? source, string? q, bool? full, bool? extras,
             IEnumerable<IImageSearchSource> sources, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(q))
                 throw new ValidationException("error.imageSearch.queryRequired");
             var picked = ResolveSource(sources, source);
-            return Results.Ok(await picked.SearchAsync(q, ct));
+            var options = new ImageSearchOptions(full ?? false, extras ?? false);
+            return Results.Ok(await picked.SearchAsync(q, options, ct));
         });
 
         // Import: fetch a picked image URL server-side (allowlisted source host only) and store it like

@@ -9,9 +9,9 @@ namespace AmbientDirector.Tests.Http;
 
 public class ScryfallImageSourceTests
 {
-    // A list with: a normal single-faced card, a double-faced card (each face has its own image_uris +
-    // name; the second face has NO artist so it must fall back to the card artist), and an imageless card
-    // that must be skipped.
+    // A list with: a normal single-faced card (full set of image sizes), a double-faced card (each face has
+    // its own image_uris + name; the second face has NO artist so it falls back to the card artist, and only
+    // an art_crop so full-image mode must fall back to it), and an imageless card that must be skipped.
     private const string ListJson = """
     {
       "object": "list",
@@ -21,7 +21,13 @@ public class ScryfallImageSourceTests
         {
           "name": "Tavern Swindler",
           "artist": "Volkan Baga",
-          "image_uris": { "art_crop": "https://cards.scryfall.io/art_crop/normal.jpg" }
+          "image_uris": {
+            "small": "https://cards.scryfall.io/small/normal.jpg",
+            "normal": "https://cards.scryfall.io/normal/normal.jpg",
+            "large": "https://cards.scryfall.io/large/normal.jpg",
+            "png": "https://cards.scryfall.io/png/normal.png",
+            "art_crop": "https://cards.scryfall.io/art_crop/normal.jpg"
+          }
         },
         {
           "name": "Delver of Secrets // Insectile Aberration",
@@ -30,7 +36,11 @@ public class ScryfallImageSourceTests
             {
               "name": "Delver of Secrets",
               "artist": "Face One",
-              "image_uris": { "art_crop": "https://cards.scryfall.io/art_crop/face1.jpg" }
+              "image_uris": {
+                "normal": "https://cards.scryfall.io/normal/face1.jpg",
+                "large": "https://cards.scryfall.io/large/face1.jpg",
+                "art_crop": "https://cards.scryfall.io/art_crop/face1.jpg"
+              }
             },
             {
               "name": "Insectile Aberration",
@@ -62,7 +72,7 @@ public class ScryfallImageSourceTests
         var (src, handler, _) = Build();
         handler.Enqueue(HttpStatusCode.OK, ListJson);
 
-        var resp = await src.SearchAsync("tavern", CancellationToken.None);
+        var resp = await src.SearchAsync("tavern", ImageSearchOptions.Default, CancellationToken.None);
 
         Assert.Equal("scryfall", resp.Source);
         Assert.Equal(42, resp.Total);
@@ -85,12 +95,64 @@ public class ScryfallImageSourceTests
     }
 
     [Fact]
+    public async Task FullImage_maps_the_whole_card_scan_and_falls_back_when_a_size_is_missing()
+    {
+        var (src, handler, _) = Build();
+        handler.Enqueue(HttpStatusCode.OK, ListJson);
+
+        var resp = await src.SearchAsync("tavern", new ImageSearchOptions(FullImage: true), CancellationToken.None);
+
+        Assert.Equal(3, resp.Results.Count);
+
+        // Full card: mid-size scan in the grid, high-res JPEG to import + crop.
+        Assert.Equal("https://cards.scryfall.io/normal/normal.jpg", resp.Results[0].ThumbUrl);
+        Assert.Equal("https://cards.scryfall.io/large/normal.jpg", resp.Results[0].Url);
+
+        // Face one has normal + large (but no small/png) → still resolves both cleanly.
+        Assert.Equal("https://cards.scryfall.io/normal/face1.jpg", resp.Results[1].ThumbUrl);
+        Assert.Equal("https://cards.scryfall.io/large/face1.jpg", resp.Results[1].Url);
+
+        // Face two has ONLY art_crop → both thumb and url fall back to it.
+        Assert.Equal("https://cards.scryfall.io/art_crop/face2.jpg", resp.Results[2].ThumbUrl);
+        Assert.Equal("https://cards.scryfall.io/art_crop/face2.jpg", resp.Results[2].Url);
+    }
+
+    [Fact]
+    public async Task IncludeExtras_appends_the_scryfall_filter_to_the_query()
+    {
+        var (src, handler, _) = Build();
+        handler.Enqueue(HttpStatusCode.OK, EmptyList);
+
+        await src.SearchAsync("goblin", new ImageSearchOptions(IncludeExtras: true), CancellationToken.None);
+
+        var query = Uri.UnescapeDataString(handler.Requests[0].Uri.Query);
+        Assert.Contains("q=goblin include:extras", query);
+        Assert.Contains("unique=art", handler.Requests[0].Uri.Query);
+    }
+
+    [Fact]
+    public async Task Different_options_do_not_share_a_cache_entry()
+    {
+        var (src, handler, _) = Build();
+        handler.Enqueue(HttpStatusCode.OK, ListJson);   // art-crop search
+        handler.Enqueue(HttpStatusCode.OK, ListJson);   // full-image search hits the network too
+
+        var art = await src.SearchAsync("tavern", ImageSearchOptions.Default, CancellationToken.None);
+        var full = await src.SearchAsync("tavern", new ImageSearchOptions(FullImage: true), CancellationToken.None);
+
+        // Two network calls (the options differ → different cache keys), and the mapped URLs differ.
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.EndsWith("art_crop/normal.jpg", art.Results[0].Url);
+        Assert.EndsWith("large/normal.jpg", full.Results[0].Url);
+    }
+
+    [Fact]
     public async Task Search_sends_ua_accept_and_unique_art_with_escaped_query()
     {
         var (src, handler, http) = Build();
         handler.Enqueue(HttpStatusCode.OK, EmptyList);
 
-        await src.SearchAsync("goblin king", CancellationToken.None);
+        await src.SearchAsync("goblin king", ImageSearchOptions.Default, CancellationToken.None);
 
         // The typed client carries the descriptive User-Agent + Accept Scryfall requires (set in the ctor,
         // so every request sends them).
@@ -112,7 +174,7 @@ public class ScryfallImageSourceTests
         handler.Enqueue(HttpStatusCode.NotFound,
             """{"object":"error","code":"not_found","status":404,"details":"No cards found."}""");
 
-        var resp = await src.SearchAsync("asdkjhaskdjh", CancellationToken.None);
+        var resp = await src.SearchAsync("asdkjhaskdjh", ImageSearchOptions.Default, CancellationToken.None);
 
         Assert.Empty(resp.Results);
         Assert.Equal(0, resp.Total);
@@ -127,7 +189,7 @@ public class ScryfallImageSourceTests
         handler.Enqueue(HttpStatusCode.BadRequest,
             """{"object":"error","code":"bad_request","status":400,"details":"All of your terms were ignored."}""");
 
-        var ex = await Assert.ThrowsAsync<ValidationException>(() => src.SearchAsync("(", CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => src.SearchAsync("(", ImageSearchOptions.Default, CancellationToken.None));
         Assert.Equal("error.imageSearch.badQuery", ex.Code);
         // Scryfall's own explanation is carried as the interpolation arg.
         Assert.Contains("All of your terms were ignored.", ex.Args[0]?.ToString());
@@ -139,7 +201,7 @@ public class ScryfallImageSourceTests
         var (src, handler, _) = Build();
         handler.Enqueue(HttpStatusCode.InternalServerError, "{}");
 
-        await Assert.ThrowsAsync<ImageSourceException>(() => src.SearchAsync("tavern", CancellationToken.None));
+        await Assert.ThrowsAsync<ImageSourceException>(() => src.SearchAsync("tavern", ImageSearchOptions.Default, CancellationToken.None));
     }
 
     [Fact]
@@ -148,8 +210,8 @@ public class ScryfallImageSourceTests
         var (src, handler, _) = Build();
         handler.Enqueue(HttpStatusCode.OK, ListJson);   // exactly one canned response
 
-        var first = await src.SearchAsync("tavern", CancellationToken.None);
-        var second = await src.SearchAsync("  Tavern  ", CancellationToken.None);   // same normalized key
+        var first = await src.SearchAsync("tavern", ImageSearchOptions.Default, CancellationToken.None);
+        var second = await src.SearchAsync("  Tavern  ", ImageSearchOptions.Default, CancellationToken.None);   // same normalized key
 
         // The second call hit the cache, not the network — the handler saw only one request (and never ran
         // out of canned responses).

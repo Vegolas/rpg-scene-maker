@@ -112,7 +112,7 @@ public class ImageSearchTests
         public string Name => "Fake";
         public string Attribution => "Test source.";
 
-        public Task<ImageSearchResponseDto> SearchAsync(string query, CancellationToken ct) =>
+        public Task<ImageSearchResponseDto> SearchAsync(string query, ImageSearchOptions options, CancellationToken ct) =>
             Task.FromResult(new ImageSearchResponseDto(Id, 0, false, []));
 
         public bool CanFetch(Uri url) =>
