@@ -28,6 +28,12 @@
 .share-note.share-warn { color: var(--warning); }
 
 .share-subhead { font: var(--text-md); margin: var(--s-4) 0 var(--s-1); color: var(--text); }
+
+/* validation heads-up (preview) + repaired-fields report (success) */
+.share-issues { margin-top: var(--s-3); }
+.share-notelist { margin: var(--s-1) 0 0; padding-left: 1.1rem; }
+.share-notelist li { font: var(--text-sm); color: var(--text-muted); margin-top: var(--s-1); }
+.share-notelist strong { color: var(--text); }
 .share-lights { display: flex; flex-direction: column; gap: var(--s-2); }
 .share-lightrow {
   display: flex; align-items: center; gap: var(--s-3);

@@ -31,6 +31,10 @@ public abstract class ShareDescriptor<T> : IShareDescriptor where T : class
     /// <summary>Rewrite ids/media/light-keys in place. Default no-op (kinds with nothing to rewrite).</summary>
     protected virtual void Rewrite(T entity, ShareRewriteContext ctx) { }
 
+    /// <summary>Repair a fixable-but-invalid field so the entity imports; return a locale key for the report,
+    /// or null. Default no-op — only kinds with such a field (e.g. a scene's music id) override this.</summary>
+    protected virtual string? Sanitize(T entity) => null;
+
     // ---- boxing shims: one cast, then delegate to the typed members above ----
     async Task<object?> IShareDescriptor.LoadAsync(string id) => await GetAsync(id);
     async Task<bool> IShareDescriptor.ExistsAsync(string id) => await GetAsync(id) is not null;
@@ -43,6 +47,7 @@ public abstract class ShareDescriptor<T> : IShareDescriptor where T : class
     JsonElement IShareDescriptor.ToJson(object entity) => JsonSerializer.SerializeToElement((T)entity, AiJson.Options);
     object IShareDescriptor.FromJson(JsonElement json) => json.Deserialize<T>(AiJson.Options)!;
     void IShareDescriptor.Rewrite(object entity, ShareRewriteContext ctx) => Rewrite((T)entity, ctx);
+    string? IShareDescriptor.Sanitize(object entity) => Sanitize((T)entity);
     void IShareDescriptor.Validate(object entity) => Validate((T)entity);
     Task IShareDescriptor.UpsertAsync(object entity) => UpsertAsync((T)entity);
 }

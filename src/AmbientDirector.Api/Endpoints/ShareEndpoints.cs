@@ -40,12 +40,16 @@ public static class ShareEndpoints
             if (file.Length > ShareImporter.MaxPackBytes)
                 throw new ValidationException("error.share.tooLarge", ShareImporter.MaxPackMb);
 
+            var lang = request.Headers["X-Ui-Lang"].FirstOrDefault();
             await using var stream = file.OpenReadStream();
-            return Results.Ok(await importer.SaveTempAndInspectAsync(stream, ct));
+            return Results.Ok(await importer.SaveTempAndInspectAsync(stream, lang, ct));
         }).DisableAntiforgery();
 
         // Commit a previously-inspected pack: apply the light mapping and recreate everything as fresh copies.
-        share.MapPost("/import/commit", async (ShareCommitInput input, ShareImporter importer, CancellationToken ct) =>
-            Results.Ok(await importer.CommitAsync(input, ct)));
+        share.MapPost("/import/commit", async (HttpRequest request, ShareCommitInput input, ShareImporter importer, CancellationToken ct) =>
+        {
+            var lang = request.Headers["X-Ui-Lang"].FirstOrDefault();
+            return Results.Ok(await importer.CommitAsync(input, lang, ct));
+        });
     }
 }

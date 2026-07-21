@@ -1,9 +1,11 @@
-@* Import a shareable content pack (issue #111): choose a .zip → the server inspects it (what's inside +
-   the light keys that need remapping) → the GM maps each source light to one of their bulbs (or skips it) →
-   commit recreates everything as fresh copies. Modeled on PdfPagePicker — a fixed-inset overlay (the app has
-   no modal primitive), the "upload → interactive step → confirm" shape. *@
+@* Import a shareable content pack (issue #111): choose a .zip → the server inspects it (what's inside, the
+   light keys to remap, and a heads-up on anything that'll be adjusted) → the GM maps each source light to one
+   of their bulbs (or skips it) → commit recreates everything as fresh copies, repairing fixable fields so it
+   never hard-fails, then offers to open the imported entity to finish it. Modeled on PdfPagePicker — a
+   fixed-inset overlay (the app has no modal primitive). *@
 @inject ApiClient Api
 @inject UiState Ui
+@inject ViewTransition Vt
 @inject Localizer L
 
 <div class="imgsearch-overlay" role="dialog" aria-modal="true" aria-label="@L["share.import.title"]">
@@ -16,7 +18,27 @@
     </div>
 
     <div class="imgsearch-body">
-        @if (_inspect is null)
+        @if (_result is not null)
+        {
+            @* ---- success: what landed + what was adjusted, then Review/Done ---- *@
+            <div class="share-summary">
+                <p class="share-contains"><strong>@L["share.import.resultTitle"]</strong>
+                    — @L.Format("share.import.done", _result.Created.Values.Sum(v => v.Count))</p>
+            </div>
+            @if (_result.Repaired.Count > 0)
+            {
+                <div class="share-issues">
+                    <p class="share-subhead">@L["share.import.repairedTitle"]</p>
+                    <ul class="share-notelist">
+                        @foreach (var note in _result.Repaired)
+                        {
+                            <li>@note.Note</li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+        else if (_inspect is null)
         {
             <div class="pdfpick-choose">
                 <label class="btn btn--primary pdfpick-upload@(_uploading ? " is-busy" : "")">
@@ -39,6 +61,19 @@
                     <p class="share-note share-warn">@L.Format("share.import.mediaMissingNote", _inspect.MediaMissing.Count)</p>
                 }
             </div>
+
+            @if (_inspect.Issues.Count > 0)
+            {
+                <div class="share-issues">
+                    <p class="share-subhead">@L["share.import.issuesTitle"]</p>
+                    <ul class="share-notelist">
+                        @foreach (var issue in _inspect.Issues)
+                        {
+                            <li><strong>@issue.Name</strong> — @issue.Problem</li>
+                        }
+                    </ul>
+                </div>
+            }
 
             @if (_inspect.LightKeys.Count > 0)
             {
@@ -75,7 +110,17 @@
         }
     </div>
 
-    @if (_inspect is not null)
+    @if (_result is not null)
+    {
+        <div class="imgsearch-foot pdfpick-foot">
+            @if (ReviewRoute is not null)
+            {
+                <button type="button" class="btn" @onclick="Review">@L["share.import.review"]</button>
+            }
+            <button type="button" class="btn btn--primary" @onclick="Done">@L["share.import.doneBtn"]</button>
+        </div>
+    }
+    else if (_inspect is not null)
     {
         <div class="imgsearch-foot pdfpick-foot">
             <button type="button" class="btn btn--primary" @onclick="CommitAsync" disabled="@_committing">
@@ -86,13 +131,15 @@
 </div>
 
 @code {
-    // Fires when the pack was imported (the host list should refresh); then the overlay closes.
+    // Fires when the pack was imported (the host list should refresh). Then the overlay shows the result, and
+    // closes on Done/Review.
     [Parameter] public EventCallback OnImported { get; set; }
 
-    // Fires when the overlay should close (close button, or after a successful import).
+    // Fires when the overlay should close (close button, Done, or before navigating to Review).
     [Parameter] public EventCallback OnClose { get; set; }
 
     private ShareInspectResult? _inspect;
+    private ShareCommitResult? _result;
     private List<RegisteredLightInfo> _lights = [];
     private readonly Dictionary<string, string?> _targets = new(StringComparer.OrdinalIgnoreCase);
     private bool _uploading;
@@ -151,22 +198,49 @@
             var (result, error) = await Api.CommitPackImportAsync(input);
             if (result is not null)
             {
-                Ui.ReportOk(L.Format("share.import.done", result.Created.Values.Sum(v => v.Count)));
-                await OnImported.InvokeAsync();
-                await OnClose.InvokeAsync();
+                await OnImported.InvokeAsync(); // refresh the host list underneath the result view
+                _result = result;               // show the success + Review/Done step
             }
             else
             {
                 Ui.ReportError(error ?? L["share.import.failed"]);
-                _committing = false; // keep the overlay open so the user can retry
             }
         }
         catch (Exception ex)
         {
             Ui.ReportError(ex.Message);
+        }
+        finally
+        {
             _committing = false;
         }
     }
+
+    // The imported primary entity's editor route (null when its kind has no per-item editor, e.g. a sound).
+    private string? ReviewRoute =>
+        _result is { PrimaryId: { } id } && EditorRoute(_result.PrimaryKind, id) is { } route ? route : null;
+
+    private async Task Review()
+    {
+        if (ReviewRoute is not { } route) return;
+        await OnClose.InvokeAsync();
+        await Vt.NavigateAsync(route);
+    }
+
+    private Task Done() => OnClose.InvokeAsync();
+
+    private static string? EditorRoute(string kind, string id) => kind switch
+    {
+        "scene" => $"editor/{id}",
+        "event" => $"event-editor/{id}",
+        "lightfx" => $"effects/{id}",
+        "screen" => $"screens/{id}",
+        "board" => $"boards/{id}",
+        "player" => $"party/{id}",
+        "enemy" => $"party/enemies/{id}",
+        "encounter" => $"encounters/{id}",
+        _ => null,
+    };
 
     // A short "2 scene, 3 sound" line from the per-kind counts (kind slugs — functional, not chrome).
     private string ContainsLine() =>

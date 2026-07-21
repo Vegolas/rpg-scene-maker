@@ -45,19 +45,22 @@ public sealed class ShareImporter
     private readonly ShareRegistry _registry;
     private readonly ImageFileStorage _images;
     private readonly SoundFileStorage _sounds;
+    private readonly LocaleService _locales;
 
-    public ShareImporter(string imagesPath, ShareRegistry registry, ImageFileStorage images, SoundFileStorage sounds)
+    public ShareImporter(string imagesPath, ShareRegistry registry, ImageFileStorage images,
+        SoundFileStorage sounds, LocaleService locales)
     {
         _registry = registry;
         _images = images;
         _sounds = sounds;
+        _locales = locales;
         _tempDir = Path.Combine(imagesPath, ".share-tmp");
         Directory.CreateDirectory(_tempDir);
     }
 
     // ---- Phase 1: inspect ----
 
-    public async Task<ShareInspectResult> SaveTempAndInspectAsync(Stream zip, CancellationToken ct = default)
+    public async Task<ShareInspectResult> SaveTempAndInspectAsync(Stream zip, string? lang, CancellationToken ct = default)
     {
         SweepStaleTemps();
 
@@ -73,6 +76,7 @@ public sealed class ShareImporter
 
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var collisions = new List<ShareCollision>();
+            var issues = new List<ShareEntityIssue>();
             foreach (var (kind, list) in manifest.Entities)
             {
                 var descriptor = _registry.Get(kind);
@@ -81,8 +85,14 @@ public sealed class ShareImporter
                 {
                     var entity = Deserialize(descriptor, json);
                     var entityId = descriptor.IdOf(entity);
+                    var name = descriptor.NameOf(entity);
                     if (await descriptor.ExistsAsync(entityId))
-                        collisions.Add(new ShareCollision(kind, entityId, descriptor.NameOf(entity)));
+                        collisions.Add(new ShareCollision(kind, entityId, name));
+                    // Preview validation: run the entity's own validator on the raw pack data (a throwaway
+                    // object — Validate mutates it) and surface any problem. Light/media/id fields are all
+                    // slug-shaped in a pack, so this only flags genuine issues (e.g. a placeholder music id).
+                    if (ValidationProblem(descriptor, entity, lang) is { } problem)
+                        issues.Add(new ShareEntityIssue(kind, entityId, name, problem));
                 }
             }
 
@@ -102,7 +112,7 @@ public sealed class ShareImporter
                 .Select(k => new ShareLightKeyDto(k.Key, k.Sources ?? [])).ToList();
 
             return new ShareInspectResult(id, manifest.Primary.Kind ?? "", manifest.Primary.Id ?? "",
-                counts, collisions, lightKeys, manifest.Media?.Count ?? 0, missing);
+                counts, collisions, lightKeys, manifest.Media?.Count ?? 0, missing, issues);
         }
         catch
         {
@@ -113,7 +123,7 @@ public sealed class ShareImporter
 
     // ---- Phase 2: commit ----
 
-    public async Task<ShareCommitResult> CommitAsync(ShareCommitInput input, CancellationToken ct = default)
+    public async Task<ShareCommitResult> CommitAsync(ShareCommitInput input, string? lang, CancellationToken ct = default)
     {
         var zipPath = ResolveTemp(input.TempId);
         var policy = (input.CollisionPolicy ?? "copy").Trim().ToLowerInvariant();
@@ -221,15 +231,21 @@ public sealed class ShareImporter
                 }
             }
 
-            // Phase C1 — set ids, rewrite, and validate EVERY entity before writing any (validators are pure,
-            // so an invalid pack fails here having touched no store row; only the just-saved media needs undoing).
+            // Phase C1 — set ids, rewrite, repair fixable fields, then validate EVERY entity before writing any
+            // (validators are pure, so an unrepairable pack fails here having touched no store row; only the
+            // just-saved media needs undoing). Sanitize repairs the placeholder cases (e.g. an invalid music
+            // link) so a normal pack imports rather than hard-failing.
             var ctx = new ShareRewriteContext { IdMap = idMap, MediaMap = mediaMap, LightKeyMap = lightMap };
             var live = items.Where(it => !skipped.Contains((it.Kind, it.OldId))).ToList();
+            var repaired = new List<ShareRepairNote>();
             foreach (var (kind, entity, oldId) in live)
             {
                 var descriptor = _registry.Get(kind);
-                descriptor.SetId(entity, idMap[(kind, oldId)]);
+                var newId = idMap[(kind, oldId)];
+                descriptor.SetId(entity, newId);
                 descriptor.Rewrite(entity, ctx);
+                if (descriptor.Sanitize(entity) is { } repairKey)
+                    repaired.Add(new ShareRepairNote(kind, newId, _locales.Localize(lang, repairKey)));
                 descriptor.Validate(entity);
             }
 
@@ -243,7 +259,11 @@ public sealed class ShareImporter
             }
 
             TryDelete(zipPath);
-            return new ShareCommitResult(created, mediaMap.Count, remapped);
+
+            // The primary entity's new id, so the panel can open it for review.
+            var primaryKind = manifest.Primary.Kind ?? "";
+            idMap.TryGetValue((primaryKind, manifest.Primary.Id ?? ""), out var primaryNewId);
+            return new ShareCommitResult(created, mediaMap.Count, remapped, repaired, primaryKind, primaryNewId);
         }
         catch
         {
@@ -301,6 +321,25 @@ public sealed class ShareImporter
             throw new ValidationException("error.share.invalid");
 
         return manifest;
+    }
+
+    // Run an entity's validator on the raw pack data; return a localized "why" if it fails, else null. Validate
+    // mutates the (throwaway) entity, which is fine here — inspect discards it.
+    private string? ValidationProblem(IShareDescriptor descriptor, object entity, string? lang)
+    {
+        try
+        {
+            descriptor.Validate(entity);
+            return null;
+        }
+        catch (Exception ex) when (ex is IErrorCode coded)
+        {
+            return _locales.Localize(lang, coded.Code, coded.Args);
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
     }
 
     private static object Deserialize(IShareDescriptor descriptor, JsonElement json)

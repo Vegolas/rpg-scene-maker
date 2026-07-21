@@ -67,6 +67,12 @@ public interface IShareDescriptor
     /// <summary>Rewrite ids, media names and light keys in place using the resolved commit maps.</summary>
     void Rewrite(object entity, ShareRewriteContext ctx);
 
+    /// <summary>Repair a field that can arrive in an unusable-but-fixable state (e.g. a placeholder music id),
+    /// so a pack carrying it still imports instead of hard-failing validation. Returns a locale key describing
+    /// the repair (for the import report), or null when nothing needed fixing. Runs just before
+    /// <see cref="Validate"/> on commit.</summary>
+    string? Sanitize(object entity);
+
     /// <summary>Run the type's existing validator (throws on invalid). Import validates every entity before
     /// upserting any, so a bad pack fails before it writes any row — all validators are pure (entity-only).</summary>
     void Validate(object entity);

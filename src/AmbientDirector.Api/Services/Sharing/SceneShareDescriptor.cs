@@ -1,4 +1,5 @@
 using AmbientDirector.Api.Models;
+using AmbientDirector.Api.Services.Music;
 using AmbientDirector.Api.Validation;
 
 namespace AmbientDirector.Api.Services.Sharing;
@@ -36,6 +37,21 @@ public sealed class SceneShareDescriptor(SceneStore store) : ShareDescriptor<Sce
         foreach (var light in scene.Lights ?? [])
             if (!string.IsNullOrEmpty(light.LightKey))
                 yield return new(light.LightKey, $"Scene '{scene.Name}'");
+    }
+
+    protected override string? Sanitize(Scene scene)
+    {
+        // The one field a pack can carry in an unusable state (e.g. the starter template's
+        // "PASTE-SPOTIFY-URI-…" placeholder): a music id that is neither a Spotify nor a local reference. Null
+        // it so the scene imports; the GM re-sets it in the editor. Every other field was validated at author
+        // time on the source. Mirrors the check in SceneValidation (error.scene.musicUri).
+        if (scene.Music is { PlayId: { } playId } && !string.IsNullOrWhiteSpace(playId)
+            && !SpotifyClient.IsSpotifyUri(playId) && !LocalMusicId.IsLocal(playId))
+        {
+            scene.Music.PlayId = null;
+            return "share.repaired.music";
+        }
+        return null;
     }
 
     protected override void Rewrite(Scene scene, ShareRewriteContext ctx)

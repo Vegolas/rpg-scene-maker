@@ -120,6 +120,48 @@ public class ShareTests
     }
 
     [Fact]
+    public async Task Import_flags_a_fixable_field_in_the_preview_and_repairs_it_on_commit()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+
+        // A pack whose scene carries a placeholder music id (the starter-template shape) — invalid, but the
+        // kind of thing the importer repairs rather than hard-failing on.
+        var pack = BuildPack("""
+            {"format":"ambient-director/share-pack","formatVersion":1,
+             "primary":{"kind":"scene","id":"badmusic"},
+             "entities":{"scene":[{"id":"badmusic","name":"Bad Music","light":null,"lights":[],
+               "music":{"playId":"PASTE-SPOTIFY-URI-OR-LINK-HERE"},"soundEffects":[],"image":null}]},
+             "lightKeys":[],"media":[]}
+            """);
+
+        // Inspect surfaces the problem up front.
+        var inspect = await PostPack(client, pack);
+        inspect.EnsureSuccessStatusCode();
+        var summary = await inspect.Content.ReadFromJsonAsync<JsonElement>();
+        var issues = summary.GetProperty("issues").EnumerateArray().ToList();
+        Assert.Single(issues);
+        Assert.Equal("badmusic", issues[0].GetProperty("id").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(issues[0].GetProperty("problem").GetString()));
+        var tempId = summary.GetProperty("tempId").GetString()!;
+
+        // Commit repairs it (clears the bad link) rather than failing, and reports the repair + the primary id.
+        var commit = await client.PostAsJsonAsync("/share/import/commit",
+            new { tempId, lightKeys = (object?)null, collisionPolicy = (string?)null });
+        Assert.Equal(HttpStatusCode.OK, commit.StatusCode);
+        var result = await commit.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("scene", result.GetProperty("primaryKind").GetString());
+        Assert.Equal("badmusic", result.GetProperty("primaryId").GetString());
+        var repaired = result.GetProperty("repaired").EnumerateArray().ToList();
+        Assert.Single(repaired);
+        Assert.Equal("scene", repaired[0].GetProperty("kind").GetString());
+
+        // The scene imported, with the invalid music link cleared to null (fixable later in the editor).
+        var scene = await client.GetFromJsonAsync<JsonElement>("/scenes/badmusic");
+        Assert.Equal(JsonValueKind.Null, scene.GetProperty("music").GetProperty("playId").ValueKind);
+    }
+
+    [Fact]
     public async Task Import_inspect_rejects_a_non_zip_upload()
     {
         using var factory = new ApiFactory();

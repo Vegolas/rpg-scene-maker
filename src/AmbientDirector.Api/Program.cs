@@ -187,7 +187,8 @@ builder.Services.AddSingleton<ShareExporter>();
 builder.Services.AddSingleton(sp => new ShareImporter(imagesPath,
     sp.GetRequiredService<ShareRegistry>(),
     sp.GetRequiredService<ImageFileStorage>(),
-    sp.GetRequiredService<SoundFileStorage>()));
+    sp.GetRequiredService<SoundFileStorage>(),
+    sp.GetRequiredService<LocaleService>()));
 
 // UI translations: JSON files on disk (community-editable), with English embedded as the fallback.
 builder.Services.AddSingleton(sp => new LocaleService(localesPath, sp.GetRequiredService<ILogger<LocaleService>>()));
