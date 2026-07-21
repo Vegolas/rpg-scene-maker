@@ -205,6 +205,37 @@
 @media (max-width: 767.98px) { .quick .q-sec { display: none; } }
 @media (max-width: 480px) { .quick .q-vol { display: none; } }
 
+/* game-system quickbar chip (issue #129) — e.g. Daggerheart's Fear: a label + −/value/+ on every page.
+   Deliberately NOT hidden on phones (unlike .q-sec / .q-vol above): mid-session reachability is the point. */
+.quick .q-chip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding-left: var(--s-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.quick .q-chip__label {
+  font: var(--text-label);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.quick .q-chip__val {
+  min-width: 1.5ch;
+  padding: 0 2px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text);
+}
+/* the −/+ read as one unit with the chip: no own border/background until hovered */
+.quick .q-chip .q-chip__btn { background: transparent; border-color: transparent; }
+.quick .q-chip .q-chip__btn:hover { background: var(--card-raised); border-color: var(--border-strong); }
+
 /* ---------- now-running status strip ---------- */
 .now-running {
   display: flex;

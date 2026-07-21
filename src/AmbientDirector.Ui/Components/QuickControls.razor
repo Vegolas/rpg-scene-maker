@@ -9,6 +9,22 @@
 @inject Localizer L
 
 <div class="quick">
+    @* Game-system quickbar (issue #129): a compact −/value/+ chip for each of the active system's Quickbar
+       table counters (Daggerheart's Fear). Shown on ALL viewport sizes — mid-session reachability from every
+       tab is the point — unlike the secondary music buttons that drop on phones. *@
+    @foreach (var c in _quickCounters)
+    {
+        <div class="q-chip" @key="c.Key">
+            <span class="q-chip__label">@c.Label</span>
+            <button class="q-btn q-chip__btn" @onclick="() => AdjustQuick(c, -1)" disabled="@IsQuickBusy(c)"
+                    title='@L.Format("quickControls.counterDecrease", c.Label)'
+                    aria-label='@L.Format("quickControls.counterDecrease", c.Label)'><Icon Name="minus" /></button>
+            <span class="q-chip__val">@c.Value</span>
+            <button class="q-btn q-chip__btn" @onclick="() => AdjustQuick(c, 1)" disabled="@IsQuickBusy(c)"
+                    title='@L.Format("quickControls.counterIncrease", c.Label)'
+                    aria-label='@L.Format("quickControls.counterIncrease", c.Label)'><Icon Name="add" /></button>
+        </div>
+    }
     @if (MusicAvailable)
     {
         @* prev / next / shuffle are secondary — hidden on phones (full transport lives on the Music tab). *@
@@ -40,16 +56,27 @@
     private long _volumeTouchedAt;   // Environment.TickCount64 of the last manual drag
     private Timer? _timer;
 
+    // Game-system quickbar (issue #129): the active system, its last-loaded id (to react to a live Settings
+    // switch), the table counters matching its Quickbar keys (in quickbar order), and a per-key in-flight set.
+    private GameSystemDto? _system;
+    private string? _systemId;
+    private List<PartyCounterDto> _quickCounters = [];
+    private readonly HashSet<string> _quickPending = new(StringComparer.OrdinalIgnoreCase);
+
     // The transport shows when any source is usable (Spotify connected and/or local tracks imported);
     // the server's "available" list is the truth, so a fresh install shows no dead controls.
     private bool MusicAvailable => _state?.Available is { Count: > 0 };
     private bool Playing => _state?.IsPlaying == true;
     private bool Shuffling => _state?.IsShuffling == true;
 
+    private bool QuickbarActive => _system?.Quickbar is { Count: > 0 };
+
     protected override async Task OnInitializedAsync()
     {
         // One timer covers the active-scene highlight and the music state, so a scene activated on any
         // tab (or a first track imported) surfaces here within a few seconds.
+        await LoadSystemAsync();          // which game system is active + its quickbar definition
+        Ui.Changed += OnUiChanged;         // Settings can switch the system live — react without a reload
         await PollAsync();
         _timer = new Timer(_ => _ = InvokeAsync(PollAsync), null, 5000, 5000);
     }
@@ -61,7 +88,70 @@
         // Don't yank the slider back while the user is dragging it — the reported volume lags a beat.
         if (_state?.VolumePercent is { } vp && Environment.TickCount64 - _volumeTouchedAt > 3000)
             _volume = vp;
+        await RefreshQuickAsync();
         StateHasChanged();
+    }
+
+    // ---------- game-system quickbar ----------
+
+    private void OnUiChanged()
+    {
+        // Ui.Changed also fires on every toast/connection tick, so only act when the active system actually
+        // changed (Settings switching it) — then reload the quickbar chips + values without a page reload.
+        if (Ui.GameSystem == _systemId) return;
+        _ = InvokeAsync(async () =>
+        {
+            await LoadSystemAsync();
+            await RefreshQuickAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadSystemAsync()
+    {
+        var systems = await Api.GetGameSystemsAsync();
+        if (systems is null) return; // keep the last-known system on a transient fetch failure
+        _system = systems.Active;
+        _systemId = systems.Current;
+    }
+
+    // Poll the roster only while a system with a non-empty quickbar is active; otherwise there is nothing to
+    // show, so we skip the extra /party/list call entirely.
+    private async Task RefreshQuickAsync()
+    {
+        if (!QuickbarActive)
+        {
+            if (_quickCounters.Count > 0) _quickCounters = [];
+            return;
+        }
+        _quickCounters = BuildQuick((await Api.GetPartyAsync())?.Counters);
+    }
+
+    // Map each quickbar key (in the system's order) to the matching table counter, dropping keys with no
+    // counter yet (e.g. Fear before it is seeded). Match on the semantic Key — never the localized label.
+    private List<PartyCounterDto> BuildQuick(IReadOnlyList<PartyCounterDto>? counters)
+    {
+        if (_system?.Quickbar is not { Count: > 0 } quickbar || counters is null) return [];
+        return [.. quickbar
+            .Select(key => counters.FirstOrDefault(c => string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase)))
+            .Where(c => c is not null)
+            .Select(c => c!)];
+    }
+
+    private bool IsQuickBusy(PartyCounterDto c) => c.Key is null || _quickPending.Contains(c.Key);
+
+    private async Task AdjustQuick(PartyCounterDto c, int delta)
+    {
+        if (c.Key is null || _quickPending.Contains(c.Key)) return;
+        _quickPending.Add(c.Key);
+        try
+        {
+            // Adjust by the semantic KEY (locale-independent), so the same call works on a Polish table.
+            var (result, error) = await Api.AdjustTableCounterAsync(c.Key, delta);
+            if (error is not null) { Ui.ReportError(error); return; }
+            if (result is not null) _quickCounters = BuildQuick(result); // optimistic; a shown board updates via TV rev
+        }
+        finally { _quickPending.Remove(c.Key); }
     }
 
     private async Task PlayPause()
@@ -102,5 +192,9 @@
 
     private Task ResetLights() => Api.ResetLightsToDefaultAsync(L["toast.lightsReset"]);
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        Ui.Changed -= OnUiChanged;
+    }
 }

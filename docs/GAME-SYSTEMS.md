@@ -1,8 +1,8 @@
 # Game systems — architecture spec & contributor contract
 
-> **Status**: phases 1–2 implemented (see [Phases](#phases--issue-slicing)); phase 3 tracked as a GitHub issue.
-> This document is self-contained on purpose: an agent or contributor picking up phase 3 (or adding a new
-> system) should need only this file plus the code it points at — no prior conversation context.
+> **Status**: all phases implemented (see [Phases](#phases--issue-slicing)). This document is self-contained on
+> purpose: an agent or contributor adding a new system should need only this file plus the code it points at —
+> no prior conversation context. Start at [Adding a new system](#adding-a-new-system-contributor-quick-guide).
 
 Ambient Director's "game layer" (party tracker, bestiary, encounters, table counters, TV counter rendering)
 started Daggerheart-flavoured. This spec makes the RPG **system pluggable** behind a well-defined C# contract
@@ -142,11 +142,13 @@ UI presets ([PartyEditor.razor](../src/AmbientDirector.Ui/Pages/PartyEditor.razo
 ([_party.scss](../src/AmbientDirector.Ui/Styles/_party.scss)); a Daggerheart table's TV output must be
 visually identical before and after each phase.
 
-### The D&D 5e sample (phase 3)
+### The D&D 5e sample
 
-`Dnd5eSystem` is intentionally minimal — it is documentation, not a full 5e implementation: members HP
-(number style, unbounded-ish default max) + AC (number), enemies HP, **no table counters, empty quickbar,
-null spotlight label**. Its emptiness is load-bearing: it proves every contract feature is optional.
+`Dnd5eSystem` ([Dnd5eSystem.cs](../src/AmbientDirector.Api/Services/Systems/Dnd5eSystem.cs)) is intentionally
+minimal — it is documentation, not a full 5e implementation: members HP + AC (both `number` style, no max),
+enemies HP, **no table counters, and it omits `Quickbar`/`SpotlightLabel` entirely** (inheriting the interface
+defaults). Its emptiness is load-bearing: it proves every contract feature beyond `Id`/`NameKey`/the three
+preset lists is optional, and it is the copy-me template in the contributor guide below.
 
 ## Semantic counter keys
 
@@ -219,12 +221,13 @@ façade, like all setup).
 - **Settings → General**: a "Game system" section (`SectionHeading` + panel + `<select>`, mirroring the
   Language section) listing None + each system by localized `NameKey`; saving calls `/systems/current`,
   toasts, and updates `UiState`.
-- **Presets from the system (phase 3)**: the player editor's "Add Daggerheart set" button becomes "Add
+- **Presets from the system** (done, #129): the player editor's "Add Daggerheart set" button becomes "Add
   {system name} set" driven by the active system's `MemberCounters`; the enemy editor + the Encounters
   page's create-enemy seed use `EnemyCounters`; the table-counter editor's "Add Fear" becomes per-preset
   add buttons from `TableCounters`. No system → only the generic "Add counter". Applying a preset stamps
-  `Key` and skips existing keys/labels (case-insensitive) so re-clicking never duplicates.
-- **Quickbar (phase 3)**: `QuickControls.razor` renders, for each `Quickbar` key present in the table
+  `Key` and skips existing keys/labels (case-insensitive) so re-clicking never duplicates. The shared apply
+  logic is `CounterPresets` (Ui/Contracts/PartyContracts.cs).
+- **Quickbar** (done, #129): `QuickControls.razor` renders, for each `Quickbar` key present in the table
   counters, a compact chip — label, value, − and + buttons (calling `/party/counters/adjust?counter=<key>`),
   visible on **all** viewport sizes (unlike the secondary music buttons — mid-session reachability is the
   point). Its existing 5 s poll adds `/party/list` (or the value from the adjust response) only while a
@@ -246,6 +249,11 @@ system, so BoardCanvas is system-agnostic:
   (`bparty__pip--heart-broken` etc.), preserving today's exact visuals for Daggerheart.
 - The panel's client-built render models (`PartyRender.ToRenderModel` + `BoardRender`, used by the editor
   preview, list cards, remote rail) resolve the same way from the `GameSystemDto` the panel already has.
+- **Enemy counters hide their max on the TV** (#129 follow-up): in `BoardCanvas`'s enemies element an enemy's
+  pip counter draws only the *filled* marks (never the empty remainder) and a number counter shows the bare
+  value (never `value/max`) — so players watch damage accrue but never learn how many marks are left before the
+  enemy drops. Player and table counters still render the full track; the GM's own Encounters tracker is
+  unaffected. This is a player-facing render rule only — the render model still carries `max`.
 - **Acceptance**: an English Daggerheart table renders pixel-identically; a **Polish** Daggerheart table
   gains the themed glyphs it silently lacked (label matching never hit "Stres"/"Pancerz"/"Nadzieja") — via
   the upgrade backfill's keys.
@@ -265,15 +273,19 @@ Each phase is one PR that keeps `dotnet build` + `dotnet test` green and changes
    scope) + panel-side resolution in `PartyRender` (via `GameSystemsDto.Active`, fetched by the Boards/BoardEditor/
    TvRemote pages), `BoardCanvas` keyed by glyph names, `_party.scss` classes renamed to glyph names. Visual
    no-op for English Daggerheart; fixes the long-standing Polish-glyph bug. No new locale keys.
-3. **Presets from the system + quickbar + the sample** — editors/create flows read the active
-   `GameSystemDto`, QuickControls quickbar chips, `Dnd5eSystem`, `GameSystemContractTests`, contributor
-   guide section below finalized.
+3. **Presets from the system + quickbar + the sample** — ✅ done (#129). Editors/create flows read the active
+   `GameSystemDto` (player/enemy "Add {system} set" via `CounterPresets`, per-preset table-counter add buttons,
+   the create-enemy seed), `QuickControls` quickbar −/+ chips (visible on every viewport), `Dnd5eSystem`,
+   `GameSystemContractTests` (parametrized over every registered system), and the contributor guide below
+   finalized. New locale keys `partyEditor.addSet` / `party.addPreset` / `party.preset.ac` / `system.dnd5e.name`
+   (en+pl); the dead `partyEditor.addDaggerheart` / `party.preset.addFear` removed.
 
 ## Adding a new system (contributor quick guide)
 
-1. Copy `src/AmbientDirector.Api/Services/Systems/Dnd5eSystem.cs` (once phase 3 lands; until then,
-   `DaggerheartSystem.cs`) to `YourSystem.cs`; give it a unique slug `Id` and fill the preset lists. Every
-   member is optional except `Id`, `NameKey`, and the three preset lists (which may be empty).
+1. Copy `src/AmbientDirector.Api/Services/Systems/Dnd5eSystem.cs` (the deliberately minimal sample) to
+   `YourSystem.cs`; give it a unique slug `Id` and fill the preset lists. Every member is optional except
+   `Id`, `NameKey`, and the three preset lists (which may be empty) — `Dnd5eSystem` omits `Quickbar` and
+   `SpotlightLabel` to show that.
 2. Add your `NameKey` + preset `LabelKey`s to `src/AmbientDirector.Api/Locales/en.json` (required) and
    `pl.json` (ideally — English is the fallback).
 3. Register it in `Program.cs`: `builder.Services.AddSingleton<IGameSystem, YourSystem>();`
