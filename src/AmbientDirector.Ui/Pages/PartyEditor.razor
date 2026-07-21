@@ -12,7 +12,7 @@
 <PageTitle>Ambient Director — @(_edit.Name is { Length: > 0 } n ? n : L["partyEditor.title"])</PageTitle>
 
 <div class="btn-row" style="margin-bottom:0.2rem">
-    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("party")'><Icon Name="back" /> @L["party.title"]</button>
+    <button class="btn btn--small" @onclick='() => Vt.NavigateAsync("encounters?tab=players")'><Icon Name="back" /> @L["encounters.title"]</button>
 </div>
 
 @if (_loading)
@@ -22,7 +22,7 @@
 else if (_notFound)
 {
     <div class="page-head"><h1>@L["partyEditor.notFoundTitle"]</h1></div>
-    <p class="empty-note">@L.Format("partyEditor.notFoundBody", Id)<a href="party">@L["party.title"]</a>@L["partyEditor.notFoundBodyEnd"]</p>
+    <p class="empty-note">@L.Format("partyEditor.notFoundBody", Id)<a href="encounters?tab=players">@L["encounters.title"]</a>@L["partyEditor.notFoundBodyEnd"]</p>
 }
 else
 {
@@ -185,7 +185,7 @@ else
         try
         {
             var (ok, error) = await Api.DeletePlayerAsync(_edit.Id);
-            if (ok) await Vt.NavigateAsync("party");
+            if (ok) await Vt.NavigateAsync("encounters?tab=players");
             else Ui.ReportError(error ?? L["partyEditor.toast.deleteFailed"]);
         }
         finally { _busy = false; }

@@ -166,6 +166,7 @@ builder.Services.AddSingleton<EventStore>();
 builder.Services.AddSingleton<ScreenStore>();
 builder.Services.AddSingleton<BoardStore>();
 builder.Services.AddSingleton<PartyStore>();
+builder.Services.AddSingleton<EncounterStore>();
 builder.Services.AddSingleton<LightFxStore>();
 
 // UI translations: JSON files on disk (community-editable), with English embedded as the fallback.
@@ -337,6 +338,7 @@ app.Use(async (context, next) =>
          path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
          path.StartsWithSegments("/boards") || path.StartsWithSegments("/party") ||
+         path.StartsWithSegments("/encounters") ||
          path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
          path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp") ||
@@ -368,6 +370,7 @@ app.MapEventEndpoints();
 app.MapScreenEndpoints();
 app.MapBoardEndpoints();
 app.MapPartyEndpoints();
+app.MapEncounterEndpoints();
 app.MapLightFxEndpoints();
 app.MapImageEndpoints();
 app.MapSetupEndpoints();

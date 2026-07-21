@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LightFx> LightFxs => Set<LightFx>();
     public DbSet<PartyMember> PartyMembers => Set<PartyMember>();
     public DbSet<Enemy> Enemies => Set<Enemy>();
+    public DbSet<Encounter> Encounters => Set<Encounter>();
     public DbSet<PartyConfig> PartyConfigs => Set<PartyConfig>();
     public DbSet<LightingConfig> LightingConfigs => Set<LightingConfig>();
     public DbSet<SpotifyConfig> SpotifyConfigs => Set<SpotifyConfig>();
@@ -121,6 +122,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             enemy.Property(e => e.Id).UseCollation("NOCASE");
             // An enemy's counters are a small ordered list of value objects — one JSON column (like PartyMember).
             enemy.OwnsMany(e => e.Counters, b => b.ToJson());
+        });
+
+        modelBuilder.Entity<Encounter>(encounter =>
+        {
+            encounter.HasKey(e => e.Id);
+            // Encounter ids appear in hand-typed /encounters/{id}/run + /tv/show?encounter= URLs — case-insensitive.
+            encounter.Property(e => e.Id).UseCollation("NOCASE");
+            // HeroIds (a List<string>) maps to a JSON column by convention, like Scene.SoundEffects / playlist TrackIds.
+            // The enemy instances are a small ordered list of value objects, each with its own counter list —
+            // one JSON column (like Scene.Lights nests its effect keyframes).
+            encounter.OwnsMany(e => e.Enemies, enemies =>
+            {
+                enemies.ToJson();
+                enemies.OwnsMany(i => i.Counters);
+            });
         });
 
         modelBuilder.Entity<PartyConfig>(config =>

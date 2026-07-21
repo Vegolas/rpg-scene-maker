@@ -220,6 +220,18 @@
   align-items: center;
   gap: 1.2cqw;
 }
+/* Enemy portrait (#122): a small square avatar to the left of the name, mirroring the hero card's portrait but
+   compact (enemy cards are name + tracks, not portrait-dominant). Hidden entirely when the enemy has none. */
+.benemies__portrait {
+  flex: 0 0 auto;
+  width: 6cqh;
+  height: 6cqh;
+  border-radius: 1cqh;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .06);
+
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
 .benemies__name {
   flex: 1 1 auto;
   min-width: 0;
@@ -294,6 +306,13 @@
   border-color: #FF4D2E;
   color: #fff;
 }
+
+/* A held-back (hidden) encounter instance: dimmed so the GM sees it's off the TV but still in the encounter. */
+.party-card--hidden { opacity: .5; }
+/* The spotlight + visible toggles sit in a row on the instance card. */
+.enc-inst-toggles { flex-wrap: wrap; gap: var(--s-2); }
+/* Visible toggle: "on" (shown) is the neutral pressed state; when off the card itself dims (above). */
+.enc-visible.is-on { background: rgba(255, 255, 255, .1); border-color: var(--border-strong, #3a4250); }
 .party-portrait {
   flex: 0 0 auto;
   width: 56px;
@@ -490,7 +509,8 @@
 .party-editor { display: flex; flex-direction: column; gap: var(--s-3); }
 .party-order { max-width: 140px; }
 
-/* enemy editor: the Spotlight (boss) checkbox row (mirrors the scene sound-picker checkbox sizing). */
+/* the per-instance Spotlight (boss) toggle + the encounter hero checkboxes (mirror the scene sound-picker
+   checkbox sizing). */
 .party-check {
   display: flex;
   align-items: center;
@@ -500,3 +520,46 @@
 
   input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--accent); flex: 0 0 auto; }
 }
+
+/* ---- encounters (issue #122): hub bestiary cards + the encounter editor/tracker ---- */
+
+/* A whole-card link (bestiary statblock card): the card itself opens the editor, like the board list cards. */
+.party-card--link { cursor: pointer; }
+.party-card--link:hover { border-color: var(--border-strong, #3a4250); }
+.party-card--link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Bestiary card: a row of muted "LABEL max" chips summarising the statblock's base counters. */
+.bestiary-tags { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.bestiary-tag {
+  padding: 2px var(--s-2);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font: var(--text-sm);
+  color: var(--text-dim, #8a94a6);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Encounter list card: the "N heroes · M enemies" summary line. */
+.encounter-summary { margin: 0 0 var(--s-2); color: var(--text-dim, #8a94a6); font: var(--text-sm); }
+
+/* Dropdowns in the encounter editor (scene/event/enemy pickers) — styled like .party-input. */
+.enc-select {
+  min-height: var(--hit-min);
+  padding: 0 var(--s-3);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: var(--text-md);
+  flex: 1 1 200px;
+}
+.enc-select:focus { outline: none; border-color: var(--accent); }
+
+/* Hero multiselect: checkboxes wrapping across the panel. */
+.enc-heroes { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-4); }
+.enc-hero { margin: 0; }
+
+/* The instance name input sits in the enemy card head, between the portrait and the remove button. */
+.enc-instname { flex: 1 1 auto; min-width: 0; }

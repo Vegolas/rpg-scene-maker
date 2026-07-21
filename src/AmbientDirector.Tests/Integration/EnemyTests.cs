@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
@@ -7,15 +8,31 @@ using Xunit;
 namespace AmbientDirector.Tests.Integration;
 
 /// <summary>
-/// The encounter's enemy roster (issue #120): the players' twin in the party domain. Covers the CRUD
-/// round-trip + ordering, the /party/list envelope, validation codes, the spotlight flag, tap-to-adjust
-/// (delta/value, GET + POST, clamping, error codes) and — most importantly — that a board's kind="enemies"
-/// element drives the live TV render + rev-bump exactly like kind="party", and that the two coexist on one
-/// encounter board.
+/// The enemy bestiary (issue #122): reusable statblock templates — name, portrait and base counter
+/// definitions, NO live tracking (that moved onto encounter instances, and so did the spotlight flag). Covers
+/// the CRUD round-trip + ordering, the /party/list envelope, validation codes, owned-portrait cleanup, the
+/// (base-stat) adjust path and — for backward compatibility — that a legacy board's kind="enemies" element
+/// still inlines the live bestiary on the TV, with a rev-bump on change.
 /// </summary>
 [Collection("integration")]
 public class EnemyTests
 {
+    // A 1x1 transparent PNG — the smallest valid upload for the /images → portrait flow.
+    private const string TinyPngBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    private static async Task<string> UploadPngAsync(HttpClient client)
+    {
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Convert.FromBase64String(TinyPngBase64));
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(file, "file", "portrait.png");
+        var response = await client.PostAsync("/images/upload", form);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return json.GetProperty("id").GetString()!;
+    }
+
     private static string? Code(JsonElement problem) => problem.GetProperty("code").GetString();
     private static long Rev(JsonElement state) => state.GetProperty("rev").GetInt64();
 
@@ -31,11 +48,10 @@ public class EnemyTests
         using var factory = new ApiFactory();
         var client = factory.CreateClient();
 
-        // Two enemies inserted out of roster order; SortOrder (ties → Id) decides the order.
+        // Two templates inserted out of bestiary order; SortOrder (ties → Id) decides the order.
         (await client.PutAsJsonAsync("/party/enemies/dread-king", new
         {
             name = "Dread King",
-            spotlight = true,
             sortOrder = 1,
             counters = new object[]
             {
@@ -55,7 +71,6 @@ public class EnemyTests
 
         var boss = enemies[1];
         Assert.Equal("Dread King", boss.GetProperty("name").GetString());
-        Assert.True(boss.GetProperty("spotlight").GetBoolean());
         var counters = boss.GetProperty("counters");
         Assert.Equal(2, counters.GetArrayLength());
         Assert.Equal("HP", counters[0].GetProperty("label").GetString());
@@ -108,6 +123,8 @@ public class EnemyTests
         await AssertCode("bad%20name", new { name = "X" }, "error.common.idSlug");
         // Missing name.
         await AssertCode("nameless", new { name = "" }, "error.common.nameRequired");
+        // Bad portrait file name (traversal) — enemies own a portrait like a member (issue #122).
+        await AssertCode("goblin", new { name = "Goblin", portrait = "../secret.png" }, "error.common.invalidImage");
         // Bad counter style (shared counter guard).
         await AssertCode("goblin", new { name = "Goblin", counters = new object[] {
             new { label = "HP", value = 1, style = "bars" } } }, "error.party.counterStyle");
@@ -131,7 +148,32 @@ public class EnemyTests
         Assert.Equal(4, CounterValue(await high.Content.ReadFromJsonAsync<JsonElement>(), "HP"));
     }
 
-    // ---- 3. Tap-to-adjust: delta / value, GET + POST, clamping, error codes ----
+    // ---- 3. Owned-portrait cleanup (issue #122: enemies get portraits, like players) ----
+
+    [Fact]
+    public async Task Replacing_and_deleting_release_the_enemys_portrait()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+        var a = await UploadPngAsync(client);
+        var b = await UploadPngAsync(client);
+
+        (await client.PutAsJsonAsync("/party/enemies/goblin", new { name = "Goblin", portrait = a }))
+            .EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/images/{a}")).StatusCode);
+
+        // Replace A with B → A's file is dropped, B's exists.
+        (await client.PutAsJsonAsync("/party/enemies/goblin", new { name = "Goblin", portrait = b }))
+            .EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/images/{a}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/images/{b}")).StatusCode);
+
+        // Deleting the template releases the remaining portrait.
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/party/enemies/goblin")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/images/{b}")).StatusCode);
+    }
+
+    // ---- 4. Base-stat adjust: delta / value, GET + POST, clamping, error codes ----
 
     [Fact]
     public async Task Adjust_enemy_counter_by_delta_and_value_via_get_and_post_with_clamping()
@@ -144,7 +186,7 @@ public class EnemyTests
             counters = new object[] { new { label = "HP", value = 5, max = 10 } },
         })).EnsureSuccessStatusCode();
 
-        // GET delta decrements (Stream Deck style: -1 boss HP).
+        // GET delta decrements.
         var dec = await client.GetAsync("/party/enemies/goblin/adjust?counter=HP&delta=-2");
         dec.EnsureSuccessStatusCode();
         Assert.Equal(3, CounterValue(await dec.Content.ReadFromJsonAsync<JsonElement>(), "HP"));
@@ -188,7 +230,7 @@ public class EnemyTests
         Assert.Equal(HttpStatusCode.BadRequest, noCounter.StatusCode);
         Assert.Equal("error.party.adjustCounter", Code(await noCounter.Content.ReadFromJsonAsync<JsonElement>()));
 
-        // Unknown enemy → 404 enemyNotFound (the new code).
+        // Unknown enemy → 404 enemyNotFound.
         var noEnemy = await client.GetAsync("/party/enemies/ghost/adjust?counter=HP&delta=1");
         Assert.Equal(HttpStatusCode.NotFound, noEnemy.StatusCode);
         Assert.Equal("error.party.enemyNotFound", Code(await noEnemy.Content.ReadFromJsonAsync<JsonElement>()));
@@ -199,25 +241,26 @@ public class EnemyTests
         Assert.Equal("error.party.counterNotFound", Code(await noLabel.Content.ReadFromJsonAsync<JsonElement>()));
     }
 
-    // ---- 4. TV projection: an enemies element inlines the live enemy roster (both kinds coexist) ----
+    // ---- 5. Legacy board rendering: a kind="enemies" element still inlines the live bestiary ----
 
     [Fact]
-    public async Task Encounter_board_inlines_the_enemy_roster_on_both_party_and_enemies_elements()
+    public async Task Board_enemies_element_inlines_the_bestiary_with_portraits_and_no_spotlight()
     {
         using var factory = new ApiFactory();
         var client = factory.CreateClient();
+        var portrait = await UploadPngAsync(client);
 
         (await client.PutAsJsonAsync("/party/players/kira", new { name = "Kira", sortOrder = 0 }))
             .EnsureSuccessStatusCode();
         (await client.PutAsJsonAsync("/party/enemies/dread-king", new
         {
             name = "Dread King",
-            spotlight = true,
+            portrait,
             sortOrder = 0,
             counters = new object[] { new { label = "HP", value = 6, max = 8, style = "number" } },
         })).EnsureSuccessStatusCode();
 
-        // An encounter board with BOTH a party element and an enemies element.
+        // A board with BOTH a party element and an enemies element.
         (await client.PutAsJsonAsync("/boards/encounter", new
         {
             name = "Encounter",
@@ -230,6 +273,7 @@ public class EnemyTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/tv/show?board=encounter")).StatusCode);
 
         var state = await client.GetFromJsonAsync<JsonElement>("/tv/state");
+        var rev = Rev(state);
         var els = state.GetProperty("content").GetProperty("board").GetProperty("elements");
         Assert.Equal(2, els.GetArrayLength());
 
@@ -246,12 +290,20 @@ public class EnemyTests
             var enemies = party.GetProperty("enemies");
             Assert.Equal(1, enemies.GetArrayLength());
             Assert.Equal("Dread King", enemies[0].GetProperty("name").GetString());
-            Assert.True(enemies[0].GetProperty("spotlight").GetBoolean());
+            // Bestiary templates carry no per-instance spotlight — always false on this legacy path.
+            Assert.False(enemies[0].GetProperty("spotlight").GetBoolean());
+            // The portrait resolves to the gate-validated per-name board route (issue #122 gave enemies portraits).
+            Assert.Equal($"/tv/content/board/{portrait}?rev={rev}", enemies[0].GetProperty("portraitUrl").GetString());
             Assert.Equal(6, CounterValue(enemies[0], "HP"));
         }
+
+        // Key-free: the enemy portrait streams through the board route (the roster-portrait gate now covers enemies).
+        var served = await client.GetAsync($"/tv/content/board/{portrait}");
+        Assert.Equal(HttpStatusCode.OK, served.StatusCode);
+        Assert.Equal("image/png", served.Content.Headers.ContentType!.MediaType);
     }
 
-    // ---- 5. The rev-bump idiom extends to enemies + enemies-only boards ----
+    // ---- 6. The rev-bump idiom extends to enemies + enemies-only boards ----
 
     [Fact]
     public async Task Enemy_changes_bump_rev_while_an_enemies_board_is_shown_and_not_otherwise()
@@ -280,11 +332,10 @@ public class EnemyTests
         var rev2 = Rev(await client.GetFromJsonAsync<JsonElement>("/tv/state"));
         Assert.True(rev2 > rev1, "adjust while an enemies board is shown should bump the rev");
 
-        // An enemy upsert (e.g. spotlight toggle — the UI sends the whole enemy, counters included) bumps too.
+        // An enemy upsert (e.g. a rename — the UI sends the whole enemy, counters included) bumps too.
         (await client.PutAsJsonAsync("/party/enemies/goblin", new
         {
-            name = "Goblin",
-            spotlight = true,
+            name = "Goblin Chief",
             counters = new object[] { new { label = "HP", value = 5, max = 10 } },
         })).EnsureSuccessStatusCode();
         var rev3 = Rev(await client.GetFromJsonAsync<JsonElement>("/tv/state"));

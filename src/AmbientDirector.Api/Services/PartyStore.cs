@@ -76,7 +76,7 @@ public class PartyStore(IDbContextFactory<AppDbContext> dbFactory)
         else
         {
             existing.Name = enemy.Name;
-            existing.Spotlight = enemy.Spotlight;
+            existing.Portrait = enemy.Portrait;
             existing.SortOrder = enemy.SortOrder;
             existing.Counters = enemy.Counters;
         }

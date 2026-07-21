@@ -32,7 +32,7 @@ public static class PartyEndpoints
             if (!string.IsNullOrEmpty(oldPortrait) &&
                 !string.Equals(oldPortrait, member.Portrait, StringComparison.OrdinalIgnoreCase))
                 images.Delete(oldPortrait);
-            await TouchIfPartyShownAsync(tvState, boards);
+            await TouchIfPartyShownAsync(tvState, boards, heroChange: true);
             return Results.Ok(member);
         });
 
@@ -43,7 +43,7 @@ public static class PartyEndpoints
             var portrait = (await store.GetMemberAsync(id))?.Portrait;
             if (!await store.DeleteMemberAsync(id)) return Results.NotFound();
             images.Delete(portrait);
-            await TouchIfPartyShownAsync(tvState, boards);
+            await TouchIfPartyShownAsync(tvState, boards, heroChange: true);
             return Results.NoContent();
         });
 
@@ -53,7 +53,7 @@ public static class PartyEndpoints
             counters ??= [];
             PartyValidation.ValidateCounters(counters); // normalizes (trims labels, clamps values) in place
             await store.SaveTableCountersAsync(counters);
-            await TouchIfPartyShownAsync(tvState, boards);
+            await TouchIfPartyShownAsync(tvState, boards, heroChange: true);
             return Results.Ok(counters);
         });
 
@@ -69,7 +69,7 @@ public static class PartyEndpoints
             if (delta.HasValue == value.HasValue) // both, or neither
                 throw new ValidationException("error.party.adjustTarget");
             var updated = await store.AdjustMemberCounterAsync(id, counter.Trim(), delta, value);
-            await TouchIfPartyShownAsync(tvState, boards);
+            await TouchIfPartyShownAsync(tvState, boards, heroChange: true);
             return Results.Ok(updated);
         });
 
@@ -83,28 +83,36 @@ public static class PartyEndpoints
             if (delta.HasValue == value.HasValue) // both, or neither
                 throw new ValidationException("error.party.adjustTarget");
             var updated = await store.AdjustTableCounterAsync(counter.Trim(), delta, value);
-            await TouchIfPartyShownAsync(tvState, boards);
+            await TouchIfPartyShownAsync(tvState, boards, heroChange: true);
             return Results.Ok(updated);
         });
 
-        // ---- enemies: the encounter's opposing roster (issue #120), the twin of the /players routes above ----
+        // ---- enemies: the bestiary of reusable statblocks (issue #122), the twin of the /players routes above.
+        // Templates only — base stats, a portrait, no live tracking. Per-fight values live on encounter instances.
 
         party.MapPut("/enemies/{id}", async (string id, Enemy enemy, PartyStore store,
-            TvState tvState, BoardStore boards) =>
+            ImageFileStorage images, TvState tvState, BoardStore boards) =>
         {
             enemy.Id = id;
             PartyValidation.Validate(enemy);
-            // No portrait cleanup: enemies carry no image (unlike a member's portrait), so there is nothing to
-            // own or release here.
+            // Own the template's portrait and clean up on replace, exactly like a member's (issue #122 gave
+            // enemies portraits): capture the old file before the upsert, drop it afterwards if it changed.
+            var oldPortrait = (await store.GetEnemyAsync(id))?.Portrait;
             await store.UpsertEnemyAsync(enemy);
+            if (!string.IsNullOrEmpty(oldPortrait) &&
+                !string.Equals(oldPortrait, enemy.Portrait, StringComparison.OrdinalIgnoreCase))
+                images.Delete(oldPortrait);
             await TouchIfPartyShownAsync(tvState, boards);
             return Results.Ok(enemy);
         });
 
         party.MapDelete("/enemies/{id}", async (string id, PartyStore store,
-            TvState tvState, BoardStore boards) =>
+            ImageFileStorage images, TvState tvState, BoardStore boards) =>
         {
+            // Capture the portrait before deleting so we can release the template's upload afterwards.
+            var portrait = (await store.GetEnemyAsync(id))?.Portrait;
             if (!await store.DeleteEnemyAsync(id)) return Results.NotFound();
+            images.Delete(portrait);
             await TouchIfPartyShownAsync(tvState, boards);
             return Results.NoContent();
         });
@@ -134,11 +142,22 @@ public static class PartyEndpoints
     // Any party change (player OR enemy) is instantly visible on the TV IF the currently-shown board renders a
     // live roster: bump the rev (via TouchBoard) so the open display re-fetches within one 2 s poll. A shown
     // image or a board with neither a party nor an enemies element is untouched — no pointless re-renders.
-    static async Task TouchIfPartyShownAsync(TvState tv, BoardStore boards)
+    //
+    // heroChange is set for player/table-counter edits (NOT enemy-template edits): those ALSO affect a shown
+    // encounter, whose hero panel + Fear strip resolve live from the party. An enemy-template edit does not
+    // touch a shown encounter — its enemy instances are snapshots taken at add-time (issue #122).
+    static async Task TouchIfPartyShownAsync(TvState tv, BoardStore boards, bool heroChange = false)
     {
-        if (tv.Current is not { Kind: "board" } current) return;
-        var board = await boards.GetAsync(current.Ref);
-        if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies"))
-            tv.TouchBoard(board.Id);
+        if (tv.Current is not { } current) return;
+        if (current.Kind == "board")
+        {
+            var board = await boards.GetAsync(current.Ref);
+            if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies"))
+                tv.TouchBoard(board.Id);
+        }
+        else if (heroChange && current.Kind == "encounter")
+        {
+            tv.TouchEncounter(current.Ref);
+        }
     }
 }

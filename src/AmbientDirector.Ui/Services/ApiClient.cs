@@ -915,6 +915,47 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         FetchAsync<PartyEnemyDto>(HttpMethod.Post,
             $"party/enemies/{Uri.EscapeDataString(id)}/adjust?counter={Uri.EscapeDataString(label)}&delta={delta}");
 
+    // ---------- encounters (prepped fights: heroes + enemy instances, run to the TV) ----------
+
+    /// <summary>All encounters; silent on failure like the other list reads (null → loaded-empty).</summary>
+    public async Task<List<EncounterDto>> GetEncountersAsync() =>
+        await GetAsync<List<EncounterDto>>("encounters/list") ?? [];
+
+    /// <summary>Upsert an encounter (id in the route, the whole encounter in the body). There is deliberately no
+    /// GET /encounters/{id} — the panel loads the list and picks by id client-side, so this is the only write.</summary>
+    public Task<(EncounterDto? Result, string? Error)> SaveEncounterAsync(string id, EncounterEdit edit) =>
+        FetchAsync<EncounterDto>(HttpMethod.Put, $"encounters/{Uri.EscapeDataString(id)}", edit.ToDto());
+
+    public async Task<(bool Ok, string? Error)> DeleteEncounterAsync(string id)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Delete, $"encounters/{Uri.EscapeDataString(id)}");
+            ui.SetConnected(true);
+            return response.IsSuccessStatusCode ? (true, null) : (false, await ExtractProblemAsync(response));
+        }
+        catch (Exception ex)
+        {
+            ui.SetConnected(false);
+            return (false, $"API unreachable: {ex.Message}");
+        }
+    }
+
+    /// <summary>Run an encounter: activates its scene + event (best-effort) and pushes it to the TV. Returns the
+    /// new TV rev + per-part statuses so the caller can toast what fired.</summary>
+    public Task<(EncounterRunResult? Result, string? Error)> RunEncounterAsync(string id) =>
+        FetchAsync<EncounterRunResult>(HttpMethod.Post, $"encounters/{Uri.EscapeDataString(id)}/run");
+
+    /// <summary>Tap-to-adjust one enemy instance's counter by ±delta (live per-fight tracking); returns the
+    /// updated encounter (a shown encounter updates on the TV within one poll).</summary>
+    public Task<(EncounterDto? Result, string? Error)> AdjustEncounterEnemyAsync(string id, string instanceId, string label, int delta) =>
+        FetchAsync<EncounterDto>(HttpMethod.Post,
+            $"encounters/{Uri.EscapeDataString(id)}/enemies/{Uri.EscapeDataString(instanceId)}/adjust?counter={Uri.EscapeDataString(label)}&delta={delta}");
+
+    /// <summary>Reset every enemy instance to its statblock's starting values; returns the updated encounter.</summary>
+    public Task<(EncounterDto? Result, string? Error)> ResetEncounterEnemiesAsync(string id) =>
+        FetchAsync<EncounterDto>(HttpMethod.Post, $"encounters/{Uri.EscapeDataString(id)}/reset");
+
     // ---------- light fx (reusable effect library) ----------
 
     public async Task<List<LightFxDto>> GetLightFxAsync() =>

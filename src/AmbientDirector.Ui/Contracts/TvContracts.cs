@@ -30,8 +30,9 @@ public record TvPartyDto(List<TvPartyPlayerDto> Players, List<TvPartyCounterDto>
 
 public record TvPartyPlayerDto(string Name, string? PortraitUrl, List<TvPartyCounterDto> Counters);
 
-// One enemy in the render model: text + counter tracks + the spotlight (boss) flag. No portrait in v1.
-public record TvEnemyDto(string Name, bool Spotlight, List<TvPartyCounterDto> Counters);
+// One enemy in the render model: portrait + text + counter tracks + the spotlight (boss) flag (issue #122).
+// PortraitUrl is a ready-to-fetch url (null when the enemy has no portrait).
+public record TvEnemyDto(string Name, string? PortraitUrl, bool Spotlight, List<TvPartyCounterDto> Counters);
 
 public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style);
 
