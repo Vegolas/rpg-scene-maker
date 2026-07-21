@@ -40,9 +40,12 @@ public record TvEnemyDto(string Name, string? PortraitUrl, bool Spotlight, List<
 // One counter track. Glyph + Color (issue #128) are the resolved presentation: the counter's semantic Key
 // mapped to the active game system's preset (member/enemy/table scope) → its curated Glyph name (null = plain
 // dot) and content Color (hex — null = the glyph's self-styled default / neutral dot). No key / no match / no
-// system → both null. BoardCanvas draws straight from these, so it stays system-agnostic.
+// system → both null. BoardCanvas draws straight from these, so it stays system-agnostic. Key is the counter's
+// own semantic id riding along (issue #144) so the fear board element can find the fear-keyed table counter —
+// its localized label can't be matched; null on a keyless counter. Mirrors the API's TvPartyCounterDto — keep
+// the two in sync.
 public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style,
-    string? Glyph = null, string? Color = null);
+    string? Glyph = null, string? Color = null, string? Key = null);
 
 // GET /tv/show/recent — recently pushed content, newest first (a protected, panel-only route). Ref is the
 // stored image file name for kind "image", or the board id for kind "board"; re-push it via /tv/show (an image

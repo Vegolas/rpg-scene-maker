@@ -140,6 +140,11 @@ else
                                     @* An enemies element is geometry-only too — its content is the live enemy roster, edited on the Party tab. *@
                                     <p class="hint" style="margin:0.6rem 0 0">@L["boardEditor.enemiesHint"]</p>
                                 }
+                                else if (el.Kind == "fear")
+                                {
+                                    @* A fear element is geometry-only too — it renders the table's Fear counter as the skull track (issue #144). *@
+                                    <p class="hint" style="margin:0.6rem 0 0">@L["boardEditor.fearHint"]</p>
+                                }
                                 else
                                 {
                                     <div class="field" style="margin:0.6rem 0 0">
@@ -175,6 +180,7 @@ else
                     </label>
                     <button class="btn btn--small" @onclick="() => OpenPdf(FillTarget.NewImage, -1)" disabled="@_busy"><Icon Name="pdf" /> @L["boardEditor.fromPdf"]</button>
                     <button class="btn btn--small" @onclick="AddParty"><Icon Name="party" /> @L["boardEditor.addParty"]</button>
+                    <button class="btn btn--small" @onclick="AddFear"><Icon Name="fear" /> @L["boardEditor.addFear"]</button>
                     @* No "Add enemies" here anymore (issue #122): enemies live in Encounters now. Legacy boards
                        that already have an enemies element keep editing/rendering it (the kind stays valid). *@
                 </div>
@@ -254,12 +260,13 @@ else
     // Re-mapped from the edit model every render, so any numeric/text/colour change previews immediately.
     private TvBoardDto Preview => BoardRender.ToRenderModel(_edit.ToDto(), Api.ImageUrl, _partyRender);
 
-    // Element header glyph + label per kind (text/image/party/enemies).
+    // Element header glyph + label per kind (text/image/party/enemies/fear).
     private static string KindIcon(string kind) => kind switch
     {
         "image" => "screens",
         "party" => "party",
         "enemies" => "enemies",
+        "fear" => "fear",
         _ => "edit",
     };
 
@@ -268,6 +275,7 @@ else
         "image" => L["boardEditor.kindImage"],
         "party" => L["boardEditor.kindParty"],
         "enemies" => L["boardEditor.kindEnemies"],
+        "fear" => L["boardEditor.kindFear"],
         _ => L["boardEditor.kindText"],
     };
 
@@ -301,6 +309,9 @@ else
 
     // A party element is geometry-only (the server nulls image/text/colour); it renders the live roster.
     private void AddParty() => _edit.Elements.Add(new BoardElementEdit { Kind = "party", X = 10, Y = 10, W = 80, H = 80 });
+
+    // A fear element is geometry-only too; it renders the live Fear counter as the skull track (issue #144).
+    private void AddFear() => _edit.Elements.Add(new BoardElementEdit { Kind = "fear", X = 25, Y = 4, W = 50, H = 13 });
 
     // No AddEnemies: standalone enemies elements are superseded by Encounters (issue #122). The "enemies" kind
     // stays valid so a legacy board keeps editing/rendering, but the panel no longer seeds new ones.

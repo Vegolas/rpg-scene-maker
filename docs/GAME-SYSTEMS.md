@@ -142,6 +142,12 @@ UI presets ([PartyEditor.razor](../src/AmbientDirector.Ui/Pages/PartyEditor.razo
 ([_party.scss](../src/AmbientDirector.Ui/Styles/_party.scss)); a Daggerheart table's TV output must be
 visually identical before and after each phase.
 
+> **Fear on the TV (#144)**: the `fear` table counter's `Glyph` is null, so it draws as a plain dot pip in the
+> panel's counter rows and the top-bar quickbar — that presentation is unchanged. But on **player-facing TV
+> boards** Fear no longer rides the party element's counter strip: it now renders through the dedicated **`fear`
+> board element**, a 12-slot **skull track** (art escalating from a plain skull at 1 to a demonic one at max),
+> matched to the fear-**keyed** table counter. The dot-pip above still applies everywhere else (panel + quickbar).
+
 ### The D&D 5e sample
 
 `Dnd5eSystem` ([Dnd5eSystem.cs](../src/AmbientDirector.Api/Services/Systems/Dnd5eSystem.cs)) is intentionally

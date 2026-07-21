@@ -31,22 +31,8 @@
   .ico { width: 14cqh; height: 14cqh; }
 }
 
-/* table-level counters row (Fear etc.), chips over the board background */
-.bparty__table {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.6cqw;
-  align-items: center;
-}
-.bparty__tcounter {
-  display: inline-flex;
-  align-items: center;
-  gap: 1.2cqw;
-  padding: .8cqh 1.6cqw;
-  background: rgba(0, 0, 0, .45);
-  border: 1px solid rgba(255, 255, 255, .10);
-  border-radius: 1.6cqh;
-}
+/* The table-level counter strip (.bparty__table / .bparty__tcounter) lived here until issue #144 moved Fear to
+   its own dedicated fear element (see _fear.scss); the party element renders players only now. */
 
 /* Vertical stack of equal-height hero cards filling the element box (the #120 design's versus/left column). */
 .bparty__list {

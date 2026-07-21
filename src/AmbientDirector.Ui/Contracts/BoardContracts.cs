@@ -67,12 +67,13 @@ public static class BoardRender
             imageUrl(board.BackgroundImage),
             [.. (board.Elements ?? []).Select(e => new TvBoardElementDto(
                 e.Kind, e.X, e.Y, e.W, e.H,
-                // image element → a ready-to-fetch url; text element → text fields; party/enemies element → the
-                // live roster; url null for all but image (mirrors the API's TvBoardElementDto projection).
+                // image element → a ready-to-fetch url; text element → text fields; party/enemies/fear element →
+                // the live table model (fear reads its fear-keyed counter — issue #144); url null for all but
+                // image (mirrors the API's TvBoardElementDto projection).
                 e.Kind == "image" ? imageUrl(e.Image) : null,
                 e.Kind == "text" ? e.Text : null,
                 e.Kind == "text" ? e.Color : null,
                 e.Kind == "text" ? e.Size : null,
                 e.Kind == "text" ? e.Align : null,
-                e.Kind is "party" or "enemies" ? party : null))]);
+                e.Kind is "party" or "enemies" or "fear" ? party : null))]);
 }

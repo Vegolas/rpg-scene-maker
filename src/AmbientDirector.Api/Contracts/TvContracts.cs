@@ -45,9 +45,11 @@ public record TvEnemyDto(string Name, string? PortraitUrl, bool Spotlight, List<
 // the counter's semantic Key to the active game system's preset (member/enemy/table scope) and inlines the
 // preset's curated Glyph name (GameSystemGlyphs — null = plain dot) and content Color (hex — null = the glyph's
 // self-styled default / neutral dot). No key, no match, or no active system → both null (a neutral dot), so
-// BoardCanvas needs no game knowledge and a Polish table renders the same glyphs as an English one.
+// BoardCanvas needs no game knowledge and a Polish table renders the same glyphs as an English one. Key is the
+// counter's own semantic id riding along (issue #144) so the fear board element can find the fear-keyed table
+// counter client-side — labels are localized ("Fear"/"Strach") and can't be matched; null on a keyless counter.
 public record TvPartyCounterDto(string Label, int Value, int? Max, string? Style,
-    string? Glyph = null, string? Color = null);
+    string? Glyph = null, string? Color = null, string? Key = null);
 
 // One entry of GET /tv/show/recent (a protected, panel-only convenience). Exposes the raw Ref (a stored image
 // file name for kind "image", a board id for kind "board") so the panel can re-push it (POST /tv/show).

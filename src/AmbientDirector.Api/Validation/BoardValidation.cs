@@ -15,9 +15,10 @@ public static class BoardValidation
     // balloon the stored JSON.
     private const int MaxTextLength = 2000;
 
-    // The element kinds the renderer knows how to draw. "party" and "enemies" carry geometry only — they render
-    // the live roster (loaded at TV-render time from PartyStore), not stored board state.
-    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "image", "text", "party", "enemies" };
+    // The element kinds the renderer knows how to draw. "party", "enemies" and "fear" carry geometry only — they
+    // render live table data (loaded at TV-render time from PartyStore), not stored board state: the roster, the
+    // bestiary, and the fear-keyed table counter (as a skull track — issue #144) respectively.
+    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "image", "text", "party", "enemies", "fear" };
 
     private static readonly HashSet<string> Aligns = new(StringComparer.Ordinal) { "left", "center", "right" };
 
@@ -87,9 +88,11 @@ public static class BoardValidation
 
                 case "party":
                 case "enemies":
-                    // A party/enemies element is a live placeholder: it carries geometry only (validated above),
-                    // and the roster + counters are fetched at render time (not board state). Null out every
-                    // content field so nothing stale is stored — like the image arm clears the text-only fields.
+                case "fear":
+                    // A party/enemies/fear element is a live placeholder: it carries geometry only (validated
+                    // above), and its live table data (the roster, the bestiary, or the fear-keyed table counter)
+                    // is fetched at render time — not board state. Null out every content field so nothing stale
+                    // is stored — like the image arm clears the text-only fields.
                     element.Image = null;
                     element.Text = null;
                     element.Color = null;

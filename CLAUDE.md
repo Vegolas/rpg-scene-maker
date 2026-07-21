@@ -147,8 +147,10 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `index.html` (the panel reads `/screens/list` and picks a board by id client-side).
 - **`BoardStore` / `BoardEndpoints`** — persistence + CRUD for **boards** (`Board`, [Board.cs](src/AmbientDirector.Api/Models/Board.cs)):
   persisted, composable player-facing TV content — a fixed **16:9 stage** described entirely in percent
-  coordinates (background solid colour or stored image, plus positioned `image`/`text`/`party` elements —
-  a `party` element is a geometry-only placeholder that renders the live roster, see `PartyStore`; **element
+  coordinates (background solid colour or stored image, plus positioned `image`/`text`/`party`/`enemies`/`fear`
+  elements — `party`/`enemies`/`fear` are geometry-only placeholders that render live table data (the roster,
+  the bestiary, and the table's **fear-keyed** counter as a 12-slot skull track — #144; the `party` element
+  renders players only now), see `PartyStore`; **element
   list order is the z-order**, there is deliberately no Z field). Not to be confused with `Screens`
   (panel-side shortcut launchers): a board is *content pushed to* the `/tv` display via
   `/tv/show?board={id}`. `/boards/*` ([BoardEndpoints.cs](src/AmbientDirector.Api/Endpoints/BoardEndpoints.cs))
@@ -182,8 +184,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   one — so a Stream Deck button can do `-1 HP`); adjust clamps into `[0, max ?? 999]`. Like `/boards` there is
   deliberately **no** `GET /party/players/{id}` and nothing at bare `/party`, so the panel's `/party` +
   `/party/{id}` pages fall through to index.html, and `/party` is in `IsProtectedPath`. Any player/counter
-  change calls `TouchIfPartyShown` — a rev bump **only if** the currently-shown board has a `party` element —
-  so an open TV re-fetches within one 2 s poll (no pointless bumps otherwise). The TV gate is extended for
+  change calls `TouchIfPartyShown` — a rev bump **only if** the currently-shown board has a `party`, `enemies`
+  or `fear` element — so an open TV re-fetches within one 2 s poll (no pointless bumps otherwise). The TV gate is extended for
   this: `/tv/content/board/{name}` also serves a **current member's portrait** key-free, but **only while a
   party-element board is shown** (membership checked before any disk access, like the board-files check).
   Party/bestiary AI ops (`list_party`, player + `save_table_counters` + enemy CRUD, and the `adjust_*` commands)

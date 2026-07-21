@@ -143,7 +143,8 @@ public static class PartyEndpoints
 
     // Any party change (player OR enemy) is instantly visible on the TV IF the currently-shown board renders a
     // live roster: bump the rev (via TouchBoard) so the open display re-fetches within one 2 s poll. A shown
-    // image or a board with neither a party nor an enemies element is untouched — no pointless re-renders.
+    // image or a board with none of a party / enemies / fear element is untouched — no pointless re-renders.
+    // (A fear element renders live table data too — a Fear adjust must refresh a shown fear board — issue #144.)
     //
     // heroChange is set for player/table-counter edits (NOT enemy-template edits): those ALSO affect a shown
     // encounter, whose hero panel + Fear strip resolve live from the party. An enemy-template edit does not
@@ -155,7 +156,7 @@ public static class PartyEndpoints
         if (current.Kind == "board")
         {
             var board = await boards.GetAsync(current.Ref);
-            if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies"))
+            if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies" or "fear"))
                 tv.TouchBoard(board.Id);
         }
         else if (heroChange && current.Kind == "encounter")

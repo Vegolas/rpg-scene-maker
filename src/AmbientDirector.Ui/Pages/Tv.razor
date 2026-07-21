@@ -24,7 +24,7 @@
         @if (layer.Kind == "board")
         {
             <div @key="layer.Seq" class="tv-layer tv-board-wrap @(visible ? "is-visible" : "")">
-                <BoardCanvas Model="layer.Board!" />
+                <BoardCanvas Model="layer.Board!" FearAnimateFrom="layer.FearFrom" />
             </div>
         }
         else
@@ -53,7 +53,9 @@
 
     // One shown layer, image or board. Seq (the monotonic token at push time) keys the element so promoting an
     // incoming layer to the display slot reuses the same DOM node — no flash — and a new push forces a fresh one.
-    private record Layer(int Seq, string Kind, string? Url, TvBoardDto? Board);
+    // FearFrom (issue #144) drives a board's fear skull cascade: the index from which lit skulls pop, or null
+    // for no animation (see FearValue + PollAsync). Only a board layer ever sets it.
+    private record Layer(int Seq, string Kind, string? Url, TvBoardDto? Board, int? FearFrom = null);
 
     private long _rev;             // last applied server revision (0 = nothing seen yet; server starts at 1)
     private Layer? _display;       // the fully shown layer
@@ -111,7 +113,19 @@
         }
         else if (content.Kind == "board" && content.Board is { } board)
         {
-            BeginShow("board", null, board);
+            // WHY diff Fear here: the TV crossfades a WHOLE new layer on every rev bump, so without this an
+            // unrelated party change (an HP adjust, a rename) would replay the entire skull cascade each poll.
+            // Compare the outgoing board's Fear (the still-loading incoming, else the shown display) to the
+            // incoming one's, and only pop what genuinely grew.
+            var prev = FearValue((_incoming ?? _display)?.Board);
+            var next = FearValue(board);
+            int? fearFrom = (prev, next) switch
+            {
+                (null, > 0) => 0,               // fear track just appeared (first show, or image→board): full cascade
+                ({ } p, { } n) when n > p => p, // fear rose: pop only the new skulls (indices >= the old value)
+                _ => null,                      // fell / unchanged / no track: no animation
+            };
+            BeginShow("board", null, board, fearFrom);
         }
         else if (content.Url is { } url)
         {
@@ -123,14 +137,26 @@
         }
     }
 
-    private void BeginShow(string kind, string? url, TvBoardDto? board)
+    private void BeginShow(string kind, string? url, TvBoardDto? board, int? fearFrom = null)
     {
         _token++;
         _clearing = false;
         _boardPromoting = false;
-        _incoming = new Layer(_token, kind, url, board);   // loads on top; the old layer stays until it's faded in
+        _incoming = new Layer(_token, kind, url, board, fearFrom);   // loads on top; the old layer stays until it's faded in
         _incomingLoaded = false;
         StateHasChanged();
+    }
+
+    // The current Fear value a board would display: the first fear element's fear-keyed table counter (matched
+    // by key — the localized label can't be), clamped to non-negative; null when the board is null, has no fear
+    // element, or that element carries no fear-keyed counter. Diffed across polls so only a genuine Fear
+    // INCREASE animates (an unchanged Fear on an unrelated re-render must NOT replay the cascade).
+    private static int? FearValue(TvBoardDto? board)
+    {
+        var counter = board?.Elements
+            .FirstOrDefault(e => e.Kind == "fear" && e.Party is not null)
+            ?.Party!.Counters.FirstOrDefault(c => string.Equals(c.Key, "fear", StringComparison.OrdinalIgnoreCase));
+        return counter is null ? null : Math.Max(0, counter.Value);
     }
 
     private async Task OnIncomingLoaded()

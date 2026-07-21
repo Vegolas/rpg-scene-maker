@@ -186,7 +186,7 @@ public class EncounterTests
         var state = await client.GetFromJsonAsync<JsonElement>("/tv/state");
         Assert.Equal("board", state.GetProperty("content").GetProperty("kind").GetString());
         var els = state.GetProperty("content").GetProperty("board").GetProperty("elements");
-        Assert.Equal(2, els.GetArrayLength());
+        Assert.Equal(3, els.GetArrayLength()); // heroes + enemies + fear (issue #144 added the fear element)
     }
 
     [Fact]
@@ -307,9 +307,11 @@ public class EncounterTests
 
         var state = await client.GetFromJsonAsync<JsonElement>("/tv/state");
         var els = state.GetProperty("content").GetProperty("board").GetProperty("elements");
-        Assert.Equal(2, els.GetArrayLength());
+        Assert.Equal(3, els.GetArrayLength()); // heroes-left, enemies-right, fear top-centre (issue #144)
         Assert.Equal("party", els[0].GetProperty("kind").GetString());
         Assert.Equal("enemies", els[1].GetProperty("kind").GetString());
+        // The fear element (issue #144) shares the same render model; on the wire it carries the roster too.
+        Assert.Equal("fear", els[2].GetProperty("kind").GetString());
 
         var party = els[0].GetProperty("party");
         // Only kira (the chosen hero), NOT aldous; and her persistent party HP shows through.

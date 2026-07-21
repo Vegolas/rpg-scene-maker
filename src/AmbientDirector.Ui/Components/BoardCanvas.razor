@@ -11,11 +11,13 @@
     }
     @foreach (var el in Model.Elements)
     {
-        // One counter's value for the PARTY (players + table strip): a row of pips (dots, filled up to Value)
-        // for a "pips"/small-bounded counter, else tabular-nums text (Value, or Value/Max when a max is set).
-        // Sized in container units so it scales with the stage. Each counter arrives with its Glyph + Color
-        // already resolved from the active game system (issue #128) — BoardCanvas draws them, it no longer matches
-        // labels — so a Polish "Stres" themes exactly like an English "Stress". Enemies use enemyValue below.
+        // One counter's value for a PARTY PLAYER row: a row of pips (dots, filled up to Value) for a
+        // "pips"/small-bounded counter, else tabular-nums text (Value, or Value/Max when a max is set). The
+        // table-counter strip is gone (issue #144 moved Fear to the dedicated fear element), so this now serves
+        // only the per-player rows. Sized in container units so it scales with the stage. Each counter arrives
+        // with its Glyph + Color already resolved from the active game system (issue #128) — BoardCanvas draws
+        // them, it no longer matches labels — so a Polish "Stres" themes exactly like an English "Stress".
+        // Enemies use enemyValue below.
         RenderFragment<TvPartyCounterDto> counterValue = c =>
         @<span class="bparty__val">
             @if (IsPips(c))
@@ -90,21 +92,11 @@
                 @if (el.Party is { } p)
                 {
                     <div class="board-el__party">
-                        @if (p.Counters.Count > 0)
-                        {
-                            <div class="bparty__table">
-                                @foreach (var c in p.Counters)
-                                {
-                                    <div class="bparty__tcounter">
-                                        <span class="bparty__label">@c.Label</span>
-                                        @counterValue(c)
-                                    </div>
-                                }
-                            </div>
-                        }
-                        @* Design hero cards (#120 "TV Board" versus mode): portrait on the LEFT, then a column
-                           with the name and one row per counter. A vertical stack of equal-height cards fills the
-                           element box — matching the mock's left party column. *@
+                        @* Players only now (issue #144): the table-counter strip moved to the dedicated fear
+                           element, so the party element renders just the hero cards. Design hero cards (#120 "TV
+                           Board" versus mode): portrait on the LEFT, then a column with the name and one row per
+                           counter. A vertical stack of equal-height cards fills the element box — matching the
+                           mock's left party column. *@
                         <div class="bparty__list">
                             @foreach (var pl in p.Players)
                             {
@@ -196,12 +188,51 @@
                     <div class="board-el__party board-el__party--empty"><Icon Name="enemies" /></div>
                 }
             }
+            else if (el.Kind == "fear")
+            {
+                // The table's Fear as a skull track (issue #144). Matched by the fear-keyed table counter — its
+                // localized label ("Fear"/"Strach") can never be matched, only its semantic Key.
+                var fear = el.Party?.Counters.FirstOrDefault(c => string.Equals(c.Key, "fear", StringComparison.OrdinalIgnoreCase));
+                @if (fear is null)
+                {
+                    @* Panel offline, or no fear-keyed table counter → a quiet placeholder, never a broken box. *@
+                    <div class="board-el__party board-el__party--empty"><Icon Name="fear" /></div>
+                }
+                else
+                {
+                    // Up to 12 slots, lit up to Value. Slot i ALWAYS shows skull_{i+1}, so the demon art at slot
+                    // 12 only ignites at max Fear; the track keeps every slot visible (dim silhouette) so the
+                    // layout never reflows as Fear rises. The art is a static wwwroot asset (outside the API-key
+                    // gate), so the key-free TV loads it directly — no /tv/content route needed.
+                    var slots = Math.Clamp(fear.Max ?? 12, 1, 12);
+                    var filled = Math.Clamp(fear.Value, 0, slots);
+                    <div class="bfear" style="--slots:@slots">
+                        @for (var i = 0; i < slots; i++)
+                        {
+                            var on = i < filled;
+                            // Only genuinely-new skulls pop: those at/above FearAnimateFrom (the previous Fear on
+                            // an increase, or 0 on first show). The inline animation-delay staggers the cascade.
+                            var pop = on && FearAnimateFrom is { } from && i >= from;
+                            var cls = "bfear__skull" + (on ? " is-on" : "") + (pop ? " bfear__skull--pop" : "");
+                            <div class="@cls" style="@(pop ? FearPopStyle(i) : null)">
+                                <img src="@($"img/fear/skull_{i + 1}.jpg")" alt="" />
+                            </div>
+                        }
+                    </div>
+                }
+            }
         </div>
     }
 </div>
 
 @code {
     [Parameter, EditorRequired] public TvBoardDto Model { get; set; } = default!;
+
+    // When set, lit fear slots at index >= it play the staggered "pop" (issue #144): the TV passes the PREVIOUS
+    // Fear value on an increase (so only genuinely-new skulls animate), or 0 when a fear board first appears
+    // (full cascade). Null (panel previews, or no change) renders the track statically. The pop's 0.75 s base
+    // delay lets the TV's crossfade of the new layer finish before the skulls ignite.
+    [Parameter] public int? FearAnimateFrom { get; set; }
 
     // Image urls that failed to load — skipped on re-render so a broken file never flashes a glyph. Keyed by
     // the full url (which carries ?rev=/?apiKey=), so a re-pushed or edited board's new url retries the fetch.
@@ -260,6 +291,14 @@
         "diamond" => DiamondGlyph,
         _ => null,
     };
+
+    // The inline animation-delay for a lit, popping fear skull at index i (issue #144): a 0.75 s base (lets the
+    // TV's crossfade finish first) plus 0.12 s per skull past FearAnimateFrom, so the new skulls ignite in a
+    // left-to-right cascade. Invariant-formatted so the CSS parses "0.87s" regardless of the device locale.
+    private string? FearPopStyle(int i) =>
+        FearAnimateFrom is { } from
+            ? $"animation-delay:{(0.75 + (i - from) * 0.12).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}s"
+            : null;
 
     // The portrait fallback: the first (rune-safe, so an emoji name doesn't split a surrogate) letter of the name.
     private static string Initial(string name)

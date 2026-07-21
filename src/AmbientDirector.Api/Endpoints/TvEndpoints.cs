@@ -14,6 +14,10 @@ public static class TvEndpoints
     // background carries the art.
     private static readonly (double X, double Y, double W, double H) HeroesRect = (0.5, 2, 31, 96);
     private static readonly (double X, double Y, double W, double H) EnemiesRect = (75.5, 2, 24, 96);
+    // The synthesized encounter view also needs a Fear element (issue #144): now that the party element no
+    // longer paints the table-counter strip, the skull track is the only place Fear shows. A short, wide strip
+    // top-centre, in the gap between the heroes (left) and enemies (right) columns.
+    private static readonly (double X, double Y, double W, double H) FearRect = (33, 2, 41, 13);
 
     public static void MapTvEndpoints(this WebApplication app)
     {
@@ -185,7 +189,9 @@ public static class TvEndpoints
         var preset = presets is null || string.IsNullOrEmpty(c.Key)
             ? null
             : presets.FirstOrDefault(p => string.Equals(p.Key, c.Key, StringComparison.OrdinalIgnoreCase));
-        return new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style, preset?.Glyph, preset?.Color);
+        // The counter's own Key rides along too (issue #144) so the fear board element can find the fear-keyed
+        // table counter client-side — its localized label can't be matched.
+        return new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style, preset?.Glyph, preset?.Color, c.Key);
     }
 
     private static TvEnemyDto EnemyDto(string name, string? portrait, bool spotlight, List<PartyCounter> counters,
@@ -196,15 +202,16 @@ public static class TvEndpoints
     private static TvPartyPlayerDto PlayerDto(PartyMember m, IGameSystem? system, long rev) =>
         new(m.Name, BoardImageUrl(m.Portrait, rev), [.. m.Counters.Select(c => Counter(c, system?.MemberCounters))]);
 
-    // A saved board's render model. A kind=party / kind=enemies element renders the LIVE roster (not board
-    // state). Load it ONCE and attach the SAME render model instance to every such element (there is normally
-    // one of each); a board with neither skips the query entirely. The party element reads Players/Counters, the
-    // enemies element reads Enemies (the bestiary templates — base stats, no per-instance spotlight).
+    // A saved board's render model. A kind=party / kind=enemies / kind=fear element renders the LIVE roster (not
+    // board state). Load it ONCE and attach the SAME render model instance to every such element (there is
+    // normally one of each); a board with none of the three skips the query entirely. The party element reads
+    // Players, the enemies element reads Enemies (the bestiary templates — base stats, no per-instance
+    // spotlight), and the fear element reads Counters (its fear-keyed table counter — issue #144).
     private static async Task<TvBoardDto> BuildBoardDtoAsync(Board board, PartyStore party,
         GameSystemRegistry registry, long rev)
     {
         TvPartyDto? partyDto = null;
-        if (board.Elements.Any(e => e.Kind is "party" or "enemies"))
+        if (board.Elements.Any(e => e.Kind is "party" or "enemies" or "fear"))
         {
             // The active system (issue #128) resolves each counter's glyph/colour; loaded once, only when a
             // live-roster element actually needs it (an image-only board skips this query, like the roster one).
@@ -229,14 +236,16 @@ public static class TvEndpoints
                 e.Kind == "text" ? e.Color : null,
                 e.Kind == "text" ? e.Size : null,
                 e.Kind == "text" ? e.Align : null,
-                e.Kind is "party" or "enemies" ? partyDto : null))]);
+                e.Kind is "party" or "enemies" or "fear" ? partyDto : null))]);
     }
 
     // Synthesize an encounter into a board render model (issue #122): background image, a party element on the
-    // left carrying the chosen heroes (resolved from HeroIds against the live party; empty ⇒ all players) + the
-    // table counters (Fear), and an enemies element on the right carrying the encounter's own instances. Both
-    // elements share the SAME render model instance (BoardCanvas reads Players/Counters for "party", Enemies for
-    // "enemies"), so the two coords come straight from the #120 preset — no BoardCanvas change.
+    // left carrying the chosen heroes (resolved from HeroIds against the live party; empty ⇒ all players), an
+    // enemies element on the right carrying the encounter's own instances, and a fear element top-centre for the
+    // table's Fear (issue #144 — the party element no longer paints the table-counter strip, so this is where
+    // Fear shows). All three elements share the SAME render model instance (BoardCanvas reads Players for
+    // "party", Enemies for "enemies", the fear-keyed Counter for "fear"), so their coords come straight from the
+    // #120/#144 presets — no BoardCanvas change.
     private static async Task<TvBoardDto> BuildEncounterDtoAsync(Encounter encounter, PartyStore party,
         GameSystemRegistry registry, long rev)
     {
@@ -257,6 +266,8 @@ public static class TvEndpoints
             new("party", HeroesRect.X, HeroesRect.Y, HeroesRect.W, HeroesRect.H,
                 null, null, null, null, null, partyDto),
             new("enemies", EnemiesRect.X, EnemiesRect.Y, EnemiesRect.W, EnemiesRect.H,
+                null, null, null, null, null, partyDto),
+            new("fear", FearRect.X, FearRect.Y, FearRect.W, FearRect.H,
                 null, null, null, null, null, partyDto),
         ];
         // No BackgroundColor — the encounter art (or the renderer default black) fills the stage.
@@ -280,6 +291,8 @@ public static class TvEndpoints
     // True when the shown board renders a LIVE ROSTER AND `name` is a current member's OR bestiary enemy's
     // portrait. Portraits are LIVE data, not board files (deliberately absent from Board.ReferencedFiles()), so
     // they're gated here — served key-free only while a live-roster board (a party OR enemies element) is shown.
+    // Deliberately NOT widened to "fear" (issue #144): a fear element draws only the static skull art and serves
+    // no portraits, so the key-free gate must not open portraits on its account.
     private static async Task<bool> IsCurrentRosterPortraitAsync(Board board, string name, PartyStore party)
     {
         if (!board.Elements.Any(e => e.Kind is "party" or "enemies"))

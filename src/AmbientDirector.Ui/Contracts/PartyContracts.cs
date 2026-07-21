@@ -161,12 +161,13 @@ public static class PartyRender
                 system?.SpotlightLabel))]);
 
     // Resolve one counter's glyph/colour: its semantic Key → the matching preset in the given scope of the
-    // active system → the preset's Glyph + Color. No presets, no key, or no match → both null (neutral dot).
+    // active system → the preset's Glyph + Color. No presets, no key, or no match → both null (neutral dot). The
+    // counter's own Key rides along too (issue #144) so a fear board element can find the fear-keyed counter.
     private static TvPartyCounterDto ToRenderCounter(PartyCounterDto c, List<CounterPresetDto>? presets)
     {
         var preset = presets is null || string.IsNullOrEmpty(c.Key)
             ? null
             : presets.FirstOrDefault(p => string.Equals(p.Key, c.Key, StringComparison.OrdinalIgnoreCase));
-        return new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style, preset?.Glyph, preset?.Color);
+        return new TvPartyCounterDto(c.Label, c.Value, c.Max, c.Style, preset?.Glyph, preset?.Color, c.Key);
     }
 }

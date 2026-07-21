@@ -1,0 +1,64 @@
+/* ============================================================
+   Fear skull track — BoardCanvas kind="fear" (issue #144).
+   The table's fear-keyed counter drawn as up to 12 skull slots,
+   lit up to its value. Slot i always shows skull_{i+1}, so the
+   demonic art at slot 12 only ignites at max Fear; unlit slots
+   stay visible as dim silhouettes (img filter) so the layout
+   never reflows as Fear rises. All sizes in container units
+   (cqh/cqw) so a tiny list card scales exactly like the full TV.
+   The reds are player-facing CONTENT colours (the #120 fear red
+   #FF4D2E), deliberately NOT the one blue chrome accent — exempt
+   like scene colours. New skulls play a staggered "pop" (below).
+   ============================================================ */
+
+.bfear {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--slots, 12), minmax(0, 1fr));
+  align-items: center;
+  justify-items: center;
+  column-gap: .8cqw;
+  overflow: hidden;
+}
+
+/* One slot: the art's own shape, boxed on a design surface. Dim (grayscale + darkened) until lit. */
+.bfear__skull {
+  width: 100%;
+  max-height: 100%;
+  aspect-ratio: 239 / 326;            /* the art's shape; both source sizes are ~this ratio */
+  border-radius: 1.2cqh;
+  overflow: hidden;
+  border: 1px solid #2E3542;          /* design surface border, like the bparty cards */
+  background: #0b0d10;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: grayscale(.85) brightness(.28);
+    opacity: .55;
+    transition: filter .45s ease, opacity .45s ease;
+  }
+}
+
+/* Lit: the art shows in full colour, ringed and glowing in the fear red. */
+.bfear__skull.is-on {
+  border-color: rgba(255, 77, 46, .55);        /* fear content red #FF4D2E — content colour, not chrome accent */
+  box-shadow: 0 0 2.4cqh rgba(255, 77, 46, .35);
+
+  img { filter: none; opacity: 1; }
+}
+
+/* A newly-lit skull ignites with a pop; the inline animation-delay (set in BoardCanvas) staggers the cascade
+   left-to-right, and `both` holds the 0% frame through that delay so the skull stays hidden until its slot. */
+.bfear__skull--pop { animation: bfear-pop .6s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes bfear-pop {
+  0%   { transform: scale(.4); opacity: 0; }
+  60%  { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bfear__skull--pop { animation: none; }
+}

@@ -84,6 +84,38 @@ public class BoardValidationPartyTests
         Assert.Null(element.Align);
     }
 
+    // ---- kind "fear" (issue #144): the party element's other twin — same geometry-only live-placeholder rules,
+    // renders the table's fear-keyed counter as a skull track ----
+
+    [Fact]
+    public void Accepts_a_fear_element_and_nulls_its_content_fields()
+    {
+        var board = new Board
+        {
+            Id = "dread",
+            Name = "Dread",
+            Elements =
+            [
+                new BoardElement
+                {
+                    Kind = "fear", X = 25, Y = 4, W = 50, H = 13,
+                    // Junk content fields a fear element must not carry — validation strips them.
+                    Image = "x.png", Text = "hi", Color = "#ffffff", Size = 5, Align = "center",
+                },
+            ],
+        };
+
+        BoardValidation.Validate(board); // must not throw
+
+        var element = board.Elements[0];
+        Assert.Equal("fear", element.Kind);
+        Assert.Null(element.Image);
+        Assert.Null(element.Text);
+        Assert.Null(element.Color);
+        Assert.Null(element.Size);
+        Assert.Null(element.Align);
+    }
+
     [Fact]
     public void Still_rejects_an_unknown_kind()
     {

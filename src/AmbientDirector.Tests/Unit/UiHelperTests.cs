@@ -195,10 +195,59 @@ public class PartyRenderTests
         Assert.Null(model.Enemies[0].SpotlightLabel);
     }
 
+    [Fact]
+    public void ToRenderModel_carries_each_counters_semantic_key_through_issue_144()
+    {
+        // The fear board element finds its counter by semantic Key (the localized label can't be matched), so
+        // the render model must round-trip Key on player, table and enemy counters — including a keyless custom.
+        var party = new PartyDto(
+            [new PartyPlayerDto("kira", "Kira", null, 0, [new PartyCounterDto("Życie", 3, 6, "pips", "hp")])],
+            [new PartyCounterDto("Strach", 4, 12, "pips", "fear"), new PartyCounterDto("Szczęście", 1, 6, "pips")],
+            [new PartyEnemyDto("goblin", "Goblin", null, 0, [new PartyCounterDto("HP", 6, 6, "pips", "hp")])],
+            "daggerheart");
+
+        var model = PartyRender.ToRenderModel(party, Img, Daggerheart);
+
+        Assert.Equal("hp", model.Players[0].Counters[0].Key);
+        Assert.Equal("fear", model.Counters[0].Key);   // the fear element matches on this
+        Assert.Null(model.Counters[1].Key);            // a keyless custom counter stays keyless
+        Assert.Equal("hp", model.Enemies[0].Counters[0].Key);
+    }
+
     private static void AssertGlyph(TvPartyCounterDto counter, string? glyph, string? color)
     {
         Assert.Equal(glyph, counter.Glyph);
         Assert.Equal(color, counter.Color);
+    }
+}
+
+public class BoardRenderTests
+{
+    private static string? Img(string? name) => name is null ? null : $"/images/{name}?apiKey=k";
+
+    [Fact]
+    public void ToRenderModel_attaches_the_live_party_model_to_party_enemies_and_fear_elements_issue_144()
+    {
+        // The fear element (issue #144) is a live-roster kind like party/enemies, so BoardRender must attach the
+        // same party model to it; text/image elements never carry it.
+        var party = new TvPartyDto(
+            [],
+            [new TvPartyCounterDto("Fear", 3, 12, "pips", null, "#ff4d2e", "fear")],
+            []);
+        var board = new BoardDto("b", "B", null, null,
+        [
+            new BoardElementDto("party", 0, 0, 10, 10, null, null, null, null, null),
+            new BoardElementDto("enemies", 0, 0, 10, 10, null, null, null, null, null),
+            new BoardElementDto("fear", 0, 0, 10, 10, null, null, null, null, null),
+            new BoardElementDto("text", 0, 0, 10, 10, null, "hi", null, null, null),
+        ]);
+
+        var model = BoardRender.ToRenderModel(board, Img, party);
+
+        Assert.Same(party, model.Elements[0].Party); // party
+        Assert.Same(party, model.Elements[1].Party); // enemies
+        Assert.Same(party, model.Elements[2].Party); // fear
+        Assert.Null(model.Elements[3].Party);         // text carries no roster
     }
 }
 

@@ -6,9 +6,9 @@ namespace AmbientDirector.Api.Models;
 
 /// <summary>
 /// Persisted, composable player-facing TV content: a 16:9 layout (a background colour or image plus
-/// positioned image/text/party elements) the GM pushes to the key-free <c>/tv</c> display. Distinct from a
-/// <see cref="Screen"/> (a panel-side shortcut-launcher grid): a board owns no light/music/sound state, it
-/// is just what appears on the shared table screen.
+/// positioned image/text/party/enemies/fear elements) the GM pushes to the key-free <c>/tv</c> display.
+/// Distinct from a <see cref="Screen"/> (a panel-side shortcut-launcher grid): a board owns no
+/// light/music/sound state, it is just what appears on the shared table screen.
 /// </summary>
 /// <remarks>
 /// All element coordinates are <em>percentages of a fixed 16:9 stage</em>, never pixels — the renderer scales
@@ -51,9 +51,11 @@ public class Board
 /// fixed 16:9 stage (see <see cref="Board"/>'s remarks).</summary>
 public class BoardElement
 {
-    /// <summary>What this element is: <c>image</c>, <c>text</c>, or <c>party</c> (a live placeholder that
-    /// renders the roster + counters from <see cref="Services.PartyStore"/> at TV-render time — it carries
-    /// geometry only, no stored content fields).</summary>
+    /// <summary>What this element is: <c>image</c>, <c>text</c>, <c>party</c>, <c>enemies</c> or <c>fear</c>.
+    /// The last three are live placeholders that render live table data from <see cref="Services.PartyStore"/>
+    /// at TV-render time — carrying geometry only, no stored content fields: <c>party</c> the player roster,
+    /// <c>enemies</c> the bestiary, and <c>fear</c> the table's fear-keyed counter as a 12-slot skull track
+    /// (issue #144).</summary>
     public string Kind { get; set; } = "";
 
     /// <summary>Left edge, as a percent of stage width (0–100).</summary>

@@ -92,11 +92,12 @@ public sealed class AssistantTools(AiToolService tools)
     private const string BoardShape =
         "The full board entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg wins), " +
         "name (required), optional backgroundColor (#RRGGBB) and/or backgroundImage (a stored image name), and " +
-        "elements[] (up to 50). Each element has kind (image|text|party|enemies) and percent-of-stage geometry " +
+        "elements[] (up to 50). Each element has kind (image|text|party|enemies|fear) and percent-of-stage geometry " +
         "x/y (0-100), w/h (0.1-100); the list order IS the z-order (index 0 draws at the bottom). An image " +
         "element needs image (a stored image name); a text element needs text (+ optional color #RRGGBB, size " +
-        "1-100, align left|center|right); party and enemies elements are geometry-only live placeholders that " +
-        "render the roster at display time (no content fields).";
+        "1-100, align left|center|right); party, enemies and fear elements are geometry-only live placeholders " +
+        "rendered at display time (party = the roster, enemies = the bestiary, fear = the table's Fear counter as " +
+        "a skull track), with no content fields.";
 
     /// <summary>The tool definitions, matching the MCP tool names and the façade operations 1:1.</summary>
     public static IReadOnlyList<AiToolDefinition> Definitions { get; } =
@@ -314,7 +315,7 @@ public sealed class AssistantTools(AiToolService tools)
         WithId("reset_encounter", "Reset every enemy instance's counters to its statblock's starting values (before re-running the same fight). Returns the updated encounter. Errors if the encounter id is unknown."),
 
         // Boards (composable player-facing TV layouts)
-        NoArgs("list_boards", "List every saved board (full entities). A board is a 16:9 player-facing TV layout: a background colour or image plus positioned elements (image/text or a live party/enemies roster), all in percent-of-stage coordinates."),
+        NoArgs("list_boards", "List every saved board (full entities). A board is a 16:9 player-facing TV layout: a background colour or image plus positioned elements (image/text, a live party/enemies roster, or the fear skull track), all in percent-of-stage coordinates."),
         WithId("get_board", "Get one board by id, or null if none has that id."),
         Tool2("upsert_board",
             "Create or replace the board at the given id (the id arg wins). Returns the stored board.",

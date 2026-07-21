@@ -386,11 +386,11 @@ public sealed class EncounterMcpTools(AiToolService tools)
 }
 
 /// <summary>Board CRUD (issues #80/#88). A board is composable player-facing TV content — a 16:9 layout of
-/// positioned image/text/party/enemies elements — that the GM pushes to the /tv display.</summary>
+/// positioned image/text/party/enemies/fear elements — that the GM pushes to the /tv display.</summary>
 [McpServerToolType]
 public sealed class BoardMcpTools(AiToolService tools)
 {
-    [McpServerTool(Name = "list_boards"), Description("List every saved board (full entities). A board is a 16:9 player-facing TV layout: a background colour or image plus positioned elements (image/text or a live party/enemies roster), all in percent-of-stage coordinates.")]
+    [McpServerTool(Name = "list_boards"), Description("List every saved board (full entities). A board is a 16:9 player-facing TV layout: a background colour or image plus positioned elements (image/text, a live party/enemies roster, or the fear skull track), all in percent-of-stage coordinates.")]
     public Task<List<Board>> ListBoards() => tools.ListBoardsAsync();
 
     [McpServerTool(Name = "get_board"), Description("Get one board by id, or null if none has that id.")]
@@ -400,10 +400,11 @@ public sealed class BoardMcpTools(AiToolService tools)
     [McpServerTool(Name = "upsert_board"), Description(
         "Create or replace the board at the given id (the id arg wins). Rules: id is a lowercase slug [a-z0-9-_]; Name " +
         "required; optional BackgroundColor (#RRGGBB) and/or BackgroundImage (a stored image name); up to 50 Elements[]. " +
-        "Each element has a Kind (image|text|party|enemies) and percent-of-stage geometry X/Y (0–100) and W/H (0.1–100); " +
+        "Each element has a Kind (image|text|party|enemies|fear) and percent-of-stage geometry X/Y (0–100) and W/H (0.1–100); " +
         "the list order IS the z-order (index 0 is at the bottom). An image element needs Image (a stored image name); a " +
-        "text element needs Text (+ optional Color/Size/Align); party/enemies elements are geometry-only live " +
-        "placeholders that render the roster at display time. Returns the stored board.")]
+        "text element needs Text (+ optional Color/Size/Align); party/enemies/fear elements are geometry-only live " +
+        "placeholders rendered at display time (party = the roster, enemies = the bestiary, fear = the table's Fear " +
+        "counter as a skull track). Returns the stored board.")]
     public Task<Board> UpsertBoard(
         [Description("The full board entity to save (see the rules in this tool's description).")] Board board,
         [Description("Board id to save it under: a lowercase slug [a-z0-9-_].")] string id) =>

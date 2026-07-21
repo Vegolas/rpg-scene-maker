@@ -44,6 +44,11 @@ public static class Icons
         // grip + pommel) fanning out at the bottom — a clear "combat / enemies" mark, the opposing twin of the
         // hand-composed "party" group glyph. The Enemies section on the Party tab + the enemies board element.
         ["enemies"]    = """<g transform="rotate(40 128 128)"><rect x="122" y="30" width="12" height="128" rx="6"/><rect x="104" y="150" width="48" height="12" rx="5"/><rect x="122" y="162" width="12" height="30" rx="5"/><circle cx="128" cy="200" r="9"/></g><g transform="rotate(-40 128 128)"><rect x="122" y="30" width="12" height="128" rx="6"/><rect x="104" y="150" width="48" height="12" rx="5"/><rect x="122" y="162" width="12" height="30" rx="5"/><circle cx="128" cy="200" r="9"/></g>""",
+        // Hand-composed (not a Phosphor glyph): a skull — a rounded cranium over a squared jaw, with two eye
+        // sockets and a downward nose triangle cut out via fill-rule:evenodd (the same hole trick as the broken
+        // heart/shield pips). The Fear board element (issue #144): its element-row glyph, the "Add fear" button,
+        // and the empty-state placeholder. Reads at ~20px.
+        ["fear"]       = """<path fill-rule="evenodd" d="M128,28 C86,28 52,62 52,112 C52,142 66,160 82,172 C86,175 88,180 88,186 L88,204 C88,214 96,222 106,222 L150,222 C160,222 168,214 168,204 L168,186 C168,180 170,175 174,172 C190,160 204,142 204,112 C204,62 170,28 128,28 Z M78,120 a20,24 0 1,0 40,0 a20,24 0 1,0 -40,0 Z M138,120 a20,24 0 1,0 40,0 a20,24 0 1,0 -40,0 Z M118,146 L138,146 L128,170 Z"/>""",
         // A shield — the "prepped fight / encounter" mark (issue #122). Distinct from the group (party) and the
         // crossed swords (enemies): the Encounters nav tab, whose hub holds Players / Enemies / Encounters.
         ["encounters"] = """<path d="M208,40H48A16,16,0,0,0,32,56v58.77c0,89.61,75.82,119.34,91,124.39a15.53,15.53,0,0,0,10,0c15.2-5.05,91-34.78,91-124.39V56A16,16,0,0,0,208,40Z"/>""", // shield

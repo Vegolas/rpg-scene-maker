@@ -608,16 +608,17 @@ public sealed class AiToolService(
     }
 
     // Mirror of PartyEndpoints.TouchIfPartyShownAsync: a party change is instantly visible on the TV IF the
-    // currently-shown content renders a live roster — a board with a party/enemies element, or (for a hero /
+    // currently-shown content renders a live roster — a board with a party/enemies/fear element, or (for a hero /
     // table-counter change) a shown encounter whose hero panel + Fear strip resolve live from the party. Bumps
-    // the rev so an open display re-fetches within one poll; otherwise no pointless re-render.
+    // the rev so an open display re-fetches within one poll; otherwise no pointless re-render. (A fear element
+    // renders the live Fear counter, so a Fear adjust must refresh a shown fear board — issue #144.)
     private async Task TouchIfPartyShownAsync(bool heroChange)
     {
         if (tvState.Current is not { } current) return;
         if (current.Kind == "board")
         {
             var board = await boards.GetAsync(current.Ref);
-            if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies"))
+            if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies" or "fear"))
                 tvState.TouchBoard(board.Id);
         }
         else if (heroChange && current.Kind == "encounter")
