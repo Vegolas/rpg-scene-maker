@@ -8,12 +8,12 @@ See [README.md](README.md) for the user-facing setup walkthrough (Tuya, Hue, Spo
 
 ## Task tracking
 
-The backlog lives in **GitHub Issues** ([Vegolas/ambient-director/issues](https://github.com/Vegolas/ambient-director/issues)),
-not in `roadmap.md`. Issues are the source of truth for what to work on.
+The backlog lives in **GitHub Issues** ([Vegolas/ambient-director/issues](https://github.com/Vegolas/ambient-director/issues)).
+Issues are the source of truth for what to work on.
 
 - **Labels**: every issue gets an area label (`area: ui`, `area: api`, `area: lights`, `area: music`,
-  `area: sound`, `area: infra`) plus a type (`enhancement` / `bug`). Add a new `area:` label rather than
-  overloading an existing one.
+  `area: sound`, `area: infra`, `area: assistant`, `area: integrations`, `area: display`, `area: game`)
+  plus a type (`enhancement` / `bug`). Add a new `area:` label rather than overloading an existing one.
 - **Branches & PRs**: work on a `claude/<slug>` branch and open a PR that closes the issue
   (`Closes #N` in the body). CI ([.github/workflows/build.yml](.github/workflows/build.yml)) runs
   `dotnet build` on every PR — keep it green.
