@@ -1,0 +1,39 @@
+# EditorConfig — https://editorconfig.org
+# Style here is *guidance* for readability, not a build gate: no project sets
+# EnforceCodeStyleInBuild, and CI does not run `dotnet format`. The gate is `dotnet test`.
+# See CONTRIBUTING.md.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Markdown uses trailing whitespace for hard line breaks.
+[*.md]
+trim_trailing_whitespace = false
+
+# Config / markup / project files use a 2-space indent.
+[*.{json,jsonc,yml,yaml,csproj,props,targets,slnx,razor}]
+indent_size = 2
+
+[*.cs]
+indent_size = 4
+
+# --- C# conventions (these reflect the existing codebase) ---
+
+# File-scoped namespaces are used throughout.
+csharp_style_namespace_declarations = file_scoped:warning
+
+# Project rule: always use braces; avoid one-liner control-flow bodies.
+csharp_prefer_braces = true:warning
+
+# `using` ordering.
+dotnet_sort_system_directives_first = true
+
+# `var` usage — explicit for built-in types, `var` when the type is already apparent
+# (matches the current code).
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
