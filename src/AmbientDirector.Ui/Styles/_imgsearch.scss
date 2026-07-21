@@ -47,6 +47,25 @@
 .imgsearch-input { flex: 1 1 auto; min-width: 0; }
 .imgsearch-btn { flex: 0 0 auto; }
 
+/* ---- options row: full-card / include-extras toggles ---- */
+.imgsearch-opts {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3) var(--s-5);
+  margin-bottom: var(--s-4);
+}
+.imgsearch-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 44px;               /* touch target */
+  color: var(--text-muted);
+  font: var(--text-sm);
+  cursor: pointer;
+}
+.imgsearch-opt input { flex: 0 0 auto; cursor: pointer; }
+
 /* ---- body: the only scrolling region ---- */
 .imgsearch-body {
   flex: 1 1 auto;

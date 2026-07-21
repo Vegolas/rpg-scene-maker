@@ -34,6 +34,20 @@
         </button>
     </div>
 
+    @* Search options. Toggling one drops back to the hint (the shown results carry the old options'
+       image URLs), so the user re-runs the search. Scryfall is the only source today, so these show
+       unconditionally; gate them per-source once a source without card semantics is added. *@
+    <div class="imgsearch-opts">
+        <label class="imgsearch-opt">
+            <input type="checkbox" @bind="_fullImage" @bind:after="ResetResults" disabled="@Importing" />
+            <span>@L["artSearch.opt.fullImage"]</span>
+        </label>
+        <label class="imgsearch-opt">
+            <input type="checkbox" @bind="_includeExtras" @bind:after="ResetResults" disabled="@Importing" />
+            <span>@L["artSearch.opt.extras"]</span>
+        </label>
+    </div>
+
     <div class="imgsearch-body">
         @if (_searching)
         {
@@ -93,6 +107,8 @@
     private List<ImageSourceDto> _sources = [];
     private string? _sourceId;
     private string _query = "";
+    private bool _fullImage;      // import the whole card image (croppable in-app), not just the art crop
+    private bool _includeExtras;  // include tokens / art-series cards / emblems Scryfall hides by default
     private bool _searching;
     private string? _error;
     private ImageSearchResponseDto? _response;   // null = the initial hint state (no search run yet)
@@ -116,7 +132,14 @@
     private void OnSourceChanged(ChangeEventArgs e)
     {
         _sourceId = e.Value?.ToString();
-        _response = null; // results belonged to the old source — drop back to the hint
+        ResetResults(); // results belonged to the old source — drop back to the hint
+    }
+
+    // Any option/source change invalidates the shown results (their image URLs were built for the old
+    // options), so clear them and let the user re-search under the new options.
+    private void ResetResults()
+    {
+        _response = null;
         _error = null;
     }
 
@@ -132,7 +155,7 @@
         _error = null;
         try
         {
-            var (result, error) = await Api.SearchImagesAsync(_sourceId, _query);
+            var (result, error) = await Api.SearchImagesAsync(_sourceId, _query, _fullImage, _includeExtras);
             if (result is not null)
             {
                 _response = result;

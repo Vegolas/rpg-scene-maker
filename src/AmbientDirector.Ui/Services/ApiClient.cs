@@ -627,12 +627,19 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         await GetAsync<List<ImageSourceDto>>("images/sources") ?? [];
 
     /// <summary>Search a source for art; the picker shows the returned error inline. Pass a null/blank
-    /// sourceId to let the server pick the sole registered source.</summary>
-    public Task<(ImageSearchResponseDto? Result, string? Error)> SearchImagesAsync(string? sourceId, string query)
+    /// sourceId to let the server pick the sole registered source. <paramref name="fullImage"/> imports the
+    /// whole card image (croppable in-app) instead of the tight art crop; <paramref name="includeExtras"/>
+    /// broadens results to card types the source hides by default (Scryfall tokens, art series, …).</summary>
+    public Task<(ImageSearchResponseDto? Result, string? Error)> SearchImagesAsync(
+        string? sourceId, string query, bool fullImage = false, bool includeExtras = false)
     {
         var path = $"images/search?q={Uri.EscapeDataString(query)}";
         if (!string.IsNullOrWhiteSpace(sourceId))
             path += $"&source={Uri.EscapeDataString(sourceId)}";
+        if (fullImage)
+            path += "&full=true";
+        if (includeExtras)
+            path += "&extras=true";
         return FetchAsync<ImageSearchResponseDto>(HttpMethod.Get, path);
     }
 
