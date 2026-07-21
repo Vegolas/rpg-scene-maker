@@ -423,3 +423,18 @@ Deployment-level config only — everything else is managed from the panel and s
 | `Launch:OpenBrowser` | Auto-open the panel in your default browser at startup. Defaults **on** for the double-clickable Windows build, **off** under `dotnet run`. |
 
 > ⚠️ The API listens on your whole LAN by default so the iPad can reach it. On a home network the worst case is someone toggling your lights, but set `Security:ApiKey` anyway — one line of config, and the panel + Stream Deck both support it. Never expose the port to the internet.
+## Contributing / Development
+
+If you'd like to contribute to Ambient Director, please read the
+[CONTRIBUTING.md](CONTRIBUTING.md) guide.
+
+### Build
+
+Run the test suite before submitting a pull request:
+
+```bash
+dotnet test
+```
+
+For development setup, coding standards, and contribution guidelines, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
