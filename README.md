@@ -47,7 +47,7 @@ The panel's tabs: **Scenes** (one-tap presets with a live active highlight), **S
 
 ### Packaged Windows build (double-click, no SDK)
 
-A self-contained, single-file **win-x64** build is produced by the [`release-win` workflow](.github/workflows/release-win.yml) when a `v*` tag is pushed, and attached as `ambient-director-win-x64.zip` on the repo's [Releases page](https://github.com/Vegolas/rpg-scene-maker/releases). Download it, unzip anywhere (Desktop/Documents is fine), and double-click **`AmbientDirector.Api.exe`**. A small console window shows where the panel is running and your browser opens automatically:
+A self-contained, single-file **win-x64** build is produced by the [`release-win` workflow](.github/workflows/release-win.yml) when a `v*` tag is pushed, and attached as `ambient-director-win-x64.zip` on the repo's [Releases page](https://github.com/Vegolas/ambient-director/releases). Download it, unzip anywhere (Desktop/Documents is fine), and double-click **`AmbientDirector.Api.exe`**. A small console window shows where the panel is running and your browser opens automatically:
 
 ```
 Ambient Director is running.
