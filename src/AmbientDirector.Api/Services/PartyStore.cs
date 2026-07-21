@@ -89,17 +89,46 @@ public class PartyStore(IDbContextFactory<AppDbContext> dbFactory)
         return await db.Enemies.Where(e => e.Id == id).ExecuteDeleteAsync() > 0;
     }
 
-    /// <summary>Adjust one of an enemy's counters by a delta or to an absolute value, clamped into range, and
-    /// return the updated enemy. Throws <see cref="NotFoundException"/> for an unknown enemy or counter.</summary>
-    public async Task<Enemy> AdjustEnemyCounterAsync(string id, string label, int? delta, int? value)
+    /// <summary>Adjust one of an enemy's counters (by semantic key or label) by a delta or to an absolute
+    /// value, clamped into range, and return the updated enemy. Throws <see cref="NotFoundException"/> for an
+    /// unknown enemy or counter.</summary>
+    public async Task<Enemy> AdjustEnemyCounterAsync(string id, string token, int? delta, int? value)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var enemy = await db.Enemies.SingleOrDefaultAsync(e => e.Id == id)
             ?? throw new NotFoundException("error.party.enemyNotFound", id);
         // In-place mutation of a tracked owned-JSON entity is detected by change tracking and rewrites the column.
-        AdjustInList(enemy.Counters ??= [], label, delta, value);
+        AdjustInList(enemy.Counters ??= [], token, delta, value);
         await db.SaveChangesAsync();
         return enemy;
+    }
+
+    /// <summary>The stored game-system id, RAW (issue #127): null = never chosen, "none" = explicitly no
+    /// system, else a system id (possibly no longer registered). Callers normalize through
+    /// <see cref="Systems.GameSystemRegistry.Find"/> for the wire.</summary>
+    public async Task<string?> GetSystemIdAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var config = await db.PartyConfigs.AsNoTracking()
+            .SingleOrDefaultAsync(c => c.Id == PartyConfig.SingletonId);
+        return config?.SystemId;
+    }
+
+    /// <summary>Persist the game-system choice ("none" for an explicit no-system — never write null back,
+    /// or the startup upgrade would re-stamp daggerheart). Creates the singleton row when missing.</summary>
+    public async Task SaveSystemIdAsync(string id)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var config = await db.PartyConfigs.SingleOrDefaultAsync(c => c.Id == PartyConfig.SingletonId);
+        if (config is null)
+        {
+            db.PartyConfigs.Add(new PartyConfig { SystemId = id });
+        }
+        else
+        {
+            config.SystemId = id;
+        }
+        await db.SaveChangesAsync();
     }
 
     public async Task<List<PartyCounter>> GetTableCountersAsync()
@@ -125,41 +154,49 @@ public class PartyStore(IDbContextFactory<AppDbContext> dbFactory)
         await db.SaveChangesAsync();
     }
 
-    /// <summary>Adjust one of a member's counters by a delta or to an absolute value, clamped into range, and
-    /// return the updated member. Throws <see cref="NotFoundException"/> for an unknown member or counter.</summary>
-    public async Task<PartyMember> AdjustMemberCounterAsync(string id, string label, int? delta, int? value)
+    /// <summary>Adjust one of a member's counters (by semantic key or label) by a delta or to an absolute
+    /// value, clamped into range, and return the updated member. Throws <see cref="NotFoundException"/> for an
+    /// unknown member or counter.</summary>
+    public async Task<PartyMember> AdjustMemberCounterAsync(string id, string token, int? delta, int? value)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var member = await db.PartyMembers.SingleOrDefaultAsync(m => m.Id == id)
             ?? throw new NotFoundException("error.party.playerNotFound", id);
         // In-place mutation of a tracked owned-JSON entity is detected by change tracking and rewrites the column.
-        AdjustInList(member.Counters ??= [], label, delta, value);
+        AdjustInList(member.Counters ??= [], token, delta, value);
         await db.SaveChangesAsync();
         return member;
     }
 
-    /// <summary>Adjust one of the table-level counters, clamped into range, and return the updated list.
-    /// Throws <see cref="NotFoundException"/> if no counter matches the label.</summary>
-    public async Task<List<PartyCounter>> AdjustTableCounterAsync(string label, int? delta, int? value)
+    /// <summary>Adjust one of the table-level counters (by semantic key or label), clamped into range, and
+    /// return the updated list. Throws <see cref="NotFoundException"/> if no counter matches.</summary>
+    public async Task<List<PartyCounter>> AdjustTableCounterAsync(string token, int? delta, int? value)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var config = await db.PartyConfigs.SingleOrDefaultAsync(c => c.Id == PartyConfig.SingletonId);
         // When there is no row yet there are no counters, so the find below throws counterNotFound before we
         // ever reach SaveChanges — nothing to persist.
         var counters = config?.Counters ?? [];
-        AdjustInList(counters, label, delta, value);
+        AdjustInList(counters, token, delta, value);
         await db.SaveChangesAsync();
         return counters;
     }
 
-    // Find the counter by label (case-insensitive), apply the delta or the absolute value, and clamp into
-    // [0, Max ?? 999]. Shared by the per-member and table-counter adjust paths. The caller has already ensured
-    // exactly one of delta/value is set (the endpoint's XOR guard). Throws counterNotFound on a miss.
-    private static void AdjustInList(List<PartyCounter> counters, string label, int? delta, int? value)
+    // Find the counter — semantic Key first, then Label, both case-insensitive (issue #127: labels are
+    // localized, so ?counter=fear must hit "Strach" on a Polish table) — apply the delta or the absolute
+    // value, and clamp into [0, Max ?? 999]. Shared by the member/enemy/table adjust paths. The caller has
+    // already ensured exactly one of delta/value is set (the endpoint's XOR guard). Throws on a miss.
+    internal static void AdjustInList(List<PartyCounter> counters, string token, int? delta, int? value)
     {
-        var counter = counters.FirstOrDefault(c => string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase))
-            ?? throw new NotFoundException("error.party.counterNotFound", label);
+        var counter = FindCounter(counters, token)
+            ?? throw new NotFoundException("error.party.counterNotFound", token);
         var target = value ?? counter.Value + (delta ?? 0);
         counter.Value = Math.Clamp(target, 0, counter.Max ?? 999);
     }
+
+    /// <summary>The shared adjust-token resolution: key match wins over label match (a counter's key is
+    /// unique, so a token that is some counter's key never falls through to another's label).</summary>
+    internal static PartyCounter? FindCounter(List<PartyCounter> counters, string token) =>
+        counters.FirstOrDefault(c => c.Key is not null && string.Equals(c.Key, token, StringComparison.OrdinalIgnoreCase))
+        ?? counters.FirstOrDefault(c => string.Equals(c.Label, token, StringComparison.OrdinalIgnoreCase));
 }

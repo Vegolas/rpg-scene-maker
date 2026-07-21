@@ -53,7 +53,8 @@ public sealed class AiToolService(
     PartyStore party,
     EncounterStore encounters,
     BoardStore boards,
-    TvState tvState)
+    TvState tvState,
+    Systems.GameSystemRegistry gameSystems)
 {
     // ---- Scenes ----
 
@@ -301,7 +302,8 @@ public sealed class AiToolService(
 
     // Mirrors GET /party/list: the whole live table — players, table-level counters, and the bestiary enemies.
     public async Task<PartyDto> ListPartyAsync() =>
-        new(await party.GetMembersAsync(), await party.GetTableCountersAsync(), await party.GetEnemiesAsync());
+        new(await party.GetMembersAsync(), await party.GetTableCountersAsync(), await party.GetEnemiesAsync(),
+            gameSystems.Find(await party.GetSystemIdAsync())?.Id);
 
     // Mirrors PUT /party/players/{id}: stamp the id, validate, upsert, drop a replaced portrait, and refresh a
     // shown live roster (a board with a party/enemies element, or a shown encounter whose hero panel resolves

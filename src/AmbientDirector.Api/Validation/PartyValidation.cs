@@ -79,10 +79,26 @@ public static class PartyValidation
             if (counter.Label.Length > MaxLabelLength)
                 throw new ValidationException("error.party.counterLabelLength", MaxLabelLength, pos);
 
-            // Labels are the adjust key, so they must be unique within the owner (case-insensitive).
+            // Labels are an adjust token, so they must be unique within the owner (case-insensitive).
             for (var j = 0; j < i; j++)
                 if (string.Equals(counters[j].Label, counter.Label, StringComparison.OrdinalIgnoreCase))
                     throw new ValidationException("error.party.duplicateCounter", counter.Label, pos);
+
+            // The optional semantic key (issue #127): normalized to a lowercase slug, unique among the
+            // owner's non-null keys (it is the preferred adjust token and the render pipeline's glyph key).
+            if (string.IsNullOrWhiteSpace(counter.Key))
+            {
+                counter.Key = null; // "" / whitespace off the wire means "no key"
+            }
+            else
+            {
+                counter.Key = counter.Key.Trim().ToLowerInvariant();
+                if (counter.Key.Length > MaxLabelLength || !LightValidation.IsSlug(counter.Key))
+                    throw new ValidationException("error.party.counterKey", pos);
+                for (var j = 0; j < i; j++)
+                    if (string.Equals(counters[j].Key, counter.Key, StringComparison.Ordinal))
+                        throw new ValidationException("error.party.duplicateCounterKey", counter.Key, pos);
+            }
 
             if (counter.Style is not null)
             {

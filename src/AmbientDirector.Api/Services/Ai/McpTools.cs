@@ -256,9 +256,11 @@ public sealed class PartyMcpTools(AiToolService tools)
 {
     [McpServerTool(Name = "list_party"), Description(
         "List the whole live table: players (each a name, optional portrait and generic counters), the table-level " +
-        "counters (system-wide stats like Fear that belong to no single player), and the bestiary enemies (reusable " +
-        "statblocks). Counters are generic {label, value, max, style} — the Daggerheart HP/Stress/Armor/Hope loadout " +
-        "is just a preset, not built in.")]
+        "counters (system-wide stats like Fear that belong to no single player), the bestiary enemies (reusable " +
+        "statblocks), and system — the active game system's id (e.g. \"daggerheart\", null when none is chosen; it " +
+        "drives the panel's presets and is set in Settings, not via tools). Counters are generic " +
+        "{label, value, max, style, key} — key is an optional stable semantic id (lowercase slug, the preferred " +
+        "adjust token) — the Daggerheart HP/Stress/Armor/Hope loadout is just a preset, not built in.")]
     public Task<PartyDto> ListParty() => tools.ListPartyAsync();
 
     [McpServerTool(Name = "upsert_player"), Description(
@@ -290,17 +292,17 @@ public sealed class PartyMcpTools(AiToolService tools)
         "(case-insensitive). Returns the updated player; errors if the player or counter is unknown.")]
     public Task<PartyMember> AdjustPlayerCounter(
         [Description("Player id (a lowercase slug [a-z0-9-_]).")] string id,
-        [Description("The counter's label (case-insensitive), e.g. HP.")] string counter,
+        [Description("The counter's semantic key (preferred, e.g. \"hp\") or its label — both case-insensitive.")] string counter,
         [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
         [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
         tools.AdjustPlayerCounterAsync(id, counter, delta, value);
 
     [McpServerTool(Name = "adjust_table_counter"), Description(
         "Adjust ONE table-level counter live (e.g. +1 Fear), clamped into [0, max]. Pass EXACTLY ONE of delta or value; " +
-        "counter is the counter's Label (case-insensitive). Returns the updated table-counter list; errors if no counter " +
+        "counter is the counter's Key or Label (case-insensitive). Returns the updated table-counter list; errors if no counter " +
         "matches the label.")]
     public Task<List<PartyCounter>> AdjustTableCounter(
-        [Description("The counter's label (case-insensitive), e.g. Fear.")] string counter,
+        [Description("The counter's semantic key (preferred, e.g. \"fear\") or its label — both case-insensitive.")] string counter,
         [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
         [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
         tools.AdjustTableCounterAsync(counter, delta, value);
@@ -322,10 +324,10 @@ public sealed class PartyMcpTools(AiToolService tools)
     [McpServerTool(Name = "adjust_enemy_counter"), Description(
         "Adjust ONE of a bestiary enemy statblock's BASE counters, clamped into [0, max]. This edits the template's " +
         "starting values, NOT a live fight (use adjust_encounter_enemy for that). Pass EXACTLY ONE of delta or value; " +
-        "counter is the Label (case-insensitive). Returns the updated statblock; errors if the enemy or counter is unknown.")]
+        "counter is the Key or Label (case-insensitive). Returns the updated statblock; errors if the enemy or counter is unknown.")]
     public Task<Enemy> AdjustEnemyCounter(
         [Description("Enemy id (a lowercase slug [a-z0-9-_]).")] string id,
-        [Description("The counter's label (case-insensitive), e.g. HP.")] string counter,
+        [Description("The counter's semantic key (preferred, e.g. \"hp\") or its label — both case-insensitive.")] string counter,
         [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
         [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
         tools.AdjustEnemyCounterAsync(id, counter, delta, value);
@@ -368,12 +370,12 @@ public sealed class EncounterMcpTools(AiToolService tools)
 
     [McpServerTool(Name = "adjust_encounter_enemy"), Description(
         "Adjust ONE counter of ONE enemy instance in a prepped/running fight (e.g. mark 3 damage on the boss), clamped " +
-        "into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's Label (case-insensitive). Returns " +
+        "into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's Key or Label (case-insensitive). Returns " +
         "the updated encounter; errors if the encounter, instance or counter is unknown.")]
     public Task<Encounter> AdjustEncounterEnemy(
         [Description("Encounter id (a lowercase slug [a-z0-9-_]).")] string id,
         [Description("The enemy instance's InstanceId within that encounter.")] string instanceId,
-        [Description("The counter's label (case-insensitive), e.g. HP.")] string counter,
+        [Description("The counter's semantic key (preferred, e.g. \"hp\") or its label — both case-insensitive.")] string counter,
         [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
         [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
         tools.AdjustEncounterEnemyAsync(id, instanceId, counter, delta, value);

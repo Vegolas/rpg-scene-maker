@@ -264,6 +264,26 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   on the next upload, deleted after import), guarded by a `^[a-z0-9]{12}$` id check before any path use. No new
   `TvContent` kind and no EF schema change. The panel side is `PdfPagePicker.razor`, opened from `ArtField` and
   the TV remote.
+- **`IGameSystem` / `GameSystemRegistry` / `SystemEndpoints`** — the pluggable **RPG game-system contract**
+  (#127, design spec: [docs/GAME-SYSTEMS.md](docs/GAME-SYSTEMS.md) — read it before touching this layer;
+  phases 2–3 are #128/#129). An [`IGameSystem`](src/AmbientDirector.Api/Services/Systems/IGameSystem.cs) is a
+  data-only DI singleton (id, `NameKey` i18n key, member/enemy/table `CounterPreset`s with curated
+  `GameSystemGlyphs` names, a `Quickbar` of table-counter keys, a `SpotlightLabel` TV literal) discovered via
+  `GameSystemRegistry` (the `IEnumerable<IImageSearchSource>` idiom; unique-slug-id asserted at startup).
+  Community systems come in **by PR** (class + locale keys + one Program.cs registration), never plugin DLLs;
+  the contract grows only by default interface members / capability marker interfaces. The choice persists in
+  `PartyConfig.SystemId` (tri-state: null = never chosen, `"none"` = explicitly none, else an id — the wire
+  shows only null-or-id); `GET /systems/list` + GetOrPost `/systems/current?id=` (`/systems` is in
+  `IsProtectedPath`, nothing at the bare path) select it, **seeding** the system's table counters
+  adopt-or-append (never overwriting values). `GameSystemUpgrade` (Program.cs startup, the LegacyImporter
+  idiom) auto-stamps `daggerheart` once when pre-#127 game data exists and backfills semantic counter keys by
+  EN/PL label. `PartyCounter.Key` is that stable semantic id ("hp", "fear"): optional, lowercase slug, unique
+  per owner, stamped by presets and kept on label rename; every counter **adjust resolves key first, then
+  label** (so `?counter=fear` works on a Polish table). Panel side: no active system hides the **Encounters
+  nav tab only** (`UiState.GameSystem`, the `AssistantConfigured` idiom — navigation-only, API/TV/deep links
+  unaffected), Settings → General has the system dropdown, and `/party/list` (+ both AI surfaces' `list_party`)
+  carries the active `system` id. Daggerheart's presets/colors are pinned in the spec's reference table — a
+  Daggerheart table must render identically across the refactor phases.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
   (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single piece of content the
@@ -427,7 +447,8 @@ background colour/image plus an `Elements` JSON column; ids `NOCASE`), `LightFxs
 `NOCASE`), a
 single-row `LightingConfig` (whose `DefaultLight` JSON column backs `/lights/default`, plus a nullable
 `OnboardingDoneUtc` stamp for the first-run wizard), a single-row `PartyConfig` (the party tracker's
-table-level counters in a `Counters` JSON column — Fear etc.), a single-row `FreesoundConfig` (the Freesound API token)
+table-level counters in a `Counters` JSON column — Fear etc. — plus the nullable `SystemId` game-system
+choice, see `IGameSystem`), a single-row `FreesoundConfig` (the Freesound API token)
 and a single-row
 `AssistantConversation` (the in-panel assistant's persisted transcript + history, each a JSON string). The Spotify
 connection (Client ID, refresh token, preferred device) is also persisted here via `SpotifyStore`.

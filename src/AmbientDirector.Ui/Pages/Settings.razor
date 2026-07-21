@@ -32,6 +32,24 @@ else
         </div>
     </div>
 
+    <SectionHeading>@L["settings.system.title"]</SectionHeading>
+    <div class="panel">
+        <p class="hint" style="margin-top:0">@L["settings.system.hint"]</p>
+        <div class="field">
+            <label for="system-select">@L["settings.system.title"]</label>
+            @* Keyed so a failed save's re-fetch snaps the select back to the stored value. *@
+            <select id="system-select" @key='@(_systems?.Current ?? "none")' @onchange="OnSystemChanged" disabled="@(_systems is null)">
+                <option value="none" selected="@(_systems?.Current is null)">@L["settings.system.none"]</option>
+                @foreach (var system in _systems?.Systems ?? [])
+                {
+                    <option value="@system.Id" selected="@string.Equals(system.Id, _systems?.Current, StringComparison.OrdinalIgnoreCase)">
+                        @L[system.NameKey]
+                    </option>
+                }
+            </select>
+        </div>
+    </div>
+
     <SectionHeading>@L["settings.wizard.title"]</SectionHeading>
     <div class="panel">
         <p class="hint" style="margin-top:0">@L["settings.wizard.hint"]</p>
@@ -224,7 +242,27 @@ else
     private List<HueLightDto>? _hueLights;
     private string? _apiKeyInput;
     private bool _showHueAdd;
+    private GameSystemsDto? _systems;
     private bool _backingUp;
+
+    // Save the game-system choice immediately (like the language select). Success updates UiState so the
+    // Encounters tab appears/disappears live; failure re-fetches so the keyed select snaps back.
+    private async Task OnSystemChanged(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString();
+        if (string.IsNullOrEmpty(id)) return;
+        var chosen = id == "none" ? null : id;
+        var (_, error) = await Api.SetGameSystemAsync(chosen);
+        if (error is not null)
+        {
+            Ui.ReportError(error);
+            _systems = await Api.GetGameSystemsAsync() ?? _systems;
+            return;
+        }
+        if (_systems is not null) _systems = _systems with { Current = chosen };
+        Ui.SetGameSystem(chosen);
+        Ui.ReportOk(L["settings.system.toast.saved"]);
+    }
 
     private async Task OnLanguageChanged(ChangeEventArgs e)
     {
@@ -243,6 +281,7 @@ else
     {
         _tab = TabFromQuery();
         _apiKeyInput = await Api.GetApiKeyAsync();
+        _systems = await Api.GetGameSystemsAsync();
         var (config, error) = await Api.GetConfigAsync();
         if (config is null)
         {

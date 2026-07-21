@@ -15,10 +15,12 @@ public static class PartyEndpoints
         // commands — there is no /trigger.
         var party = app.MapGroup("/party");
 
-        // Literal segment, so it wins over any "/{id}" route.
-        party.MapGet("/list", async (PartyStore store) =>
+        // Literal segment, so it wins over any "/{id}" route. System is the ACTIVE game system's id (null
+        // when none/unset — normalized through the registry), so every party consumer (panel pages, both AI
+        // surfaces' list_party) knows the table's idiom without an extra fetch.
+        party.MapGet("/list", async (PartyStore store, Services.Systems.GameSystemRegistry registry) =>
             new PartyDto(await store.GetMembersAsync(), await store.GetTableCountersAsync(),
-                await store.GetEnemiesAsync()));
+                await store.GetEnemiesAsync(), registry.Find(await store.GetSystemIdAsync())?.Id));
 
         party.MapPut("/players/{id}", async (string id, PartyMember member, PartyStore store,
             ImageFileStorage images, TvState tvState, BoardStore boards) =>
@@ -146,7 +148,8 @@ public static class PartyEndpoints
     // heroChange is set for player/table-counter edits (NOT enemy-template edits): those ALSO affect a shown
     // encounter, whose hero panel + Fear strip resolve live from the party. An enemy-template edit does not
     // touch a shown encounter — its enemy instances are snapshots taken at add-time (issue #122).
-    static async Task TouchIfPartyShownAsync(TvState tv, BoardStore boards, bool heroChange = false)
+    // Internal: SystemEndpoints seeds table counters on system select and must bump identically.
+    internal static async Task TouchIfPartyShownAsync(TvState tv, BoardStore boards, bool heroChange = false)
     {
         if (tv.Current is not { } current) return;
         if (current.Kind == "board")

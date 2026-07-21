@@ -52,10 +52,10 @@ public class EncounterStore(IDbContextFactory<AppDbContext> dbFactory)
         return await db.Encounters.Where(e => e.Id == id).ExecuteDeleteAsync() > 0;
     }
 
-    /// <summary>Adjust one counter of one enemy instance by a delta or to an absolute value, clamped into
-    /// <c>[0, Max ?? 999]</c>, and return the updated encounter. Throws <see cref="NotFoundException"/> for an
-    /// unknown encounter, instance or counter.</summary>
-    public async Task<Encounter> AdjustEnemyInstanceAsync(string encounterId, string instanceId, string label, int? delta, int? value)
+    /// <summary>Adjust one counter of one enemy instance (by semantic key or label) by a delta or to an
+    /// absolute value, clamped into <c>[0, Max ?? 999]</c>, and return the updated encounter. Throws
+    /// <see cref="NotFoundException"/> for an unknown encounter, instance or counter.</summary>
+    public async Task<Encounter> AdjustEnemyInstanceAsync(string encounterId, string instanceId, string token, int? delta, int? value)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var encounter = await db.Encounters.SingleOrDefaultAsync(e => e.Id == encounterId)
@@ -64,12 +64,9 @@ public class EncounterStore(IDbContextFactory<AppDbContext> dbFactory)
             string.Equals(i.InstanceId, instanceId, StringComparison.OrdinalIgnoreCase))
             ?? throw new NotFoundException("error.encounter.enemyInstanceNotFound", instanceId);
 
-        // In-place mutation of a tracked owned-JSON entity is detected by change tracking and rewrites the column.
-        var counter = (instance.Counters ??= []).FirstOrDefault(c =>
-            string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase))
-            ?? throw new NotFoundException("error.party.counterNotFound", label);
-        var target = value ?? counter.Value + (delta ?? 0);
-        counter.Value = Math.Clamp(target, 0, counter.Max ?? 999);
+        // In-place mutation of a tracked owned-JSON entity is detected by change tracking and rewrites the
+        // column. Token resolution (key first, then label) is shared with the party/table adjusts.
+        PartyStore.AdjustInList(instance.Counters ??= [], token, delta, value);
 
         await db.SaveChangesAsync();
         return encounter;

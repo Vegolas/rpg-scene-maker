@@ -941,6 +941,17 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
         return CommandAsync(path, okMessage);
     }
 
+    // ---------- game system (issue #127) ----------
+
+    /// <summary>Every registered game system's definition + the active id; silent on failure (null → the
+    /// caller treats the gate/dropdown as "nothing selected", never blocking the panel).</summary>
+    public Task<GameSystemsDto?> GetGameSystemsAsync() => GetAsync<GameSystemsDto>("systems/list");
+
+    /// <summary>Select the active game system (null → explicit "none"). Selecting seeds the system's
+    /// table counters server-side; the Settings page surfaces the returned error.</summary>
+    public Task<(JsonNode? Result, string? Error)> SetGameSystemAsync(string? id) =>
+        FetchAsync<JsonNode>(HttpMethod.Post, $"systems/current?id={Uri.EscapeDataString(id ?? "none")}");
+
     // ---------- party (players + counters tracker) ----------
 
     /// <summary>The whole roster + table-level counters; silent on failure like the other list reads (null →

@@ -114,11 +114,14 @@
     };
 
     // The built-in tabs, plus the Assistant tab when a provider key is configured and the Logs tab in dev mode.
+    // The Encounters tab (party + bestiary + encounters live inside it) needs an active game system (issue
+    // #127) — a navigation-only gate: deep links and the API keep working, the tab just isn't offered.
     private IEnumerable<Tab> KnownTabs
     {
         get
         {
             List<Tab> tabs = [.. Tabs];
+            if (Ui.GameSystem is null) tabs.RemoveAll(t => t.Href == "encounters");
             if (Ui.AssistantConfigured) tabs.Add(AssistantTab);
             if (Ui.DevMode) tabs.Add(LogsTab);
             return tabs;
@@ -160,6 +163,8 @@
         // The Assistant tab is gated on a server-side provider key; load it too.
         var (assistant, _) = await Api.GetAssistantConfigAsync();
         Ui.SetAssistantConfigured(assistant?.Configured ?? false);
+        // The Encounters tab is gated on the chosen game system (Settings updates it live afterwards).
+        Ui.SetGameSystem((await Api.GetGameSystemsAsync())?.Current);
 
         // First-run onboarding (issue #75): checked once at layout init, not per navigation. Open the
         // wizard when the server says a fresh install should see it — or when this device has a

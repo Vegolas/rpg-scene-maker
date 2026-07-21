@@ -60,8 +60,10 @@ public sealed class AssistantTools(AiToolService tools)
     private const string PlayerShape =
         "The full party player entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg " +
         "wins), name (required), optional portrait (a stored image file name from an /images upload), sortOrder " +
-        "(int roster order), and counters[] — generic trackers, each {label, value, max, style}: label is unique " +
-        "within the player and is the case-insensitive adjust key; max is null (unbounded) or 1-999; style is " +
+        "(int roster order), and counters[] — generic trackers, each {label, value, max, style, key}: label is " +
+        "unique within the player and a case-insensitive adjust token; key is an optional stable semantic id " +
+        "(lowercase slug, e.g. \"hp\" — the preferred adjust token, stamped by the active game system's presets; " +
+        "keep an existing counter's key when editing); max is null (unbounded) or 1-999; style is " +
         "null|\"pips\"|\"number\" (\"pips\" needs a small max ≤24); up to 8 counters. The Daggerheart " +
         "HP/Stress/Armor/Hope loadout is just a preset, not built in.";
 
@@ -72,9 +74,11 @@ public sealed class AssistantTools(AiToolService tools)
         "counters[] the base definitions ({label, value, max, style}, same rules as a player's).";
 
     private const string CountersShape =
-        "An array of table-level counters, each a generic tracker {label, value, max, style}: label unique (the " +
-        "case-insensitive adjust key), max null or 1-999, style null|\"pips\"|\"number\" (\"pips\" needs a small " +
-        "max ≤24); up to 8. These are system-wide stats (like Fear) that belong to no single player.";
+        "An array of table-level counters, each a generic tracker {label, value, max, style, key}: label unique " +
+        "(a case-insensitive adjust token), key an optional stable semantic id (lowercase slug, e.g. \"fear\" — " +
+        "the preferred adjust token; keep existing keys when editing), max null or 1-999, style " +
+        "null|\"pips\"|\"number\" (\"pips\" needs a small max ≤24); up to 8. These are system-wide stats (like " +
+        "Fear) that belong to no single player.";
 
     private const string EncounterShape =
         "The full encounter entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg wins), " +
@@ -230,7 +234,7 @@ public sealed class AssistantTools(AiToolService tools)
         NoArgs("get_lights_status", "Get the live bulb state: normalized on/off, mode (colour/white), brightness, colour (RRGGBB hex) and white temperature, plus the raw Tuya/Hue payload for diagnostics. Errors if the light is unreachable."),
 
         // Party (players + table-level counters)
-        NoArgs("list_party", "List the whole live table: players (name, optional portrait, generic counters), the table-level counters (system-wide stats like Fear), and the bestiary enemies (reusable statblocks). Counters are generic {label, value, max, style} — the Daggerheart loadout is just a preset."),
+        NoArgs("list_party", "List the whole live table: players (name, optional portrait, generic counters), the table-level counters (system-wide stats like Fear), the bestiary enemies (reusable statblocks), and system — the active game system's id (e.g. \"daggerheart\", null when none is chosen; it drives the panel's presets, set in Settings, not via tools). Counters are generic {label, value, max, style, key} — the Daggerheart loadout is just a preset."),
         Tool2("upsert_player",
             "Create or replace the party player at the given id (the id arg wins). Returns the stored player.",
             "id", "Player id to save under: a lowercase slug [a-z0-9-_].",
@@ -244,23 +248,23 @@ public sealed class AssistantTools(AiToolService tools)
                 required: ["counters"])),
         new AiToolDefinition(
             "adjust_player_counter",
-            "Adjust ONE of a player's counters live (e.g. mark 2 damage), clamped into [0, max]. Pass EXACTLY ONE of delta (bump, may be negative) or value (set absolutely). counter is the counter's label (case-insensitive). Returns the updated player; errors if the player or counter is unknown.",
+            "Adjust ONE of a player's counters live (e.g. mark 2 damage), clamped into [0, max]. Pass EXACTLY ONE of delta (bump, may be negative) or value (set absolutely). counter is the counter's key or label (case-insensitive). Returns the updated player; errors if the player or counter is unknown.",
             Schema(
                 new()
                 {
                     ["id"] = Prop("string", "Player id: a lowercase slug [a-z0-9-_]."),
-                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. HP."),
+                    ["counter"] = Prop("string", "The counter's semantic key (preferred, e.g. \"hp\") or its label — both case-insensitive."),
                     ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
                     ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
                 },
                 required: ["id", "counter"])),
         new AiToolDefinition(
             "adjust_table_counter",
-            "Adjust ONE table-level counter live (e.g. +1 Fear), clamped into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's label (case-insensitive). Returns the updated table-counter list; errors if no counter matches the label.",
+            "Adjust ONE table-level counter live (e.g. +1 Fear), clamped into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's key or label (case-insensitive). Returns the updated table-counter list; errors if no counter matches the label.",
             Schema(
                 new()
                 {
-                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. Fear."),
+                    ["counter"] = Prop("string", "The counter's semantic key (preferred, e.g. \"fear\") or its label — both case-insensitive."),
                     ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
                     ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
                 },
@@ -274,12 +278,12 @@ public sealed class AssistantTools(AiToolService tools)
         WithId("delete_enemy", "Delete the bestiary enemy statblock with this id (and its portrait). Returns true if it existed, false otherwise. Encounter instances already made from it are unaffected (they are snapshots)."),
         new AiToolDefinition(
             "adjust_enemy_counter",
-            "Adjust ONE of a bestiary enemy statblock's BASE counters, clamped into [0, max]. This edits the template's starting values, NOT a live fight (use adjust_encounter_enemy for that). Pass EXACTLY ONE of delta or value; counter is the label (case-insensitive). Returns the updated statblock; errors if the enemy or counter is unknown.",
+            "Adjust ONE of a bestiary enemy statblock's BASE counters, clamped into [0, max]. This edits the template's starting values, NOT a live fight (use adjust_encounter_enemy for that). Pass EXACTLY ONE of delta or value; counter is the key or label (case-insensitive). Returns the updated statblock; errors if the enemy or counter is unknown.",
             Schema(
                 new()
                 {
                     ["id"] = Prop("string", "Enemy id: a lowercase slug [a-z0-9-_]."),
-                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. HP."),
+                    ["counter"] = Prop("string", "The counter's semantic key (preferred, e.g. \"hp\") or its label — both case-insensitive."),
                     ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
                     ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
                 },
@@ -296,13 +300,13 @@ public sealed class AssistantTools(AiToolService tools)
         WithId("run_encounter", "Run the encounter NOW: activate its configured scene and event best-effort (each reports ok/skipped/notFound/partial/error but never blocks) and push its heroes-left / enemies-right view to the /tv display. Returns { rev, encounter, scene, event }. Errors if the encounter id is unknown."),
         new AiToolDefinition(
             "adjust_encounter_enemy",
-            "Adjust ONE counter of ONE enemy instance in a prepped/running fight (e.g. mark 3 damage on the boss), clamped into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's label (case-insensitive). Returns the updated encounter; errors if the encounter, instance or counter is unknown.",
+            "Adjust ONE counter of ONE enemy instance in a prepped/running fight (e.g. mark 3 damage on the boss), clamped into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's key or label (case-insensitive). Returns the updated encounter; errors if the encounter, instance or counter is unknown.",
             Schema(
                 new()
                 {
                     ["id"] = Prop("string", "Encounter id: a lowercase slug [a-z0-9-_]."),
                     ["instanceId"] = Prop("string", "The enemy instance's instanceId within that encounter."),
-                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. HP."),
+                    ["counter"] = Prop("string", "The counter's semantic key (preferred, e.g. \"hp\") or its label — both case-insensitive."),
                     ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
                     ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
                 },

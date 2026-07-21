@@ -57,6 +57,18 @@ public class UiState
         Changed?.Invoke();
     }
 
+    /// <summary>The active game system's id, or null when none is chosen — gates the Encounters nav tab
+    /// (issue #127). Loaded by the layout from /systems/list and updated live by the Settings page, so the
+    /// tab appears/disappears without a reload.</summary>
+    public string? GameSystem { get; private set; }
+
+    public void SetGameSystem(string? id)
+    {
+        if (GameSystem == id) return;
+        GameSystem = id;
+        Changed?.Invoke();
+    }
+
     /// <summary>Whether the first-run onboarding wizard overlay is open. Opened by the layout when
     /// GET /setup/onboarding says show (or a mid-flight step marker survives a reload), and by the
     /// Settings page's "Run setup wizard" re-entry button; closed by the wizard itself.</summary>

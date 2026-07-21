@@ -7,8 +7,10 @@ namespace AmbientDirector.Ui.Contracts;
 // "player"). A counter is a generic {label, value, max, style}: style is null | "pips" | "number" — null lets
 // the renderer decide (dots when a max is set, else a bare number); "pips" needs a small max (1–24).
 // Table-level counters (e.g. Fear) and the encounter's enemy roster (issue #120) live alongside the players in
-// the same envelope. The Daggerheart/Fear presets are a UI-only convenience — the API stores only generic counters.
-public record PartyDto(List<PartyPlayerDto> Players, List<PartyCounterDto> Counters, List<PartyEnemyDto> Enemies);
+// the same envelope, plus System — the active game system's id (issue #127; null = none chosen), which gates
+// the Encounters tab and (phase 3, #129) drives the editors' presets. Counter presets come from the active
+// system's definition (GET /systems/list) — the API stores only generic counters.
+public record PartyDto(List<PartyPlayerDto> Players, List<PartyCounterDto> Counters, List<PartyEnemyDto> Enemies, string? System);
 
 public record PartyPlayerDto(string Id, string Name, string? Portrait, int SortOrder, List<PartyCounterDto>? Counters);
 
@@ -16,7 +18,10 @@ public record PartyPlayerDto(string Id, string Name, string? Portrait, int SortO
 // stats only — the per-fight spotlight (boss) flag and live values live on an encounter instance, not here.
 public record PartyEnemyDto(string Id, string Name, string? Portrait, int SortOrder, List<PartyCounterDto>? Counters);
 
-public record PartyCounterDto(string Label, int Value, int? Max, string? Style);
+// Key is the optional stable semantic id (issue #127): stamped by system presets ("hp", "fear"), null on
+// custom counters. It is the preferred /adjust token (labels are localized text) and, from phase 2 (#128),
+// the render pipeline's glyph key — so editors MUST round-trip it (see CounterEdit).
+public record PartyCounterDto(string Label, int Value, int? Max, string? Style, string? Key = null);
 
 // Mutable form model for editing one player in the panel; converts to the immutable wire DTO on save (the
 // BoardEdit pattern). Each counter needs per-field editing (label/value/max/style), so it gets its own mutable
@@ -74,15 +79,20 @@ public class CounterEdit
     // New counters default to pips/max 6 (see the pages' AddCounter).
     public string Style { get; set; } = "pips";
 
+    // The semantic key rides along invisibly (no editor field): dropping it here would strip every counter's
+    // key on the next manual save. Renaming the label keeps the key — that is the point of having one.
+    public string? Key { get; set; }
+
     public static CounterEdit FromDto(PartyCounterDto dto) => new()
     {
         Label = dto.Label,
         Value = dto.Value,
         Max = dto.Max,
         Style = dto.Style ?? (dto.Max is >= 1 and <= 24 ? "pips" : "number"),
+        Key = dto.Key,
     };
 
-    public PartyCounterDto ToDto() => new(Label.Trim(), Value, Max, Style);
+    public PartyCounterDto ToDto() => new(Label.Trim(), Value, Max, Style, Key);
 }
 
 // Builds the same TvPartyDto shape the TV gets inline, from the panel's own /party/list data — so the ONE

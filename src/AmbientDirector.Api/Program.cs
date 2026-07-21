@@ -170,6 +170,13 @@ builder.Services.AddSingleton<PartyStore>();
 builder.Services.AddSingleton<EncounterStore>();
 builder.Services.AddSingleton<LightFxStore>();
 
+// Pluggable RPG game systems (issue #127; docs/GAME-SYSTEMS.md): data-only IGameSystem singletons discovered
+// through the registry (the IEnumerable<IImageSearchSource> idiom). Community systems are added by PR — one
+// class + its locale keys + one registration line here.
+builder.Services.AddSingleton<AmbientDirector.Api.Services.Systems.IGameSystem,
+    AmbientDirector.Api.Services.Systems.DaggerheartSystem>();
+builder.Services.AddSingleton<AmbientDirector.Api.Services.Systems.GameSystemRegistry>();
+
 // Shareable content packs (issue #111): a per-kind share descriptor for every content type, a registry over
 // them, and the export/import services. Export zips a root entity + its dependency closure + media; import is
 // two-phase (inspect → commit) with a light-key remap step. All singletons (every dependency is a singleton).
@@ -287,6 +294,8 @@ var app = builder.Build();
     using var db = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext();
     db.Database.Migrate();
     LegacyImporter.Run(db, app.Configuration, app.Environment, app.Logger);
+    // Pre-#127 installs with game data get "daggerheart" stamped + counter keys backfilled, exactly once.
+    GameSystemUpgrade.Run(db, app.Logger);
 }
 
 // Seed the on-disk locales directory with the shipped translations (only the files that are missing,
@@ -363,7 +372,7 @@ app.Use(async (context, next) =>
          path.StartsWithSegments("/music") || path.StartsWithSegments("/sounds") ||
          path.StartsWithSegments("/events") || path.StartsWithSegments("/screens") ||
          path.StartsWithSegments("/boards") || path.StartsWithSegments("/party") ||
-         path.StartsWithSegments("/encounters") ||
+         path.StartsWithSegments("/encounters") || path.StartsWithSegments("/systems") ||
          path.StartsWithSegments("/lightfx") || path.StartsWithSegments("/images") ||
          path.StartsWithSegments("/setup") || path.StartsWithSegments("/logs") ||
          path.StartsWithSegments("/diagnostics") || path.StartsWithSegments("/mcp") ||
@@ -397,6 +406,7 @@ app.MapScreenEndpoints();
 app.MapBoardEndpoints();
 app.MapPartyEndpoints();
 app.MapEncounterEndpoints();
+app.MapSystemEndpoints();
 app.MapLightFxEndpoints();
 app.MapImageEndpoints();
 app.MapSetupEndpoints();

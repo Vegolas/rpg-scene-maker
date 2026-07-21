@@ -25,7 +25,7 @@
 }
 else
 {
-    var party = _party ?? new PartyDto([], [], []);
+    var party = _party ?? new PartyDto([], [], [], null);
 
     // One counter's value: pips (dots) for a "pips" counter, else tabular text. Same rule as BoardCanvas.
     RenderFragment<PartyCounterDto> counterValue = c =>

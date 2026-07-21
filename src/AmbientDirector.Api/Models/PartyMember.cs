@@ -41,9 +41,16 @@ public class PartyMember
 /// <see cref="Data.LightingConfig"/>.</summary>
 public class PartyCounter
 {
-    /// <summary>Display name, e.g. "HP" — also the <b>adjust key</b> (matched case-insensitively by
+    /// <summary>Display name, e.g. "HP" — also an <b>adjust token</b> (matched case-insensitively by
     /// <c>/adjust?counter=</c>, so it must be unique within its owner).</summary>
     public string Label { get; set; } = "";
+
+    /// <summary>Optional stable <b>semantic id</b> ("hp", "fear") — lowercase slug, unique among the owner's
+    /// non-null keys. Stamped by a game system's presets (see <c>Services/Systems/IGameSystem</c>, issue
+    /// #127), null on hand-added custom counters; renaming the label keeps the key. Needed because the
+    /// label is localized ("Fear" vs "Strach") and can't be matched reliably: <c>/adjust?counter=</c>
+    /// resolves key first, then label, and the render pipeline (#128) maps key → glyph/colour.</summary>
+    public string? Key { get; set; }
 
     public int Value { get; set; }
 

@@ -87,7 +87,8 @@ public class PartyRenderTests
             [
                 new PartyEnemyDto("goblin", "Goblin", "goblin.png", 0, [new PartyCounterDto("HP", 3, 4, "pips")]),
                 new PartyEnemyDto("boss", "Dread King", null, 1, null),
-            ]);
+            ],
+            "daggerheart");
 
         var model = PartyRender.ToRenderModel(party, Img);
 
