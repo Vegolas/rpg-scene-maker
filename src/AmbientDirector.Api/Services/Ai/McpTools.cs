@@ -248,3 +248,191 @@ public sealed class SoundMcpTools(AiToolService tools)
     [McpServerTool(Name = "get_sounds_state"), Description("Get the ids of the sounds currently playing on the server's soundboard.")]
     public SoundStateDto GetSoundsState() => tools.GetSoundsState();
 }
+
+/// <summary>The live table (issues #88/#120/#122): party players + table-level counters, plus the reusable
+/// bestiary of enemy statblocks. Rendered on the key-free /tv display by a board's party/enemies element.</summary>
+[McpServerToolType]
+public sealed class PartyMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "list_party"), Description(
+        "List the whole live table: players (each a name, optional portrait and generic counters), the table-level " +
+        "counters (system-wide stats like Fear that belong to no single player), and the bestiary enemies (reusable " +
+        "statblocks). Counters are generic {label, value, max, style} — the Daggerheart HP/Stress/Armor/Hope loadout " +
+        "is just a preset, not built in.")]
+    public Task<PartyDto> ListParty() => tools.ListPartyAsync();
+
+    [McpServerTool(Name = "upsert_player"), Description(
+        "Create or replace the party player at the given id (the id arg wins; the body's own id is overwritten). " +
+        "Rules: id is a lowercase slug [a-z0-9-_]; Name is required; optional Portrait is a stored image name (from an " +
+        "/images upload); SortOrder sets roster order. Counters[] are generic {Label, Value, Max, Style}: Label is " +
+        "unique within the player and doubles as the adjust key; Style is null|pips|number (pips needs a small Max ≤24); " +
+        "up to 8 counters. Returns the stored player.")]
+    public Task<PartyMember> UpsertPlayer(
+        [Description("The full player entity to save (see the rules in this tool's description).")] PartyMember member,
+        [Description("Player id to save it under: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.UpsertPlayerAsync(member, id);
+
+    [McpServerTool(Name = "delete_player"), Description("Delete the party player with this id (and its portrait). Returns true if it existed, false otherwise.")]
+    public Task<bool> DeletePlayer([Description("Player id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.DeletePlayerAsync(id);
+
+    [McpServerTool(Name = "save_table_counters"), Description(
+        "Replace the whole set of table-level counters (system-wide stats like Fear that belong to no single player). " +
+        "Each counter is {Label, Value, Max, Style} with the same rules as a player's (unique label, pips needs a small " +
+        "max, up to 8). Returns the stored list.")]
+    public Task<List<PartyCounter>> SaveTableCounters(
+        [Description("The full table-counter list to save.")] List<PartyCounter> counters) =>
+        tools.SaveTableCountersAsync(counters);
+
+    [McpServerTool(Name = "adjust_player_counter"), Description(
+        "Adjust ONE of a player's counters live (e.g. mark 2 damage), clamped into [0, max]. Pass EXACTLY ONE of delta " +
+        "(bump the current value, may be negative) or value (set it absolutely). counter is the counter's Label " +
+        "(case-insensitive). Returns the updated player; errors if the player or counter is unknown.")]
+    public Task<PartyMember> AdjustPlayerCounter(
+        [Description("Player id (a lowercase slug [a-z0-9-_]).")] string id,
+        [Description("The counter's label (case-insensitive), e.g. HP.")] string counter,
+        [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
+        [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
+        tools.AdjustPlayerCounterAsync(id, counter, delta, value);
+
+    [McpServerTool(Name = "adjust_table_counter"), Description(
+        "Adjust ONE table-level counter live (e.g. +1 Fear), clamped into [0, max]. Pass EXACTLY ONE of delta or value; " +
+        "counter is the counter's Label (case-insensitive). Returns the updated table-counter list; errors if no counter " +
+        "matches the label.")]
+    public Task<List<PartyCounter>> AdjustTableCounter(
+        [Description("The counter's label (case-insensitive), e.g. Fear.")] string counter,
+        [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
+        [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
+        tools.AdjustTableCounterAsync(counter, delta, value);
+
+    [McpServerTool(Name = "upsert_enemy"), Description(
+        "Create or replace a bestiary ENEMY STATBLOCK at the given id (the id arg wins). A statblock is a reusable " +
+        "template — base stats only, NO live tracking (per-fight HP lives on an encounter's enemy instance). Rules: id " +
+        "is a lowercase slug [a-z0-9-_]; Name required; optional Portrait (a stored image name); Counters[] are the base " +
+        "definitions (same {Label, Value, Max, Style} rules as a player). Returns the stored statblock.")]
+    public Task<Enemy> UpsertEnemy(
+        [Description("The full enemy statblock to save (see the rules in this tool's description).")] Enemy enemy,
+        [Description("Enemy id to save it under: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.UpsertEnemyAsync(enemy, id);
+
+    [McpServerTool(Name = "delete_enemy"), Description("Delete the bestiary enemy statblock with this id (and its portrait). Returns true if it existed, false otherwise. Encounter instances already made from it are unaffected (they are snapshots).")]
+    public Task<bool> DeleteEnemy([Description("Enemy id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.DeleteEnemyAsync(id);
+
+    [McpServerTool(Name = "adjust_enemy_counter"), Description(
+        "Adjust ONE of a bestiary enemy statblock's BASE counters, clamped into [0, max]. This edits the template's " +
+        "starting values, NOT a live fight (use adjust_encounter_enemy for that). Pass EXACTLY ONE of delta or value; " +
+        "counter is the Label (case-insensitive). Returns the updated statblock; errors if the enemy or counter is unknown.")]
+    public Task<Enemy> AdjustEnemyCounter(
+        [Description("Enemy id (a lowercase slug [a-z0-9-_]).")] string id,
+        [Description("The counter's label (case-insensitive), e.g. HP.")] string counter,
+        [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
+        [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
+        tools.AdjustEnemyCounterAsync(id, counter, delta, value);
+}
+
+/// <summary>Encounter CRUD + run + live enemy tracking (issue #122). An encounter is a prepped fight: chosen
+/// heroes vs enemy instances over a background, optionally activating a scene/event, pushed to the /tv display.</summary>
+[McpServerToolType]
+public sealed class EncounterMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "list_encounters"), Description("List every saved encounter (full entities). An encounter is a prepped fight: HeroIds (party player ids; empty = all players), enemy instances (each a live copy of a bestiary statblock with its own counters and per-instance Spotlight/Hidden flags), an optional background image, and optional scene/event ids activated when it runs.")]
+    public Task<List<Encounter>> ListEncounters() => tools.ListEncountersAsync();
+
+    [McpServerTool(Name = "get_encounter"), Description("Get one encounter by id, or null if none has that id.")]
+    public Task<Encounter?> GetEncounter([Description("Encounter id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.GetEncounterAsync(id);
+
+    [McpServerTool(Name = "upsert_encounter"), Description(
+        "Create or replace the encounter at the given id (the id arg wins). Rules: id is a lowercase slug [a-z0-9-_]; " +
+        "Name required; HeroIds is a list of party player ids (empty means all current players); Enemies[] are the " +
+        "instances — each needs a unique InstanceId, the source EnemyId (a bestiary statblock), a Name, its own " +
+        "Counters[] (seeded from the statblock), and optional Spotlight (boss highlight) / Hidden (held back) flags; " +
+        "optional BackgroundImage (a stored image name); optional ActivateSceneId / ActivateEventId (slugs, run " +
+        "best-effort on run). Returns the stored encounter.")]
+    public Task<Encounter> UpsertEncounter(
+        [Description("The full encounter entity to save (see the rules in this tool's description).")] Encounter encounter,
+        [Description("Encounter id to save it under: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.UpsertEncounterAsync(encounter, id);
+
+    [McpServerTool(Name = "delete_encounter"), Description("Delete the encounter with this id (and its owned background image; enemy-instance portraits are bestiary snapshots and are left alone). Clears the /tv display if this encounter was showing. Returns true if it existed, false otherwise.")]
+    public Task<bool> DeleteEncounter([Description("Encounter id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.DeleteEncounterAsync(id);
+
+    [McpServerTool(Name = "run_encounter"), Description(
+        "Run the encounter NOW: activate its configured scene and event best-effort (each reports " +
+        "ok/skipped/notFound/partial/error but never blocks the show) and push its heroes-left / enemies-right view to " +
+        "the /tv display. Returns { rev, encounter, scene, event }. Throws if the encounter id is unknown.")]
+    public Task<object> RunEncounter([Description("Encounter id to run: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.RunEncounterAsync(id);
+
+    [McpServerTool(Name = "adjust_encounter_enemy"), Description(
+        "Adjust ONE counter of ONE enemy instance in a prepped/running fight (e.g. mark 3 damage on the boss), clamped " +
+        "into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's Label (case-insensitive). Returns " +
+        "the updated encounter; errors if the encounter, instance or counter is unknown.")]
+    public Task<Encounter> AdjustEncounterEnemy(
+        [Description("Encounter id (a lowercase slug [a-z0-9-_]).")] string id,
+        [Description("The enemy instance's InstanceId within that encounter.")] string instanceId,
+        [Description("The counter's label (case-insensitive), e.g. HP.")] string counter,
+        [Description("Bump the current value by this (may be negative). Give delta OR value, not both.")] int? delta = null,
+        [Description("Set the value absolutely. Give value OR delta, not both.")] int? value = null) =>
+        tools.AdjustEncounterEnemyAsync(id, instanceId, counter, delta, value);
+
+    [McpServerTool(Name = "reset_encounter"), Description("Reset every enemy instance's counters to its statblock's starting values (before re-running the same fight). Returns the updated encounter. Throws if the encounter id is unknown.")]
+    public Task<Encounter> ResetEncounter([Description("Encounter id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.ResetEncounterAsync(id);
+}
+
+/// <summary>Board CRUD (issues #80/#88). A board is composable player-facing TV content — a 16:9 layout of
+/// positioned image/text/party/enemies elements — that the GM pushes to the /tv display.</summary>
+[McpServerToolType]
+public sealed class BoardMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "list_boards"), Description("List every saved board (full entities). A board is a 16:9 player-facing TV layout: a background colour or image plus positioned elements (image/text or a live party/enemies roster), all in percent-of-stage coordinates.")]
+    public Task<List<Board>> ListBoards() => tools.ListBoardsAsync();
+
+    [McpServerTool(Name = "get_board"), Description("Get one board by id, or null if none has that id.")]
+    public Task<Board?> GetBoard([Description("Board id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.GetBoardAsync(id);
+
+    [McpServerTool(Name = "upsert_board"), Description(
+        "Create or replace the board at the given id (the id arg wins). Rules: id is a lowercase slug [a-z0-9-_]; Name " +
+        "required; optional BackgroundColor (#RRGGBB) and/or BackgroundImage (a stored image name); up to 50 Elements[]. " +
+        "Each element has a Kind (image|text|party|enemies) and percent-of-stage geometry X/Y (0–100) and W/H (0.1–100); " +
+        "the list order IS the z-order (index 0 is at the bottom). An image element needs Image (a stored image name); a " +
+        "text element needs Text (+ optional Color/Size/Align); party/enemies elements are geometry-only live " +
+        "placeholders that render the roster at display time. Returns the stored board.")]
+    public Task<Board> UpsertBoard(
+        [Description("The full board entity to save (see the rules in this tool's description).")] Board board,
+        [Description("Board id to save it under: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.UpsertBoardAsync(board, id);
+
+    [McpServerTool(Name = "delete_board"), Description("Delete the board with this id (and its owned images). Clears the /tv display if this board was showing. Returns true if it existed, false otherwise.")]
+    public Task<bool> DeleteBoard([Description("Board id: a lowercase slug [a-z0-9-_].")] string id) =>
+        tools.DeleteBoardAsync(id);
+}
+
+/// <summary>The player-facing /tv display (issues #80/#122): push a prepared image, a board, or an encounter to
+/// the shared table screen, clear it, or read what's currently shown.</summary>
+[McpServerToolType]
+public sealed class TvMcpTools(AiToolService tools)
+{
+    [McpServerTool(Name = "show_on_tv"), Description(
+        "Push content to the player-facing /tv display. Pass EXACTLY ONE of: image (a stored image name from an /images " +
+        "upload — a handout/map), board (a board id from list_boards), or encounter (an encounter id from " +
+        "list_encounters — shows its heroes-left / enemies-right view). Optional label overrides the caption (defaults " +
+        "to the board's/encounter's name). Returns the new display rev. Errors if none / more than one target is given, " +
+        "or the target doesn't exist.")]
+    public Task<object> ShowOnTv(
+        [Description("A stored image file name to show; omit unless showing an image.")] string? image = null,
+        [Description("A board id to show; omit unless showing a board.")] string? board = null,
+        [Description("An encounter id to show; omit unless showing an encounter.")] string? encounter = null,
+        [Description("Optional caption; defaults to the board's/encounter's name.")] string? label = null) =>
+        tools.ShowOnTvAsync(image, board, encounter, label);
+
+    [McpServerTool(Name = "clear_tv"), Description("Clear the player-facing /tv display (nothing shown). Returns the new display rev.")]
+    public object ClearTv() => tools.ClearTv();
+
+    [McpServerTool(Name = "get_tv_state"), Description("Get what the /tv display is currently showing: the live rev plus the pushed content's kind (image|board|encounter), its ref (image name or entity id) and label — all null when the display is cleared.")]
+    public TvStatusInfo GetTvState() => tools.GetTvState();
+}

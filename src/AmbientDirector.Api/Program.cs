@@ -230,7 +230,11 @@ builder.Services.AddMcpServer()
     .WithTools<AmbientDirector.Api.Services.Ai.LightFxMcpTools>()
     .WithTools<AmbientDirector.Api.Services.Ai.MusicMcpTools>()
     .WithTools<AmbientDirector.Api.Services.Ai.SoundMcpTools>()
-    .WithTools<AmbientDirector.Api.Services.Ai.LibraryMcpTools>();
+    .WithTools<AmbientDirector.Api.Services.Ai.LibraryMcpTools>()
+    .WithTools<AmbientDirector.Api.Services.Ai.PartyMcpTools>()
+    .WithTools<AmbientDirector.Api.Services.Ai.EncounterMcpTools>()
+    .WithTools<AmbientDirector.Api.Services.Ai.BoardMcpTools>()
+    .WithTools<AmbientDirector.Api.Services.Ai.TvMcpTools>();
 
 // In-memory log buffer surfaced by the panel's Logs tab. Whitelist our own logs at Information and
 // default everything else (EF SQL, HttpClient request chatter, hosting) to Warning+, so the tab stays

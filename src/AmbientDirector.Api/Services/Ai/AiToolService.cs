@@ -1,4 +1,5 @@
 using AmbientDirector.Api.Contracts;
+using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services.Music;
 using AmbientDirector.Api.Validation;
@@ -16,6 +17,11 @@ public record ActiveSceneInfo(string? Id, DateTimeOffset? ActivatedAt);
 
 /// <summary>The running light-FX test (its FX id and the clamped window in seconds).</summary>
 public record LightFxTestInfo(string Testing, int Seconds);
+
+/// <summary>What the player-facing /tv display is currently showing, slimmed for AI-tool context: the live
+/// revision plus the pushed content (kind "image"/"board"/"encounter", its ref and label; all null when the
+/// display is cleared).</summary>
+public record TvStatusInfo(long Rev, string? Kind, string? Ref, string? Label);
 
 /// <summary>
 /// Shared tool layer over scenes, events, screens and light FX (plus read-only context and live control —
@@ -43,7 +49,11 @@ public sealed class AiToolService(
     ImageFileStorage images,
     EffectEngine effects,
     ISoundboardPlayer player,
-    SoundFileStorage soundFiles)
+    SoundFileStorage soundFiles,
+    PartyStore party,
+    EncounterStore encounters,
+    BoardStore boards,
+    TvState tvState)
 {
     // ---- Scenes ----
 
@@ -287,6 +297,246 @@ public sealed class AiToolService(
     // Mirrors GET /music/state: neutral playback state + which source produced it + the available sources.
     public Task<MusicStateDto> GetMusicStateAsync() => WithMusicAsync(r => r.GetStateAsync(null));
 
+    // ---- Party (players + table-level counters) ----
+
+    // Mirrors GET /party/list: the whole live table — players, table-level counters, and the bestiary enemies.
+    public async Task<PartyDto> ListPartyAsync() =>
+        new(await party.GetMembersAsync(), await party.GetTableCountersAsync(), await party.GetEnemiesAsync());
+
+    // Mirrors PUT /party/players/{id}: stamp the id, validate, upsert, drop a replaced portrait, and refresh a
+    // shown live roster (a board with a party/enemies element, or a shown encounter whose hero panel resolves
+    // live from the party).
+    public async Task<PartyMember> UpsertPlayerAsync(PartyMember member, string id)
+    {
+        member.Id = id;
+        PartyValidation.Validate(member);
+        var oldPortrait = (await party.GetMemberAsync(id))?.Portrait;
+        await party.UpsertMemberAsync(member);
+        if (!string.IsNullOrEmpty(oldPortrait) && !string.Equals(oldPortrait, member.Portrait, StringComparison.OrdinalIgnoreCase))
+            images.Delete(oldPortrait);
+        await TouchIfPartyShownAsync(heroChange: true);
+        return member;
+    }
+
+    // Mirrors DELETE /party/players/{id}: release the portrait, refresh a shown live roster. False if it didn't exist.
+    public async Task<bool> DeletePlayerAsync(string id)
+    {
+        var portrait = (await party.GetMemberAsync(id))?.Portrait;
+        if (!await party.DeleteMemberAsync(id)) return false;
+        images.Delete(portrait);
+        await TouchIfPartyShownAsync(heroChange: true);
+        return true;
+    }
+
+    // Mirrors PUT /party/counters: validate+normalize the table-level counter list in place, save, refresh the TV.
+    public async Task<List<PartyCounter>> SaveTableCountersAsync(List<PartyCounter> counters)
+    {
+        counters ??= [];
+        PartyValidation.ValidateCounters(counters);
+        await party.SaveTableCountersAsync(counters);
+        await TouchIfPartyShownAsync(heroChange: true);
+        return counters;
+    }
+
+    // Mirrors /party/players/{id}/adjust: bump one counter by delta OR set it to value (exactly one), clamped.
+    public async Task<PartyMember> AdjustPlayerCounterAsync(string id, string counter, int? delta, int? value)
+    {
+        AdjustGuard(counter, delta, value);
+        var updated = await party.AdjustMemberCounterAsync(id, counter.Trim(), delta, value);
+        await TouchIfPartyShownAsync(heroChange: true);
+        return updated;
+    }
+
+    // Mirrors /party/counters/adjust: bump/set one table-level counter (Fear etc.), clamped.
+    public async Task<List<PartyCounter>> AdjustTableCounterAsync(string counter, int? delta, int? value)
+    {
+        AdjustGuard(counter, delta, value);
+        var updated = await party.AdjustTableCounterAsync(counter.Trim(), delta, value);
+        await TouchIfPartyShownAsync(heroChange: true);
+        return updated;
+    }
+
+    // ---- Bestiary enemies (reusable statblocks) ----
+
+    // Mirrors PUT /party/enemies/{id}: the enemy twin of UpsertPlayerAsync. An enemy-template edit does NOT
+    // touch a shown encounter (its instances are add-time snapshots — issue #122), so heroChange stays false;
+    // it still refreshes a shown board with an enemies element (which renders the bestiary).
+    public async Task<Enemy> UpsertEnemyAsync(Enemy enemy, string id)
+    {
+        enemy.Id = id;
+        PartyValidation.Validate(enemy);
+        var oldPortrait = (await party.GetEnemyAsync(id))?.Portrait;
+        await party.UpsertEnemyAsync(enemy);
+        if (!string.IsNullOrEmpty(oldPortrait) && !string.Equals(oldPortrait, enemy.Portrait, StringComparison.OrdinalIgnoreCase))
+            images.Delete(oldPortrait);
+        await TouchIfPartyShownAsync(heroChange: false);
+        return enemy;
+    }
+
+    // Mirrors DELETE /party/enemies/{id}: release the template's portrait. False if it didn't exist.
+    public async Task<bool> DeleteEnemyAsync(string id)
+    {
+        var portrait = (await party.GetEnemyAsync(id))?.Portrait;
+        if (!await party.DeleteEnemyAsync(id)) return false;
+        images.Delete(portrait);
+        await TouchIfPartyShownAsync(heroChange: false);
+        return true;
+    }
+
+    // Mirrors /party/enemies/{id}/adjust: bump/set one of a bestiary template's base counters, clamped.
+    public async Task<Enemy> AdjustEnemyCounterAsync(string id, string counter, int? delta, int? value)
+    {
+        AdjustGuard(counter, delta, value);
+        var updated = await party.AdjustEnemyCounterAsync(id, counter.Trim(), delta, value);
+        await TouchIfPartyShownAsync(heroChange: false);
+        return updated;
+    }
+
+    // ---- Encounters (prepped fights: heroes + enemy instances + background + optional scene/event) ----
+
+    public Task<List<Encounter>> ListEncountersAsync() => encounters.GetAllAsync();
+
+    // There is deliberately no GET /encounters/{id} endpoint; read straight from the store (the GetScreen idiom).
+    public Task<Encounter?> GetEncounterAsync(string id) => encounters.GetAsync(id);
+
+    // Mirrors PUT /encounters/{id}: stamp the id, validate, upsert, drop a replaced background image, and
+    // refresh the TV if this encounter is the one being shown. Instance portraits are template snapshots (owned
+    // in the bestiary), so they are deliberately not released here.
+    public async Task<Encounter> UpsertEncounterAsync(Encounter encounter, string id)
+    {
+        encounter.Id = id;
+        EncounterValidation.Validate(encounter);
+        var oldBackground = (await encounters.GetAsync(id))?.BackgroundImage;
+        await encounters.UpsertAsync(encounter);
+        if (!string.IsNullOrEmpty(oldBackground) && !string.Equals(oldBackground, encounter.BackgroundImage, StringComparison.OrdinalIgnoreCase))
+            images.Delete(oldBackground);
+        tvState.TouchEncounter(id);
+        return encounter;
+    }
+
+    // Mirrors DELETE /encounters/{id}: release the owned background, then clear+scrub the display if it was showing.
+    public async Task<bool> DeleteEncounterAsync(string id)
+    {
+        var background = (await encounters.GetAsync(id))?.BackgroundImage;
+        if (!await encounters.DeleteAsync(id)) return false;
+        images.Delete(background);
+        tvState.ForgetEncounter(id);
+        return true;
+    }
+
+    // Mirrors /encounters/{id}/run: activate the encounter's scene + event best-effort (each reports
+    // ok/skipped/notFound/partial/error but never blocks the show), then push the heroes-left / enemies-right
+    // view to the TV. Throws NotFoundException if the encounter id is unknown.
+    public async Task<object> RunEncounterAsync(string id)
+    {
+        var encounter = await encounters.GetAsync(id)
+            ?? throw new NotFoundException("error.encounter.notFound", id);
+        var sceneStatus = await RunSceneBestEffortAsync(encounter.ActivateSceneId);
+        var eventStatus = await RunEventBestEffortAsync(encounter.ActivateEventId);
+        var rev = tvState.ShowEncounter(encounter.Id, encounter.Name);
+        return new { rev, encounter = encounter.Id, scene = sceneStatus, @event = eventStatus };
+    }
+
+    // Mirrors /encounters/{id}/enemies/{instanceId}/adjust: bump/set one enemy instance's live counter, clamped.
+    public async Task<Encounter> AdjustEncounterEnemyAsync(string id, string instanceId, string counter, int? delta, int? value)
+    {
+        AdjustGuard(counter, delta, value);
+        var updated = await encounters.AdjustEnemyInstanceAsync(id, instanceId, counter.Trim(), delta, value);
+        tvState.TouchEncounter(id);
+        return updated;
+    }
+
+    // Mirrors /encounters/{id}/reset: reset every enemy instance's counters to its statblock's starting values.
+    public async Task<Encounter> ResetEncounterAsync(string id)
+    {
+        var updated = await encounters.ResetEnemiesAsync(id);
+        tvState.TouchEncounter(id);
+        return updated;
+    }
+
+    // ---- Boards (composable player-facing TV layouts) ----
+
+    public Task<List<Board>> ListBoardsAsync() => boards.GetAllAsync();
+
+    // There is deliberately no GET /boards/{id} endpoint; read straight from the store (the GetScreen idiom).
+    public Task<Board?> GetBoardAsync(string id) => boards.GetAsync(id);
+
+    // Mirrors PUT /boards/{id}: validate, upsert, diff the owned file set to drop images no longer referenced,
+    // and refresh the TV if this board is the one being shown.
+    public async Task<Board> UpsertBoardAsync(Board board, string id)
+    {
+        board.Id = id;
+        BoardValidation.Validate(board);
+        var oldFiles = (await boards.GetAsync(id))?.ReferencedFiles()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        await boards.UpsertAsync(board);
+        var newFiles = board.ReferencedFiles().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var stale in oldFiles.Where(f => !newFiles.Contains(f)))
+            images.Delete(stale);
+        tvState.TouchBoard(id);
+        return board;
+    }
+
+    // Mirrors DELETE /boards/{id}: release every owned file, then clear+scrub the display if it was showing.
+    public async Task<bool> DeleteBoardAsync(string id)
+    {
+        var files = (await boards.GetAsync(id))?.ReferencedFiles().ToList();
+        if (!await boards.DeleteAsync(id)) return false;
+        foreach (var file in files ?? [])
+            images.Delete(file);
+        tvState.ForgetBoard(id);
+        return true;
+    }
+
+    // ---- TV (the player-facing display) ----
+
+    // Mirrors GET|POST /tv/show: push EXACTLY ONE of a stored image name / a board id / an encounter id (with an
+    // optional label) to the display. Validates the target exists exactly like the endpoint; returns the new rev.
+    public async Task<object> ShowOnTvAsync(string? image, string? board, string? encounter, string? label)
+    {
+        var imageName = image?.Trim();
+        var boardId = board?.Trim();
+        var encounterId = encounter?.Trim();
+        var targets = (string.IsNullOrEmpty(imageName) ? 0 : 1)
+                      + (string.IsNullOrEmpty(boardId) ? 0 : 1)
+                      + (string.IsNullOrEmpty(encounterId) ? 0 : 1);
+        if (targets != 1) // none, or more than one
+            throw new ValidationException("error.tv.showTarget");
+
+        var trimmedLabel = string.IsNullOrWhiteSpace(label) ? null : label.Trim();
+
+        if (!string.IsNullOrEmpty(imageName))
+        {
+            // The name is traversal-guarded inside FullPathForName and must exist on disk (like the endpoint).
+            var full = images.FullPathForName(imageName);
+            if (full is null || !File.Exists(full))
+                throw new ValidationException("error.tv.imageNotFound", imageName);
+            return new { rev = tvState.Show("image", imageName, trimmedLabel), image = imageName };
+        }
+
+        if (!string.IsNullOrEmpty(boardId))
+        {
+            var b = await boards.GetAsync(boardId)
+                ?? throw new ValidationException("error.tv.boardNotFound", boardId);
+            // Default the display label to the board's own name; store the canonical DB-cased id.
+            return new { rev = tvState.Show("board", b.Id, trimmedLabel ?? b.Name), board = b.Id };
+        }
+
+        var enc = await encounters.GetAsync(encounterId!)
+            ?? throw new ValidationException("error.tv.encounterNotFound", encounterId!);
+        return new { rev = tvState.ShowEncounter(enc.Id, trimmedLabel ?? enc.Name), encounter = enc.Id };
+    }
+
+    // Mirrors GET|POST /tv/clear.
+    public object ClearTv() => new { rev = tvState.Clear(), cleared = true };
+
+    // Mirrors GET /tv/state, slimmed for the model: the live rev + what's currently pushed (all null if cleared).
+    public TvStatusInfo GetTvState()
+    {
+        var (rev, content) = tvState.Snapshot();
+        return new TvStatusInfo(rev, content?.Kind, content?.Ref, content?.Label);
+    }
+
     // ---- Context / control ----
 
     public IReadOnlyList<LightInfo> ListLights() =>
@@ -342,5 +592,75 @@ public sealed class AiToolService(
     {
         using var scope = scopeFactory.CreateScope();
         return await op(scope.ServiceProvider.GetRequiredService<MusicRouter>());
+    }
+
+    // The endpoints' adjust guard, shared by every /adjust op (see PartyEndpoints): a counter label is required
+    // and EXACTLY ONE of delta (bump) / value (set) must be given. Throws the same ValidationExceptions (400) the
+    // HTTP routes do — ValidationException is an ArgumentException, so both AI surfaces surface it as a tool error.
+    private static void AdjustGuard(string? counter, int? delta, int? value)
+    {
+        if (string.IsNullOrWhiteSpace(counter))
+            throw new ValidationException("error.party.adjustCounter");
+        if (delta.HasValue == value.HasValue) // both, or neither
+            throw new ValidationException("error.party.adjustTarget");
+    }
+
+    // Mirror of PartyEndpoints.TouchIfPartyShownAsync: a party change is instantly visible on the TV IF the
+    // currently-shown content renders a live roster — a board with a party/enemies element, or (for a hero /
+    // table-counter change) a shown encounter whose hero panel + Fear strip resolve live from the party. Bumps
+    // the rev so an open display re-fetches within one poll; otherwise no pointless re-render.
+    private async Task TouchIfPartyShownAsync(bool heroChange)
+    {
+        if (tvState.Current is not { } current) return;
+        if (current.Kind == "board")
+        {
+            var board = await boards.GetAsync(current.Ref);
+            if (board is not null && board.Elements.Any(e => e.Kind is "party" or "enemies"))
+                tvState.TouchBoard(board.Id);
+        }
+        else if (heroChange && current.Kind == "encounter")
+        {
+            tvState.TouchEncounter(current.Ref);
+        }
+    }
+
+    // Activate a configured scene best-effort inside a fresh scope for the scoped SceneActivator (issue #122
+    // encounter-run semantics, mirroring EncounterEndpoints): "skipped" (none set) / "notFound" (since deleted) /
+    // "ok" / "partial" / "error:<code>". Never rethrows — running an encounter still shows on the TV even if the
+    // ambiance failed.
+    private async Task<string> RunSceneBestEffortAsync(string? sceneId)
+    {
+        if (string.IsNullOrWhiteSpace(sceneId)) return "skipped";
+        var scene = await scenes.GetAsync(sceneId);
+        if (scene is null) return "notFound";
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var activator = scope.ServiceProvider.GetRequiredService<SceneActivator>();
+            var result = await activator.ActivateAsync(scene);
+            return result.FullySucceeded ? "ok" : "partial";
+        }
+        catch (Exception ex)
+        {
+            return "error:" + ErrorClassifier.DisplayCodeFor(ex);
+        }
+    }
+
+    private async Task<string> RunEventBestEffortAsync(string? eventId)
+    {
+        if (string.IsNullOrWhiteSpace(eventId)) return "skipped";
+        var evt = await events.GetAsync(eventId);
+        if (evt is null) return "notFound";
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var activator = scope.ServiceProvider.GetRequiredService<EventActivator>();
+            var result = await activator.TriggerAsync(evt);
+            return result.FullySucceeded ? "ok" : "partial";
+        }
+        catch (Exception ex)
+        {
+            return "error:" + ErrorClassifier.DisplayCodeFor(ex);
+        }
     }
 }

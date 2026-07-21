@@ -159,8 +159,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   upsert diffs the old vs new set and deletes dropped files, delete releases them all. Upserting the
   currently-shown board calls `TvState.TouchBoard` (rev bump → an open TV re-renders within one 2 s poll —
   the codebase's real-time idiom, no SSE); deleting it calls `TvState.ForgetBoard` (clears the display and
-  scrubs it from Recent, like the sound-delete scrub). Board AI ops are deferred to #89 (adding them to only
-  one AI surface would fail `AiToolSurfaceParityTests`). The panel side is the **Boards** tab (pl "Tablice"):
+  scrubs it from Recent, like the sound-delete scrub). Board AI ops (`list_boards`/`get_board`/`upsert_board`/
+  `delete_board`) live on the shared `AiToolService` façade (#89, both AI surfaces). The panel side is the **Boards** tab (pl "Tablice"):
   `/boards` list + `/boards/{id}` editor (numeric controls + a live 16:9 preview; on-canvas drag/resize is a
   follow-up), with [`BoardCanvas.razor`](src/AmbientDirector.Ui/Components/BoardCanvas.razor) as the one
   shared renderer (TV, editor preview, list cards, remote rail — text sizes in `cqh` container units so it
@@ -183,7 +183,8 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   so an open TV re-fetches within one 2 s poll (no pointless bumps otherwise). The TV gate is extended for
   this: `/tv/content/board/{name}` also serves a **current member's portrait** key-free, but **only while a
   party-element board is shown** (membership checked before any disk access, like the board-files check).
-  Party AI ops are deferred to #89 (adding them to only one AI surface would fail `AiToolSurfaceParityTests`).
+  Party/bestiary AI ops (`list_party`, player + `save_table_counters` + enemy CRUD, and the `adjust_*` commands)
+  live on the shared `AiToolService` façade (#89, both AI surfaces), with the same `TouchIfPartyShown` rev-bump.
   **Panel side**: the **Party** tab (pl "Drużyna") is the fast, touch-first mid-session tracker at `/party` —
   table counters up top and a card per player with ± step buttons on every counter (each tap hits `/party/.../adjust`;
   a shown party board updates live) — plus a per-player editor at `/party/{id}` (name, **ArtField** portrait, order,
@@ -321,25 +322,39 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   AI **tool façade** (a singleton) behind both AI surfaces (MCP + the assistant): full CRUD + live control
   over scenes, events, **screens** and Light FX; **Spotify music transport** (`play_music`/`pause_music`/
   `resume_music`/`next_track`/`previous_track`/`set_music_volume`/`set_music_shuffle`/`set_music_repeat`);
-  **soundboard control** (`play_sound`/`stop_sound`/`stop_all_sounds`/`update_sound`); plus read-only context
-  and state (`list_lights`, `list_sounds`, `list_spotify_playlists`, `search_spotify_tracks`, `reset_lights`,
-  `get_lights_status`, `get_music_state`, `get_sounds_state`, `get_event_state`) — **43 ops total**. Setup/
+  **soundboard control** (`play_sound`/`stop_sound`/`stop_all_sounds`/`update_sound`); the **live table**
+  (party players, table-level counters, and the bestiary — `list_party`, `upsert_player`/`delete_player`,
+  `save_table_counters`, `adjust_player_counter`/`adjust_table_counter`, `upsert_enemy`/`delete_enemy`/
+  `adjust_enemy_counter`); **encounters** (`list_encounters`/`get_encounter`/`upsert_encounter`/
+  `delete_encounter`/`run_encounter`/`adjust_encounter_enemy`/`reset_encounter`); **boards** (`list_boards`/
+  `get_board`/`upsert_board`/`delete_board`); the **player-facing TV** (`show_on_tv`/`clear_tv`/`get_tv_state`);
+  plus read-only context and state (`list_lights`, `list_sounds`, `list_spotify_playlists`,
+  `search_spotify_tracks`, `reset_lights`, `get_lights_status`, `get_music_state`, `get_sounds_state`,
+  `get_event_state`) — **66 ops total**. Setup/
   secrets/logs/diagnostics stay deliberately excluded. It reuses the exact HTTP paths' machinery: the
-  `Validation/*` guards, the stores, and Scene/Event/Screen image cleanup (capture old `Image`, upsert,
-  `ImageFileStorage.Delete` on replace/delete). Because `SceneActivator`/`EventActivator`/`ILightService`/
+  `Validation/*` guards, the stores, and Scene/Event/Screen/Board/Party/Encounter image cleanup (capture old
+  `Image`/`Portrait`/`BackgroundImage` or the board file set, upsert, `ImageFileStorage.Delete` on
+  replace/delete), **and the same `TvState` side effects** the endpoints emit — party/board/encounter mutations
+  call the mirror of `TouchIfPartyShown` / `TouchBoard`/`TouchEncounter` / `ForgetBoard`/`ForgetEncounter`, so an
+  open TV re-renders identically whether the change came over HTTP or a tool call. Because
+  `SceneActivator`/`EventActivator`/`ILightService`/
   `SpotifyClient` are **scoped**, every op that touches them does `using var scope = scopeFactory.CreateScope()`
   and resolves per call (the `EventTimelineRunner`/`LightFxTester` pattern; music/lights-status use a
-  `WithSpotifyAsync`/scoped `ILightService` helper), while the singleton `SoundboardPlayer` needs no scope;
-  `AiJson` gives it a `JsonSerializerDefaults.Web` options so tool JSON matches the wire exactly. The FX
+  `WithSpotifyAsync`/scoped `ILightService` helper; `run_encounter` runs the scene+event best-effort in their own
+  scopes, like the endpoint), while the singleton `SoundboardPlayer`/`PartyStore`/`EncounterStore`/`BoardStore`/
+  `TvState` need no scope; `AiJson` gives it a `JsonSerializerDefaults.Web` options so tool JSON matches the wire
+  exactly. The FX
   detach-on-delete logic is factored into `LightFxDetacher` ([LightFxDetacher.cs](src/AmbientDirector.Api/Services/LightFxDetacher.cs))
   so the endpoint and the façade delete FX identically. `update_sound` deliberately edits only name/category/
   volume/loop (never the tile art or file); there is deliberately **no** `delete_sound` op (it would have to
-  replicate the endpoint's scene/event/timeline scrub).
+  replicate the endpoint's scene/event/timeline scrub). Enemy AI ops act on the **bestiary statblock's base
+  stats** (`adjust_enemy_counter`); live per-fight tracking is `adjust_encounter_enemy` on an encounter instance.
 - **MCP server** — `ModelContextProtocol.AspNetCore` (stateless streamable HTTP) mapped at **`/mcp`**
   (`AddMcpServer().WithHttpTransport(o => o.Stateless = true)` + `MapMcp("/mcp")` in
-  [Program.cs](src/AmbientDirector.Api/Program.cs), before `MapFallbackToFile`). The 43 tools
+  [Program.cs](src/AmbientDirector.Api/Program.cs), before `MapFallbackToFile`). The 66 tools
   ([McpTools.cs](src/AmbientDirector.Api/Services/Ai/McpTools.cs)) are thin `[McpServerTool]` adapters over
-  `AiToolService`, grouped into tool-type classes by domain (scene/event/screen/lightFx/music/sound/library),
+  `AiToolService`, grouped into tool-type classes by domain
+  (scene/event/screen/lightFx/music/sound/library/party/encounter/board/tv),
   each registered with a `.WithTools<…>()` call in Program.cs (upserts take the typed entity so schemas
   auto-generate from the models). Point Claude Code / Claude Desktop here; it is behind the optional API-key
   gate like the rest of the API. **The MCP surface and the assistant's `AssistantTools.Definitions` must stay

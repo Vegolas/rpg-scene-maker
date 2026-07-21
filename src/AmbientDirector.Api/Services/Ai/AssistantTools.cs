@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using System.Text.Json;
+using AmbientDirector.Api.Errors;
 using AmbientDirector.Api.Models;
 using AmbientDirector.Api.Services;
 using AmbientDirector.Api.Services.Ai.Providers;
@@ -55,6 +56,43 @@ public sealed class AssistantTools(AiToolService tools)
         "URI or open.spotify.com link and label is required; light-reset and break take no ref (break is a " +
         "layout line break whose label is an optional section heading). A screen owns no light/music/sound " +
         "state — it only references existing entities.";
+
+    private const string PlayerShape =
+        "The full party player entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg " +
+        "wins), name (required), optional portrait (a stored image file name from an /images upload), sortOrder " +
+        "(int roster order), and counters[] — generic trackers, each {label, value, max, style}: label is unique " +
+        "within the player and is the case-insensitive adjust key; max is null (unbounded) or 1-999; style is " +
+        "null|\"pips\"|\"number\" (\"pips\" needs a small max ≤24); up to 8 counters. The Daggerheart " +
+        "HP/Stress/Armor/Hope loadout is just a preset, not built in.";
+
+    private const string EnemyShape =
+        "The full bestiary enemy STATBLOCK as camelCase JSON — a reusable template, base stats only (no live " +
+        "tracking; per-fight HP lives on an encounter's enemy instance). Fields: id (a lowercase slug [a-z0-9-_]; " +
+        "the id arg wins), name (required), optional portrait (a stored image file name), sortOrder (int), and " +
+        "counters[] the base definitions ({label, value, max, style}, same rules as a player's).";
+
+    private const string CountersShape =
+        "An array of table-level counters, each a generic tracker {label, value, max, style}: label unique (the " +
+        "case-insensitive adjust key), max null or 1-999, style null|\"pips\"|\"number\" (\"pips\" needs a small " +
+        "max ≤24); up to 8. These are system-wide stats (like Fear) that belong to no single player.";
+
+    private const string EncounterShape =
+        "The full encounter entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg wins), " +
+        "name (required), sortOrder (int), heroIds[] (party player ids — empty means all current players), " +
+        "enemies[] the instances (each {instanceId (unique within the encounter), enemyId (the source bestiary " +
+        "statblock id), name, optional portrait, spotlight (bool boss highlight), hidden (bool held back), " +
+        "counters[] its own live {label,value,max,style} trackers seeded from the statblock}), optional " +
+        "backgroundImage (a stored image name), and optional activateSceneId / activateEventId (slugs run " +
+        "best-effort when the encounter runs).";
+
+    private const string BoardShape =
+        "The full board entity as camelCase JSON. Fields: id (a lowercase slug [a-z0-9-_]; the id arg wins), " +
+        "name (required), optional backgroundColor (#RRGGBB) and/or backgroundImage (a stored image name), and " +
+        "elements[] (up to 50). Each element has kind (image|text|party|enemies) and percent-of-stage geometry " +
+        "x/y (0-100), w/h (0.1-100); the list order IS the z-order (index 0 draws at the bottom). An image " +
+        "element needs image (a stored image name); a text element needs text (+ optional color #RRGGBB, size " +
+        "1-100, align left|center|right); party and enemies elements are geometry-only live placeholders that " +
+        "render the roster at display time (no content fields).";
 
     /// <summary>The tool definitions, matching the MCP tool names and the façade operations 1:1.</summary>
     public static IReadOnlyList<AiToolDefinition> Definitions { get; } =
@@ -190,6 +228,111 @@ public sealed class AssistantTools(AiToolService tools)
                 required: ["query"])),
         NoArgs("reset_lights", "Reset all lights to the configured default lighting state (the panel's reset-lights button). Errors if no default lighting has been set on the Settings page."),
         NoArgs("get_lights_status", "Get the live bulb state: normalized on/off, mode (colour/white), brightness, colour (RRGGBB hex) and white temperature, plus the raw Tuya/Hue payload for diagnostics. Errors if the light is unreachable."),
+
+        // Party (players + table-level counters)
+        NoArgs("list_party", "List the whole live table: players (name, optional portrait, generic counters), the table-level counters (system-wide stats like Fear), and the bestiary enemies (reusable statblocks). Counters are generic {label, value, max, style} — the Daggerheart loadout is just a preset."),
+        Tool2("upsert_player",
+            "Create or replace the party player at the given id (the id arg wins). Returns the stored player.",
+            "id", "Player id to save under: a lowercase slug [a-z0-9-_].",
+            "member", PlayerShape),
+        WithId("delete_player", "Delete the party player with this id (and its portrait). Returns true if it existed, false otherwise."),
+        new AiToolDefinition(
+            "save_table_counters",
+            "Replace the whole set of table-level counters (system-wide stats like Fear that belong to no single player). Returns the stored list.",
+            Schema(
+                new() { ["counters"] = PropArray(CountersShape) },
+                required: ["counters"])),
+        new AiToolDefinition(
+            "adjust_player_counter",
+            "Adjust ONE of a player's counters live (e.g. mark 2 damage), clamped into [0, max]. Pass EXACTLY ONE of delta (bump, may be negative) or value (set absolutely). counter is the counter's label (case-insensitive). Returns the updated player; errors if the player or counter is unknown.",
+            Schema(
+                new()
+                {
+                    ["id"] = Prop("string", "Player id: a lowercase slug [a-z0-9-_]."),
+                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. HP."),
+                    ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
+                    ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
+                },
+                required: ["id", "counter"])),
+        new AiToolDefinition(
+            "adjust_table_counter",
+            "Adjust ONE table-level counter live (e.g. +1 Fear), clamped into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's label (case-insensitive). Returns the updated table-counter list; errors if no counter matches the label.",
+            Schema(
+                new()
+                {
+                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. Fear."),
+                    ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
+                    ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
+                },
+                required: ["counter"])),
+
+        // Bestiary enemies (reusable statblocks)
+        Tool2("upsert_enemy",
+            "Create or replace a bestiary enemy statblock at the given id (the id arg wins). A statblock is base stats only — no live tracking. Returns the stored statblock.",
+            "id", "Enemy id to save under: a lowercase slug [a-z0-9-_].",
+            "enemy", EnemyShape),
+        WithId("delete_enemy", "Delete the bestiary enemy statblock with this id (and its portrait). Returns true if it existed, false otherwise. Encounter instances already made from it are unaffected (they are snapshots)."),
+        new AiToolDefinition(
+            "adjust_enemy_counter",
+            "Adjust ONE of a bestiary enemy statblock's BASE counters, clamped into [0, max]. This edits the template's starting values, NOT a live fight (use adjust_encounter_enemy for that). Pass EXACTLY ONE of delta or value; counter is the label (case-insensitive). Returns the updated statblock; errors if the enemy or counter is unknown.",
+            Schema(
+                new()
+                {
+                    ["id"] = Prop("string", "Enemy id: a lowercase slug [a-z0-9-_]."),
+                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. HP."),
+                    ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
+                    ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
+                },
+                required: ["id", "counter"])),
+
+        // Encounters (prepped fights)
+        NoArgs("list_encounters", "List every saved encounter (full entities). An encounter is a prepped fight: heroIds (party player ids; empty = all players), enemy instances (each a live copy of a bestiary statblock with its own counters + per-instance spotlight/hidden flags), an optional background image, and optional scene/event ids activated when it runs."),
+        WithId("get_encounter", "Get one encounter by id, or null if none has that id."),
+        Tool2("upsert_encounter",
+            "Create or replace the encounter at the given id (the id arg wins). Returns the stored encounter.",
+            "id", "Encounter id to save under: a lowercase slug [a-z0-9-_].",
+            "encounter", EncounterShape),
+        WithId("delete_encounter", "Delete the encounter with this id (and its owned background image). Clears the /tv display if this encounter was showing. Returns true if it existed, false otherwise."),
+        WithId("run_encounter", "Run the encounter NOW: activate its configured scene and event best-effort (each reports ok/skipped/notFound/partial/error but never blocks) and push its heroes-left / enemies-right view to the /tv display. Returns { rev, encounter, scene, event }. Errors if the encounter id is unknown."),
+        new AiToolDefinition(
+            "adjust_encounter_enemy",
+            "Adjust ONE counter of ONE enemy instance in a prepped/running fight (e.g. mark 3 damage on the boss), clamped into [0, max]. Pass EXACTLY ONE of delta or value; counter is the counter's label (case-insensitive). Returns the updated encounter; errors if the encounter, instance or counter is unknown.",
+            Schema(
+                new()
+                {
+                    ["id"] = Prop("string", "Encounter id: a lowercase slug [a-z0-9-_]."),
+                    ["instanceId"] = Prop("string", "The enemy instance's instanceId within that encounter."),
+                    ["counter"] = Prop("string", "The counter's label (case-insensitive), e.g. HP."),
+                    ["delta"] = Prop("integer", "Bump the current value by this (may be negative). Give delta OR value, not both."),
+                    ["value"] = Prop("integer", "Set the value absolutely. Give value OR delta, not both."),
+                },
+                required: ["id", "instanceId", "counter"])),
+        WithId("reset_encounter", "Reset every enemy instance's counters to its statblock's starting values (before re-running the same fight). Returns the updated encounter. Errors if the encounter id is unknown."),
+
+        // Boards (composable player-facing TV layouts)
+        NoArgs("list_boards", "List every saved board (full entities). A board is a 16:9 player-facing TV layout: a background colour or image plus positioned elements (image/text or a live party/enemies roster), all in percent-of-stage coordinates."),
+        WithId("get_board", "Get one board by id, or null if none has that id."),
+        Tool2("upsert_board",
+            "Create or replace the board at the given id (the id arg wins). Returns the stored board.",
+            "id", "Board id to save under: a lowercase slug [a-z0-9-_].",
+            "board", BoardShape),
+        WithId("delete_board", "Delete the board with this id (and its owned images). Clears the /tv display if this board was showing. Returns true if it existed, false otherwise."),
+
+        // TV (the player-facing display)
+        new AiToolDefinition(
+            "show_on_tv",
+            "Push content to the player-facing /tv display. Pass EXACTLY ONE of image (a stored image name — a handout/map), board (a board id from list_boards), or encounter (an encounter id from list_encounters — shows its heroes-left / enemies-right view). Optional label overrides the caption. Returns the new display rev. Errors if none / more than one target is given, or the target doesn't exist.",
+            Schema(
+                new()
+                {
+                    ["image"] = Prop("string", "A stored image file name to show; omit unless showing an image."),
+                    ["board"] = Prop("string", "A board id to show; omit unless showing a board."),
+                    ["encounter"] = Prop("string", "An encounter id to show; omit unless showing an encounter."),
+                    ["label"] = Prop("string", "Optional caption; defaults to the board's/encounter's name."),
+                },
+                required: [])),
+        NoArgs("clear_tv", "Clear the player-facing /tv display (nothing shown). Returns the new display rev."),
+        NoArgs("get_tv_state", "Get what the /tv display is currently showing: the live rev plus the pushed content's kind (image|board|encounter), its ref (image name or entity id) and label — all null when the display is cleared."),
     ];
 
     // ---- Dispatch ----
@@ -256,13 +399,49 @@ public sealed class AssistantTools(AiToolService tools)
                 "reset_lights" => await ResetAsync(),
                 "get_lights_status" => await tools.GetLightsStatusAsync(),
 
+                "list_party" => await tools.ListPartyAsync(),
+                "upsert_player" => await tools.UpsertPlayerAsync(Entity<PartyMember>(input, "member"), Id(input)),
+                "delete_player" => await tools.DeletePlayerAsync(Id(input)),
+                "save_table_counters" => await tools.SaveTableCountersAsync(Entity<List<PartyCounter>>(input, "counters")),
+                "adjust_player_counter" => await tools.AdjustPlayerCounterAsync(
+                    Id(input), Str(input, "counter"), OptInt(input, "delta"), OptInt(input, "value")),
+                "adjust_table_counter" => await tools.AdjustTableCounterAsync(
+                    Str(input, "counter"), OptInt(input, "delta"), OptInt(input, "value")),
+
+                "upsert_enemy" => await tools.UpsertEnemyAsync(Entity<Enemy>(input, "enemy"), Id(input)),
+                "delete_enemy" => await tools.DeleteEnemyAsync(Id(input)),
+                "adjust_enemy_counter" => await tools.AdjustEnemyCounterAsync(
+                    Id(input), Str(input, "counter"), OptInt(input, "delta"), OptInt(input, "value")),
+
+                "list_encounters" => await tools.ListEncountersAsync(),
+                "get_encounter" => await tools.GetEncounterAsync(Id(input)),
+                "upsert_encounter" => await tools.UpsertEncounterAsync(Entity<Encounter>(input, "encounter"), Id(input)),
+                "delete_encounter" => await tools.DeleteEncounterAsync(Id(input)),
+                "run_encounter" => await tools.RunEncounterAsync(Id(input)),
+                "adjust_encounter_enemy" => await tools.AdjustEncounterEnemyAsync(
+                    Id(input), Str(input, "instanceId"), Str(input, "counter"), OptInt(input, "delta"), OptInt(input, "value")),
+                "reset_encounter" => await tools.ResetEncounterAsync(Id(input)),
+
+                "list_boards" => await tools.ListBoardsAsync(),
+                "get_board" => await tools.GetBoardAsync(Id(input)),
+                "upsert_board" => await tools.UpsertBoardAsync(Entity<Board>(input, "board"), Id(input)),
+                "delete_board" => await tools.DeleteBoardAsync(Id(input)),
+
+                "show_on_tv" => await tools.ShowOnTvAsync(
+                    OptStr(input, "image"), OptStr(input, "board"), OptStr(input, "encounter"), OptStr(input, "label")),
+                "clear_tv" => tools.ClearTv(),
+                "get_tv_state" => tools.GetTvState(),
+
                 _ => throw new ArgumentException($"Unknown tool '{name}'."),
             };
             return (JsonSerializer.Serialize(result, AiJson.Options), false);
         }
-        // The same failure modes the HTTP endpoints raise: bad input/validation, provider errors, unreachable
-        // hardware/Spotify. Surface the message to the model as an error tool-result so it can retry/correct.
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+        // The same failure modes the HTTP endpoints raise: bad input/validation (ValidationException is an
+        // ArgumentException), unknown entity/counter (NotFoundException — the party/encounter adjust ops surface
+        // it), not-configured (NotConfiguredException is an InvalidOperationException), provider errors,
+        // unreachable hardware/Spotify. Surface the message to the model as an error tool-result so it can
+        // retry/correct instead of the run crashing.
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotFoundException
             or SpotifyException or HueException or SoundboardException
             or SocketException or IOException or TimeoutException
             or HttpRequestException or TaskCanceledException && ct.IsCancellationRequested == false)
@@ -348,4 +527,10 @@ public sealed class AssistantTools(AiToolService tools)
 
     private static JsonElement Prop(string type, string description) =>
         JsonSerializer.SerializeToElement(new { type, description });
+
+    // An array-typed argument. Includes a minimal object `items` schema — Gemini/OpenAI reject a bare
+    // `type: array` with no items (the shape the model actually sends lives in the description, like the
+    // object-typed entity args above).
+    private static JsonElement PropArray(string description) =>
+        JsonSerializer.SerializeToElement(new { type = "array", description, items = new { type = "object" } });
 }
