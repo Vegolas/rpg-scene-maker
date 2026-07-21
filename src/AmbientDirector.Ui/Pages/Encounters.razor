@@ -83,7 +83,12 @@ else
                     }
                     <div class="btn-row" style="margin-top:var(--s-3)">
                         <button class="btn btn--small" @onclick="AddCounter"><Icon Name="add" /> @L["party.addCounter"]</button>
-                        <button class="btn btn--small" @onclick="AddFear">@L["party.preset.addFear"]</button>
+                        @* One "Add {counter}" button per active-system table preset (issue #129) — Daggerheart's
+                           Fear; a system with no table counters (D&D 5e) shows only the generic add button. *@
+                        @foreach (var preset in _system?.TableCounters ?? [])
+                        {
+                            <button class="btn btn--small" @onclick="() => AddTablePreset(preset)">@L.Format("party.addPreset", L[preset.LabelKey])</button>
+                        }
                         <button class="btn btn--primary btn--small" @onclick="SaveCounters" disabled="@_busy">@L["party.doneEditing"]</button>
                     </div>
                 </div>
@@ -307,6 +312,7 @@ else
     [SupplyParameterFromQuery] public string? Tab { get; set; }
 
     private PartyDto? _party;
+    private GameSystemDto? _system;
     private List<EncounterDto> _encounters = [];
     private bool _loaded;
     private bool _busy;
@@ -340,6 +346,7 @@ else
     {
         await Api.GetApiKeyAsync(); // cache the key so portrait image urls carry it
         _party = await Api.GetPartyAsync();
+        _system = (await Api.GetGameSystemsAsync())?.Active; // table-counter presets + the create-enemy seed
         _encounters = await Api.GetEncountersAsync();
         _loaded = true;
     }
@@ -377,12 +384,9 @@ else
 
     private void AddCounter() => _counters.Add(new CounterEdit { Label = "", Value = 0, Max = 6, Style = "pips" });
 
-    private void AddFear()
-    {
-        var fear = L["party.preset.fear"];
-        if (_counters.Any(c => string.Equals(c.Label, fear, StringComparison.OrdinalIgnoreCase))) return;
-        _counters.Add(new CounterEdit { Label = fear, Value = 0, Max = 12, Style = "pips" });
-    }
+    // Add one table-level preset from the active system (issue #129) — Daggerheart's Fear. CounterPresets stamps
+    // the semantic key + localized label and skips it if the key/label already exists (re-click never dupes).
+    private void AddTablePreset(CounterPresetDto preset) => CounterPresets.AddOne(_counters, preset, k => L[k]);
 
     private async Task SaveCounters()
     {
@@ -457,12 +461,11 @@ else
         try
         {
             var nextOrder = existing.Count > 0 ? _party!.Enemies.Max(e => e.SortOrder) + 1 : 0;
-            // UI-side Daggerheart enemy preset: HP/Stress both start fresh at 0 and are tracked upward.
-            var counters = new List<PartyCounterDto>
-            {
-                new(L["party.preset.hp"], 0, 6, "pips"),
-                new(L["party.preset.stress"], 0, 3, "pips"),
-            };
+            // Seed the new enemy with the active system's enemy preset loadout (issue #129); keys + localized
+            // labels are stamped by CounterPresets. No system (or one with no enemy presets) → no counters.
+            var seed = new List<CounterEdit>();
+            CounterPresets.Apply(seed, _system?.EnemyCounters ?? [], k => L[k]);
+            var counters = seed.Select(c => c.ToDto()).ToList();
             var (_, error) = await Api.SaveEnemyAsync(id, new PartyEnemyDto(id, _newEnemyName.Trim(), null, nextOrder, counters));
             if (error is not null) { Ui.ReportError(error); return; }
             await Vt.NavigateAsync($"party/enemies/{id}");

@@ -87,7 +87,12 @@ else
             }
             <div class="btn-row" style="margin-top:var(--s-4,1rem)">
                 <button class="btn btn--small" @onclick="AddCounter"><Icon Name="add" /> @L["party.addCounter"]</button>
-                <button class="btn btn--small" @onclick="AddDaggerheart">@L["partyEditor.addDaggerheart"]</button>
+                @* "Add {system} set" — the active game system's enemy preset loadout (issue #129); hidden when
+                   no system is chosen or it offers none, leaving only the generic add-counter button. *@
+                @if (_system?.EnemyCounters is { Count: > 0 })
+                {
+                    <button class="btn btn--small" @onclick="AddPresetSet">@L.Format("partyEditor.addSet", L[_system.NameKey])</button>
+                }
             </div>
         </div>
     </div>
@@ -107,6 +112,7 @@ else
     private bool _notFound;
     private bool _busy;
     private EnemyEdit _edit = new();
+    private GameSystemDto? _system;
 
     private (string, string)[] StyleOptions =>
         [("pips", L["partyEditor.stylePips"]), ("number", L["partyEditor.styleNumber"])];
@@ -115,6 +121,7 @@ else
     {
         await Api.GetApiKeyAsync(); // cache the key so the ArtField portrait thumbnail url carries it
         var party = await Api.GetPartyAsync();
+        _system = (await Api.GetGameSystemsAsync())?.Active; // drives the "Add {system} set" preset button
         var dto = party?.Enemies.FirstOrDefault(e => string.Equals(e.Id, Id, StringComparison.OrdinalIgnoreCase));
         if (dto is null)
         {
@@ -128,19 +135,10 @@ else
 
     private void AddCounter() => _edit.Counters.Add(new CounterEdit { Label = "", Value = 0, Max = 6, Style = "pips" });
 
-    // The Daggerheart enemy loadout — a UI-only preset (the API stores generic counters). HP/Stress both start
-    // fresh at 0 and are tracked upward (damage/stress marked). Skips labels that already exist (case-insensitive).
-    private void AddDaggerheart()
-    {
-        AddPreset(L["party.preset.hp"], 0, 6);
-        AddPreset(L["party.preset.stress"], 0, 3);
-    }
-
-    private void AddPreset(string label, int value, int max)
-    {
-        if (_edit.Counters.Any(c => string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase))) return;
-        _edit.Counters.Add(new CounterEdit { Label = label, Value = value, Max = max, Style = "pips" });
-    }
+    // Append the active system's enemy counter loadout (issue #129) — a UI-only convenience; the API still
+    // stores generic counters. CounterPresets stamps each counter's semantic key + localized label and skips
+    // any preset whose key/label already exists, so re-clicking never duplicates.
+    private void AddPresetSet() => CounterPresets.Apply(_edit.Counters, _system!.EnemyCounters, k => L[k]);
 
     private static void SetStyle(CounterEdit c, string style)
     {

@@ -175,6 +175,8 @@ builder.Services.AddSingleton<LightFxStore>();
 // class + its locale keys + one registration line here.
 builder.Services.AddSingleton<AmbientDirector.Api.Services.Systems.IGameSystem,
     AmbientDirector.Api.Services.Systems.DaggerheartSystem>();
+builder.Services.AddSingleton<AmbientDirector.Api.Services.Systems.IGameSystem,
+    AmbientDirector.Api.Services.Systems.Dnd5eSystem>();
 builder.Services.AddSingleton<AmbientDirector.Api.Services.Systems.GameSystemRegistry>();
 
 // Shareable content packs (issue #111): a per-kind share descriptor for every content type, a registry over

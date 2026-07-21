@@ -164,7 +164,10 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `/boards` list + `/boards/{id}` editor (numeric controls + a live 16:9 preview; on-canvas drag/resize is a
   follow-up), with [`BoardCanvas.razor`](src/AmbientDirector.Ui/Components/BoardCanvas.razor) as the one
   shared renderer (TV, editor preview, list cards, remote rail — text sizes in `cqh` container units so it
-  scales identically everywhere).
+  scales identically everywhere). **Enemy counters hide their max** (#129): the enemies element draws only the
+  filled pip marks (never the empty remainder) and a bare value (never `value/max`), so the player-facing TV
+  never reveals how close an enemy is to defeat; player/table counters keep the full track, and the GM's
+  Encounters tracker is unaffected.
 - **`PartyStore` / `PartyEndpoints`** — the **party tracker** (#88, Phase 3): live table stats on the TV.
   The **players** domain is `PartyMember` ([PartyMember.cs](src/AmbientDirector.Api/Models/PartyMember.cs);
   named `PartyMember`, not `Player`, to dodge the audio `…Player` collision — the wire/route vocabulary is
@@ -265,8 +268,9 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   `TvContent` kind and no EF schema change. The panel side is `PdfPagePicker.razor`, opened from `ArtField` and
   the TV remote.
 - **`IGameSystem` / `GameSystemRegistry` / `SystemEndpoints`** — the pluggable **RPG game-system contract**
-  (#127, design spec: [docs/GAME-SYSTEMS.md](docs/GAME-SYSTEMS.md) — read it before touching this layer;
-  phase 2 render presentation is done (#128), phase 3 is #129). An [`IGameSystem`](src/AmbientDirector.Api/Services/Systems/IGameSystem.cs) is a
+  (design spec: [docs/GAME-SYSTEMS.md](docs/GAME-SYSTEMS.md) — read it before touching this layer;
+  **all three phases done**: #127 contract + selection + keys, #128 render presentation, #129 presets +
+  quickbar + the D&D 5e sample). An [`IGameSystem`](src/AmbientDirector.Api/Services/Systems/IGameSystem.cs) is a
   data-only DI singleton (id, `NameKey` i18n key, member/enemy/table `CounterPreset`s with curated
   `GameSystemGlyphs` names, a `Quickbar` of table-counter keys, a `SpotlightLabel` TV literal) discovered via
   `GameSystemRegistry` (the `IEnumerable<IImageSearchSource>` idiom; unique-slug-id asserted at startup).
@@ -289,6 +293,16 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   the member/enemy/table scope), the panel in `PartyRender.ToRenderModel` from `GameSystemsDto.Active` (fetched by
   the Boards/BoardEditor/TvRemote pages) — so `BoardCanvas` is system-agnostic (its pip glyph SVGs + `_party.scss`
   classes are keyed by curated glyph names, no label matching) and a Polish table themes like an English one.
+  **Presets + quickbar + sample (phase 3, #129)**: the player/enemy editors and the Encounters table-counter
+  editor + create-enemy seed apply the active system's presets (`MemberCounters`/`EnemyCounters`/`TableCounters`)
+  via the shared `CounterPresets` helper (stamps `Key` + localized label, skips existing key/label — no system →
+  only the generic "Add counter"); `QuickControls` renders a −/value/+ chip per `Quickbar` key present in the
+  table counters, on **every** viewport (mid-session reachability), polling `/party/list` in its 5 s timer only
+  while a quickbar system is active and adjusting by key; [`Dnd5eSystem`](src/AmbientDirector.Api/Services/Systems/Dnd5eSystem.cs)
+  is the deliberately minimal copy-me sample (number HP/AC, no table counters, omits `Quickbar`/`SpotlightLabel`);
+  and `GameSystemContractTests` reflect over **every** registered system to enforce the contract (slug ids,
+  per-scope unique slug keys, valid styles, pips max 1–24, glyphs ∈ `GameSystemGlyphs.Known`, quickbar ⊆ table
+  keys, `NameKey`/`LabelKey`s in embedded `en.json`) so a bad community system fails `dotnet test`.
 - **`CurrentState`** — singleton remembering the last activated scene so the panel can highlight it.
 - **`TvState` / `TvEndpoints`** — the player-facing **`/tv` display** (issue #80): an ephemeral singleton
   (`TvState`, like `CurrentState` — survives navigation, not a restart) holding the single piece of content the

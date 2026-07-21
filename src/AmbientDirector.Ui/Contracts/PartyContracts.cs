@@ -92,7 +92,47 @@ public class CounterEdit
         Key = dto.Key,
     };
 
+    // Materialize a game-system preset (issue #129) into an editor row: stamp the semantic Key and use the
+    // already-localized label, applying the same null-style fallback as FromDto (dots for a small max, else a
+    // number). The style is normally set on the preset, so the fallback only guards a preset that leaves it null.
+    public static CounterEdit FromPreset(CounterPresetDto preset, string label) => new()
+    {
+        Key = preset.Key,
+        Label = label,
+        Value = preset.Value,
+        Max = preset.Max,
+        Style = preset.Style ?? (preset.Max is >= 1 and <= 24 ? "pips" : "number"),
+    };
+
     public PartyCounterDto ToDto() => new(Label.Trim(), Value, Max, Style, Key);
+}
+
+// Applies an active game system's counter presets to an editor's counter list — the player/enemy "Add {system}
+// set" buttons, the table-counter per-preset add buttons, and the Encounters create-enemy seed (issue #129).
+// Each preset stamps its semantic Key and its localized label; a preset whose Key OR localized Label already
+// exists (case-insensitive) is skipped, so re-clicking a set/preset button never duplicates a counter.
+public static class CounterPresets
+{
+    public static void Apply(List<CounterEdit> target, IEnumerable<CounterPresetDto> presets, Func<string, string> localize)
+    {
+        foreach (var preset in presets)
+        {
+            AddOne(target, preset, localize);
+        }
+    }
+
+    public static void AddOne(List<CounterEdit> target, CounterPresetDto preset, Func<string, string> localize)
+    {
+        var label = localize(preset.LabelKey);
+        var duplicate = target.Any(c =>
+            (!string.IsNullOrEmpty(preset.Key) && string.Equals(c.Key, preset.Key, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(c.Label, label, StringComparison.OrdinalIgnoreCase));
+        if (duplicate)
+        {
+            return;
+        }
+        target.Add(CounterEdit.FromPreset(preset, label));
+    }
 }
 
 // Builds the same TvPartyDto shape the TV gets inline, from the panel's own /party/list data — so the ONE

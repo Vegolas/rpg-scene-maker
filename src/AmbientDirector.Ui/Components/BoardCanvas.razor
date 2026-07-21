@@ -11,12 +11,11 @@
     }
     @foreach (var el in Model.Elements)
     {
-        // One counter's value: a row of pips (dots, filled up to Value) for a "pips"/small-bounded counter, else
-        // tabular-nums text (Value, or Value/Max when a max is set). Hoisted above the kind branches so BOTH the
-        // party element (table strip + each player's rows) AND the enemies element (each enemy's rows) share the
-        // one fragment; sized in container units so it scales with the stage. Each counter arrives with its Glyph
-        // + Color already resolved from the active game system (issue #128) — BoardCanvas draws them, it no longer
-        // matches labels — so a Polish "Stres" themes exactly like an English "Stress".
+        // One counter's value for the PARTY (players + table strip): a row of pips (dots, filled up to Value)
+        // for a "pips"/small-bounded counter, else tabular-nums text (Value, or Value/Max when a max is set).
+        // Sized in container units so it scales with the stage. Each counter arrives with its Glyph + Color
+        // already resolved from the active game system (issue #128) — BoardCanvas draws them, it no longer matches
+        // labels — so a Polish "Stres" themes exactly like an English "Stress". Enemies use enemyValue below.
         RenderFragment<TvPartyCounterDto> counterValue = c =>
         @<span class="bparty__val">
             @if (IsPips(c))
@@ -42,6 +41,35 @@
             else
             {
                 <span class="bparty__num">@(c.Max is { } m ? $"{c.Value}/{m}" : c.Value.ToString())</span>
+            }
+        </span>;
+
+        // An ENEMY counter, drawn so the players never learn its MAX — they must not see how much more HP/Stress
+        // is left to mark before it drops (issue #129 follow-up). So, unlike counterValue: pips draw ONLY the
+        // marked (filled) count, never the empty remainder that would reveal the total (an undamaged enemy shows
+        // no marks — like un-ticked HP boxes at the table); number style shows the bare Value, never "/max". The
+        // GM's own Encounters tracker still shows the full track — this hiding is player-facing (BoardCanvas) only.
+        RenderFragment<TvPartyCounterDto> enemyValue = c =>
+        @<span class="bparty__val">
+            @if (IsPips(c))
+            {
+                var marked = Math.Clamp(c.Value, 0, PipCap);
+                var svg = GlyphSvg(c.Glyph);
+                <span class="bparty__pips" style="--pip:@PipVar(c)">
+                    @for (var i = 0; i < marked; i++)
+                    {
+                        <span class="@PipClass(c.Glyph, svg is not null, true)">
+                            @if (svg is not null)
+                            {
+                                <svg viewBox="0 0 256 256" aria-hidden="true">@((MarkupString)svg)</svg>
+                            }
+                        </span>
+                    }
+                </span>
+            }
+            else
+            {
+                <span class="bparty__num">@c.Value</span>
             }
         </span>;
         <div class="board-el" style="left:@Pct(el.X)%;top:@Pct(el.Y)%;width:@Pct(el.W)%;height:@Pct(el.H)%">
@@ -153,7 +181,7 @@
                                         {
                                             <div class="benemies__crow">
                                                 <span class="bparty__label">@c.Label</span>
-                                                @counterValue(c)
+                                                @enemyValue(c)
                                             </div>
                                         }
                                     </div>

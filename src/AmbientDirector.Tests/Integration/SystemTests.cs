@@ -204,6 +204,36 @@ public class SystemTests
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
     }
 
+    // ---- issue #129: the D&D 5e sample proves the contract is not Daggerheart-shaped — number-style presets,
+    // no table counters, empty quickbar, no spotlight label ----
+
+    [Fact]
+    public async Task Dnd5e_sample_lists_with_number_presets_and_seeds_no_table_counters()
+    {
+        using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+
+        var list = await client.GetFromJsonAsync<JsonElement>("/systems/list");
+        var dnd = list.GetProperty("systems").EnumerateArray()
+            .Single(s => s.GetProperty("id").GetString() == "dnd5e");
+        Assert.Equal("system.dnd5e.name", dnd.GetProperty("nameKey").GetString());
+        Assert.Empty(dnd.GetProperty("tableCounters").EnumerateArray());
+        Assert.Empty(dnd.GetProperty("quickbar").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, dnd.GetProperty("spotlightLabel").ValueKind);
+
+        // Members: HP + AC, both the "number" style (not pips) — the point of the non-Daggerheart sample.
+        var members = dnd.GetProperty("memberCounters").EnumerateArray().ToList();
+        Assert.Equal(new[] { "hp", "ac" }, members.Select(m => m.GetProperty("key").GetString()).ToArray());
+        Assert.All(members, m => Assert.Equal("number", m.GetProperty("style").GetString()));
+        Assert.Equal("hp", dnd.GetProperty("enemyCounters").EnumerateArray().Single().GetProperty("key").GetString());
+
+        // Selecting it activates the system but seeds nothing (it has no table counters).
+        (await client.PostAsync("/systems/current?id=dnd5e", null)).EnsureSuccessStatusCode();
+        var party = await client.GetFromJsonAsync<JsonElement>("/party/list");
+        Assert.Equal("dnd5e", party.GetProperty("system").GetString());
+        Assert.Empty(party.GetProperty("counters").EnumerateArray());
+    }
+
     // ---- issue #128: the /tv render model carries the system's counter glyphs/colours + spotlight, resolved
     // server-side from the active system, so the key-free TV needs no game knowledge ----
 
