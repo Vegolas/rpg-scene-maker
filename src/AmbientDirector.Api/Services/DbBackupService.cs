@@ -3,14 +3,14 @@ using Microsoft.Data.Sqlite;
 namespace AmbientDirector.Api.Services;
 
 /// <summary>
-/// Makes a consistent, self-contained copy of the SQLite database for the panel's "download backup"
-/// button (issue #110). Uses SQLite's online backup API (<see cref="SqliteConnection.BackupDatabase"/>)
-/// rather than a plain file copy so the snapshot is safe against the live connection even in WAL mode:
-/// a raw copy of the <c>.db</c> alone can miss committed pages still sitting in the <c>-wal</c> sidecar.
-/// The result is a single file with no sidecars, so the user only has to keep one file.
+/// Makes a consistent, self-contained copy of the SQLite database (issue #110) — the <c>ambient-director.db</c>
+/// entry of the panel's full "download backup" zip (see <see cref="FullBackupService"/>). Uses SQLite's online
+/// backup API (<see cref="SqliteConnection.BackupDatabase"/>) rather than a plain file copy so the snapshot is
+/// safe against the live connection even in WAL mode: a raw copy of the <c>.db</c> alone can miss committed
+/// pages still sitting in the <c>-wal</c> sidecar. The result is a single file with no sidecars.
 ///
-/// Note this backs up the metadata database only (scenes, sounds/music metadata, settings, party, …) —
-/// the on-disk audio/image files live outside the DB and are not included.
+/// This is the metadata database only (scenes, sounds/music metadata, settings, party, …); the on-disk
+/// audio/image/locale files live outside the DB and are bundled separately by <see cref="FullBackupService"/>.
 /// </summary>
 public sealed class DbBackupService(string databasePath)
 {

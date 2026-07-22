@@ -302,7 +302,7 @@
     "settings.device.apiKeyPlaceholder": "leave empty when not used",
     "settings.device.saveBtn": "Save key on this device",
     "settings.backup.title": "Backup",
-    "settings.backup.hint": "Download a copy of the database — your scenes, events, sounds and settings — so you can keep it safe or move it to another machine. Imported audio and image files are stored separately and aren't included.",
+    "settings.backup.hint": "Download everything as one zip — the database (scenes, events, settings) plus your imported sounds, music, images and translations. To restore, stop the app and unzip it over %LocalAppData%\\AmbientDirector\\.",
     "settings.backup.downloadBtn": "Download backup",
     "settings.backup.working": "Preparing backup…",
     "settings.developer.title": "Developer",

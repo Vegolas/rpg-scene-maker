@@ -307,7 +307,7 @@
     "settings.device.apiKeyPlaceholder": "pozostaw puste, gdy nieużywane",
     "settings.device.saveBtn": "Zapisz klucz na tym urządzeniu",
     "settings.backup.title": "Kopia zapasowa",
-    "settings.backup.hint": "Pobierz kopię bazy danych — sceny, zdarzenia, dźwięki i ustawienia — aby ją zabezpieczyć lub przenieść na inny komputer. Zaimportowane pliki dźwiękowe i graficzne są przechowywane osobno i nie są dołączane.",
+    "settings.backup.hint": "Pobierz wszystko jako jeden plik ZIP — bazę danych (sceny, zdarzenia, ustawienia) oraz zaimportowane dźwięki, muzykę, obrazy i tłumaczenia. Aby przywrócić, zatrzymaj aplikację i rozpakuj archiwum do %LocalAppData%\\AmbientDirector\\.",
     "settings.backup.downloadBtn": "Pobierz kopię zapasową",
     "settings.backup.working": "Przygotowywanie kopii…",
     "settings.developer.title": "Dla programistów",

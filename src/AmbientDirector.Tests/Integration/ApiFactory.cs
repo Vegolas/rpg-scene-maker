@@ -24,14 +24,19 @@ public class ApiFactory : WebApplicationFactory<Program>
         Path.GetTempPath(), "rsm-tests", Guid.NewGuid().ToString("N"));
     private readonly string _dbPath;
 
+    /// <summary>The sounds data dir the app is pointed at — the backup test drops a file here and asserts it
+    /// shows up under <c>sounds/</c> in the download zip.</summary>
+    public string SoundsPath { get; }
+
     /// <param name="apiKey">When set, the app requires this key on protected routes.</param>
     public ApiFactory(string? apiKey = null)
     {
         Directory.CreateDirectory(_root);
         _dbPath = Path.Combine(_root, "test.db");
+        SoundsPath = Path.Combine(_root, "sounds");
 
         Environment.SetEnvironmentVariable("Database__Path", _dbPath);
-        Environment.SetEnvironmentVariable("Sounds__Path", Path.Combine(_root, "sounds"));
+        Environment.SetEnvironmentVariable("Sounds__Path", SoundsPath);
         Environment.SetEnvironmentVariable("Images__Path", Path.Combine(_root, "images"));
         Environment.SetEnvironmentVariable("Music__Path", Path.Combine(_root, "music"));
         Environment.SetEnvironmentVariable("Scenes__FilePath", "does-not-exist.json");

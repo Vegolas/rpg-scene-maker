@@ -381,7 +381,7 @@ else
         _backingUp = true;
         try
         {
-            await Api.DownloadDbBackupAsync(L["settings.toast.backupDownloaded"]);
+            await Api.DownloadBackupAsync(L["settings.toast.backupDownloaded"]);
         }
         finally
         {

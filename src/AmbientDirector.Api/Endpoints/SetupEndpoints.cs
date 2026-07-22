@@ -191,22 +191,24 @@ public static class SetupEndpoints
             return new { show = false };
         });
 
-        // Download a backup of the SQLite database (issue #110) — the friendly alternative to copying the
-        // file by hand. Streams a consistent single-file snapshot (see DbBackupService) as an attachment; the
-        // temp file is deleted as the stream is disposed. GET (a plain export, like /diagnostics); the /setup
-        // key gate covers it. On-disk audio/image files live outside the DB and are not part of this backup.
-        setup.MapGet("/backup", (DbBackupService backup) =>
+        // Download a full backup (issue #153) — the friendly alternative to copying the data folder by hand.
+        // Streams one zip mirroring %LocalAppData%\AmbientDirector\: a consistent DB snapshot at the root as
+        // ambient-director.db (see DbBackupService) plus the sounds/music/images/locales folders, so restoring
+        // is just "stop the app and unzip over that folder". Built on disk first (see FullBackupService) so the
+        // response has a Content-Length; the temp file is deleted as the stream is disposed. GET (a plain
+        // export, like /diagnostics); the /setup key gate covers it.
+        setup.MapGet("/backup", async (FullBackupService backup, CancellationToken ct) =>
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "ambient-director-backup");
             Directory.CreateDirectory(tempDir);
-            var tempPath = Path.Combine(tempDir, $"{Guid.NewGuid():N}.db");
-            backup.BackupTo(tempPath);
+            var tempPath = Path.Combine(tempDir, $"{Guid.NewGuid():N}.zip");
+            await backup.WriteTo(tempPath, ct);
 
-            // DeleteOnClose removes the temp snapshot once Results.File disposes the stream after sending.
+            // DeleteOnClose removes the temp zip once Results.File disposes the stream after sending.
             var stream = new FileStream(tempPath, FileMode.Open, FileAccess.Read, FileShare.Read,
                 bufferSize: 4096, FileOptions.DeleteOnClose | FileOptions.Asynchronous);
-            var fileName = $"ambient-director-backup-{DateTime.Now:yyyy-MM-dd-HHmmss}.db";
-            return Results.File(stream, "application/octet-stream", fileName);
+            var fileName = $"ambient-director-backup-{DateTime.Now:yyyy-MM-dd-HHmmss}.zip";
+            return Results.File(stream, "application/zip", fileName);
         });
     }
 

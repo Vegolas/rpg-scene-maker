@@ -100,8 +100,11 @@ var localesPath = Path.GetFullPath(builder.Configuration["Locales:Path"] ?? Path
 // resolved on-disk paths, so the endpoint reuses the exact values instead of re-resolving them.
 builder.Services.AddSingleton(new DiagnosticsInfo(DateTimeOffset.UtcNow, dbPath, soundsPath));
 
-// Backs GET /setup/backup — a one-tap download of a consistent SQLite snapshot (issue #110).
+// Backs GET /setup/backup — a consistent SQLite snapshot (issue #110), now the db entry of the full backup.
 builder.Services.AddSingleton(new DbBackupService(dbPath));
+// The full backup (issue #153): the db snapshot plus the on-disk sounds/music/images/locales folders, zipped.
+builder.Services.AddSingleton(sp => new FullBackupService(
+    sp.GetRequiredService<DbBackupService>(), soundsPath, musicPath, imagesPath, localesPath));
 
 builder.Services.AddSingleton<TuyaLightService>();
 builder.Services.AddSingleton<TuyaSetupService>();

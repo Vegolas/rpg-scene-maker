@@ -246,10 +246,11 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
     public Task<(List<DiscoveredTuyaDto>? Result, string? Error)> ScanTuyaAsync() =>
         FetchAsync<List<DiscoveredTuyaDto>>(HttpMethod.Get, "setup/scan?seconds=8");
 
-    /// <summary>Download a backup of the database (issue #110). Fetches the snapshot with the API key on the
-    /// header, then streams it into a browser download via JS interop — so the key never rides in a URL. The
-    /// filename comes from the server's Content-Disposition, falling back to a fixed name.</summary>
-    public async Task<bool> DownloadDbBackupAsync(string? okMessage = null)
+    /// <summary>Download a full backup zip (issue #153) — the database plus the on-disk sounds/music/images/
+    /// locales folders. Fetches it with the API key on the header, then streams it into a browser download via
+    /// JS interop — so the key never rides in a URL. The filename comes from the server's Content-Disposition,
+    /// falling back to a fixed name.</summary>
+    public async Task<bool> DownloadBackupAsync(string? okMessage = null)
     {
         try
         {
@@ -262,7 +263,7 @@ public class ApiClient(HttpClient http, IJSRuntime js, UiState ui)
             }
             var fileName = response.Content.Headers.ContentDisposition?.FileNameStar
                 ?? response.Content.Headers.ContentDisposition?.FileName?.Trim('"')
-                ?? "ambient-director-backup.db";
+                ?? "ambient-director-backup.zip";
             await using var stream = await response.Content.ReadAsStreamAsync();
             using var streamRef = new DotNetStreamReference(stream);
             await js.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
