@@ -58,4 +58,46 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <!-- Slim the PUBLISH output for end users (issue #149). A release dry-run shipped ~96 MB an end user
+       never needs: ~84 MB of debug symbols, an ~11 MB dev-only Blazor debug proxy baked into the exe,
+       and dev/IIS config. Everything below is scoped to `dotnet publish` (not a plain
+       `dotnet build`/`dotnet run`), and lives at the project level rather than in a single publish
+       profile, so every RID benefits — the win-x64 release zip AND publish.yml's linux-x64 /
+       osx-arm64 tarballs — while local dev keeps its symbols and its Development config. -->
+  <PropertyGroup>
+    <!-- The app is a self-hosted Kestrel exe and is never hosted behind IIS, so the auto-generated
+         web.config (the ASP.NET Core Module / IIS transform) is dead weight in a published build. -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dev-only overrides: keep the copy in the BUILD output (so a local `dotnet run` still layers
+         Development settings in) but never ship it to an end user in a published build. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <!-- Prune leftovers the SDK still stages into publish that end users never need. None of these is
+       reachable by a plain property:
+         * *.pdb — managed symbols (AmbientDirector.Api / .Ui) AND the ~80 MB native libSkiaSharp.pdb
+           the SkiaSharp/PDFtoImage targets flow in as a native asset. A <DebugType> switch would drop
+           symbols from local build output too and STILL wouldn't touch the native pdb, so pruning the
+           resolved publish list is the one mechanism that clears every pdb while leaving `dotnet build`
+           fully debuggable.
+         * BlazorDebugProxy/ — the Blazor WASM debugging bridge (Roslyn + the browser debug host,
+           ~11 MB, dev-only). It looks near-empty on disk because the SDK bundles those DLLs straight
+           into the single-file exe — which is exactly where this prune reclaims them.
+         * sasscompiler.json — AspNetCore.SassCompiler's build-time config (flows in from the UI
+           project); the CSS is already compiled into wwwroot by publish time, so it is unused at runtime.
+       ComputeResolvedFilesToPublishList is where @(ResolvedFileToPublish) is finalized, so removing
+       items here keeps them out of both the loose publish folder and the single-file bundle.
+       AmbientDirector.Api.staticwebassets.endpoints.json is deliberately left in place (see #149). -->
+  <Target Name="TrimPublishArtifacts" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Extension)' == '.pdb'
+                                        Or '%(FileName)%(Extension)' == 'sasscompiler.json'
+                                        Or $([MSBuild]::ValueOrDefault('%(RelativePath)', '').StartsWith('BlazorDebugProxy'))" />
+    </ItemGroup>
+  </Target>
+
 </Project>
