@@ -64,9 +64,6 @@ else
                     <button class="btn btn--small" @onclick="() => Show(board)" disabled="@_busy">
                         <Icon Name="tv" /> @L["boards.showOnTv"]
                     </button>
-                    <button class="btn btn--small" @onclick="() => Export(board.Id)" disabled="@_busy">
-                        <Icon Name="share" /> @L["share.export.aria"]
-                    </button>
                 </div>
             </div>
         }
@@ -136,9 +133,6 @@ else
     private Task Open(string id) => Vt.NavigateAsync($"boards/{id}");
 
     private async Task Reload() => _boards = await Api.GetBoardsAsync();
-
-    // Download a shareable pack for this board (bundles its background + element images).
-    private Task Export(string id) => Api.ExportPackAsync("board", id, L["share.export.done"]);
 
     // Keyboard activation for the role="button" card (Enter / Space), matching a native button.
     private async Task OnCardKey(KeyboardEventArgs e, string id)

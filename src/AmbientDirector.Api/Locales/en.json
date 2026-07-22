@@ -996,6 +996,7 @@
     "share.import.done": "Imported {0} item(s).",
     "share.import.failed": "Import failed.",
     "share.export.aria": "Share",
+    "share.export.btn": "Share",
     "share.export.done": "Pack downloaded.",
     "share.repaired.music": "Cleared the music link — set it in the editor.",
     "share.import.issuesTitle": "Heads up — these will be adjusted on import:",

@@ -52,8 +52,6 @@ else
                 }
                 <span class="card-edit" role="button" tabindex="0" aria-label='@L["scenes.editAria"]'
                       @onclick="() => Edit(scene.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
-                <span class="card-share" role="button" tabindex="0" aria-label='@L["share.export.aria"]'
-                      @onclick="() => Export(scene.Id)" @onclick:stopPropagation="true"><Icon Name="share" /></span>
                 <Glyph Emoji="@emoji" Fallback="scenes" />
                 <span class="scene-name">@label</span>
             </button>
@@ -147,9 +145,6 @@ else
     private Task NewScene() => Vt.NavigateAsync("editor");
 
     private Task Edit(string id) => Vt.NavigateAsync($"editor/{id}");
-
-    // Download a shareable pack for this scene (bundles its Light FX, sounds + tile art).
-    private Task Export(string id) => Api.ExportPackAsync("scene", id, L["share.export.done"]);
 
     // Tapping the live scene stops it (return to default lights, pause music, stop sounds); any other
     // card activates it.

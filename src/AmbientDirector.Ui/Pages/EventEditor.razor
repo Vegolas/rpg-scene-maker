@@ -61,6 +61,7 @@ else
     @if (!_isNew)
     {
         <div class="btn-row" style="margin-top:1.5rem">
+            <button class="btn" @onclick="ExportPack" disabled="@_busy"><Icon Name="share" /> @L["share.export.btn"]</button>
             <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["eventEditor.deleteBtn"]</ConfirmButton>
         </div>
     }
@@ -340,6 +341,9 @@ else
             _busy = false;
         }
     }
+
+    // Download a shareable pack for this event (bundles its sounds, Light FX + tile art).
+    private Task ExportPack() => Api.ExportPackAsync("event", _edit.Id, L["share.export.done"]);
 
     private async Task DeleteConfirmed()
     {

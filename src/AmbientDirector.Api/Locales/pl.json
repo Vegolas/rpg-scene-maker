@@ -1010,6 +1010,7 @@
     "share.import.done": "Zaimportowano {0} element(ów).",
     "share.import.failed": "Import nie powiódł się.",
     "share.export.aria": "Udostępnij",
+    "share.export.btn": "Udostępnij",
     "share.export.done": "Pobrano paczkę.",
     "share.repaired.music": "Wyczyszczono link do muzyki — ustaw go w edytorze.",
     "share.import.issuesTitle": "Uwaga — te elementy zostaną dostosowane przy imporcie:",

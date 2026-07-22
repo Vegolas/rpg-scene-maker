@@ -141,8 +141,6 @@ else
                             <span class="party-name">@p.Name</span>
                             <span class="card-edit" role="button" tabindex="0" aria-label='@L.Format("party.editAria", p.Name)'
                                   @onclick="() => EditPlayer(p.Id)" @onkeydown="e => OnKey(e, () => EditPlayer(p.Id))"><Icon Name="edit" /></span>
-                            <span class="card-share" role="button" tabindex="0" aria-label='@L["share.export.aria"]'
-                                  @onclick='() => Export("player", p.Id)' @onclick:stopPropagation="true"><Icon Name="share" /></span>
                         </div>
                         @if (p.Counters is { Count: > 0 })
                         {
@@ -217,8 +215,6 @@ else
                             </div>
                             <span class="party-name">@e.Name</span>
                             <span class="card-edit"><Icon Name="edit" /></span>
-                            <span class="card-share" role="button" tabindex="0" aria-label='@L["share.export.aria"]'
-                                  @onclick='() => Export("enemy", e.Id)' @onclick:stopPropagation="true"><Icon Name="share" /></span>
                         </div>
                         @if (e.Counters is { Count: > 0 })
                         {
@@ -281,9 +277,6 @@ else
                         <div class="btn-row">
                             <button class="btn btn--primary btn--small" @onclick="() => RunEncounter(enc.Id)" disabled="@_busy">
                                 <Icon Name="play" /> @L["encounters.run"]
-                            </button>
-                            <button class="btn btn--small" @onclick='() => Export("encounter", enc.Id)' disabled="@_busy">
-                                <Icon Name="share" /> @L["share.export.aria"]
                             </button>
                         </div>
                     </div>
@@ -507,7 +500,7 @@ else
         finally { _busy = false; }
     }
 
-    // ---------- share (export / import content packs) ----------
+    // ---------- import (content packs) ----------
 
     // Reload every list the hub shows after a pack import (players/enemies live on the party DTO).
     private async Task Reload()
@@ -516,8 +509,6 @@ else
         _encounters = await Api.GetEncountersAsync();
         StateHasChanged();
     }
-
-    private Task Export(string kind, string id) => Api.ExportPackAsync(kind, id, L["share.export.done"]);
 
     // ---------- navigation ----------
 

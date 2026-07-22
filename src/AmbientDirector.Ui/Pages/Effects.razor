@@ -28,13 +28,7 @@ else
         <div class="klist">
             @foreach (var fx in _fx)
             {
-                @* Wrap the row so a Share affordance can sit at its right edge (KRow is one button — a nested
-                   button would be invalid HTML, so the share control is a sibling overlaid on top). *@
-                <div class="krow-wrap">
-                    <KRow IconName="effects" Title="@fx.Name" Hint="@Meta(fx)" OnClick="() => Edit(fx.Id)" />
-                    <button type="button" class="krow-share" @onclick="() => Export(fx.Id)"
-                            aria-label='@L["share.export.aria"]'><Icon Name="share" /></button>
-                </div>
+                <KRow IconName="effects" Title="@fx.Name" Hint="@Meta(fx)" OnClick="() => Edit(fx.Id)" />
             }
         </div>
     }
@@ -55,9 +49,6 @@ else
     protected override async Task OnInitializedAsync() => _fx = await Api.GetLightFxAsync();
 
     private async Task Reload() => _fx = await Api.GetLightFxAsync();
-
-    // Download a shareable pack for this Light FX (pure keyframes — no media, no dependencies).
-    private Task Export(string id) => Api.ExportPackAsync("lightfx", id, L["share.export.done"]);
 
     private string Meta(LightFxDto fx)
     {

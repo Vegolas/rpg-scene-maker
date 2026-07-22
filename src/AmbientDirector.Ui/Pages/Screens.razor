@@ -62,8 +62,6 @@ else
                 {
                     <span class="scene-art"></span>
                 }
-                <span class="card-share" role="button" tabindex="0" aria-label='@L["share.export.aria"]'
-                      @onclick="() => Export(screen.Id)" @onclick:stopPropagation="true"><Icon Name="share" /></span>
                 <Glyph Emoji="@emoji" Fallback="screens" />
                 <span class="scene-name">@label</span>
                 <span class="screen-count">@TileCount(screen)</span>
@@ -129,9 +127,6 @@ else
     private Task Open(string id) => Vt.NavigateAsync($"screens/{id}");
 
     private async Task Reload() => _screens = await Api.GetScreensAsync();
-
-    // Download a shareable pack for this screen (bundles the scenes/events/sounds its tiles point at).
-    private Task Export(string id) => Api.ExportPackAsync("screen", id, L["share.export.done"]);
 
     private void NewScreen()
     {

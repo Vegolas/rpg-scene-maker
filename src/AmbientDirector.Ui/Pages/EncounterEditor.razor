@@ -206,6 +206,7 @@ else
         <button class="btn" @onclick="Reset" disabled="@_busy"><Icon Name="reset" /> @L["encounterEditor.resetEnemies"]</button>
     </div>
     <div class="btn-row" style="margin-top:0.7rem">
+        <button class="btn" @onclick="ExportPack" disabled="@_busy"><Icon Name="share" /> @L["share.export.btn"]</button>
         <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["encounterEditor.delete"]</ConfirmButton>
     </div>
 }
@@ -405,6 +406,9 @@ else
         }
         finally { _busy = false; }
     }
+
+    // Download a shareable pack for this encounter (bundles the scene/event it fires + its enemy statblocks).
+    private Task ExportPack() => Api.ExportPackAsync("encounter", _edit.Id, L["share.export.done"]);
 
     private async Task DeleteConfirmed()
     {

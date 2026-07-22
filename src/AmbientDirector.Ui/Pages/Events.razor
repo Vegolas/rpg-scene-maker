@@ -43,8 +43,6 @@ else
                 <span class="scene-swatch"></span>
                 <span class="card-edit" role="button" tabindex="0" aria-label='@L["events.editAria"]'
                       @onclick="() => Edit(evt.Id)" @onclick:stopPropagation="true"><Icon Name="edit" /></span>
-                <span class="card-share" role="button" tabindex="0" aria-label='@L["share.export.aria"]'
-                      @onclick="() => Export(evt.Id)" @onclick:stopPropagation="true"><Icon Name="share" /></span>
                 @if (running)
                 {
                     <span class="card-stop" role="button" tabindex="0" aria-label='@L["events.stopAria"]'
@@ -157,9 +155,6 @@ else
     private Task NewEvent() => Vt.NavigateAsync("event-editor");
 
     private Task Edit(string id) => Vt.NavigateAsync($"event-editor/{id}");
-
-    // Download a shareable pack for this event (bundles its sounds, Light FX + tile art).
-    private Task Export(string id) => Api.ExportPackAsync("event", id, L["share.export.done"]);
 
     public void Dispose()
     {

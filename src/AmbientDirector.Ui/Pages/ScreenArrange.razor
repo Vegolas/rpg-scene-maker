@@ -132,6 +132,7 @@ else
         <button class="btn" @onclick="Cancel" disabled="@_busy">@L["common.cancel"]</button>
     </div>
     <div class="btn-row" style="margin-top:0.7rem">
+        <button class="btn" @onclick="ExportPack" disabled="@_busy"><Icon Name="share" /> @L["share.export.btn"]</button>
         <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["screenArrange.deleteBtn"]</ConfirmButton>
     </div>
 }
@@ -357,6 +358,9 @@ else
         }
         finally { _busy = false; }
     }
+
+    // Download a shareable pack for this screen (bundles the scenes/events/sounds its tiles point at).
+    private Task ExportPack() => Api.ExportPackAsync("screen", _edit.Id, L["share.export.done"]);
 
     private async Task DeleteConfirmed()
     {

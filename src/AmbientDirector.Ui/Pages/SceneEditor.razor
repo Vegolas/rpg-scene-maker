@@ -61,6 +61,7 @@ else
     @if (!_isNew)
     {
         <div class="btn-row" style="margin-top:1.5rem">
+            <button class="btn" @onclick="ExportPack" disabled="@_busy"><Icon Name="share" /> @L["share.export.btn"]</button>
             <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["sceneEditor.deleteBtn"]</ConfirmButton>
         </div>
     }
@@ -754,6 +755,9 @@ else
 
     // Drop a dangling reference (a sound id no longer in the library) from the scene. Persists on Save.
     private void RemoveSound(string id) => _soundEffects.Remove(id);
+
+    // Download a shareable pack for this scene (bundles its Light FX, sounds + tile art).
+    private Task ExportPack() => Api.ExportPackAsync("scene", _edit.Id, L["share.export.done"]);
 
     private async Task DeleteConfirmed()
     {

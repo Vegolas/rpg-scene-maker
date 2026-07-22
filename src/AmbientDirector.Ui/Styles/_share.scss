@@ -1,25 +1,10 @@
 /* ============================================================
-   Shareable content packs (issue #111): the per-card "Share"
-   corner affordance + the import overlay's content. The overlay
-   frame reuses the .imgsearch-* / .pdfpick-* classes (see
-   _imgsearch.scss / _pdfpick.scss); only the summary + the
-   light-map rows are new here.
+   Shareable content packs (issue #111): the import overlay's
+   content. The overlay frame reuses the .imgsearch-* / .pdfpick-*
+   classes (see _imgsearch.scss / _pdfpick.scss); only the summary
+   + the light-map rows are new here. The per-entity Share button
+   lives in each editor and reuses the shared .btn (issue #155).
    ============================================================ */
-
-/* Corner affordance: share top-left (edit is bottom-right, stop is top-right). */
-.scene-card .card-share {
-  position: absolute;
-  top: 0; left: 0;
-  width: 48px; height: 48px;
-  display: grid; place-items: center;
-  font-size: 17px;
-  color: var(--text-muted);
-  border-bottom-right-radius: var(--r-md);
-  z-index: 4;
-  transition: color var(--t-fast), background var(--t-fast);
-}
-.scene-card .card-share:hover { color: var(--text); background: rgba(255, 255, 255, .07); }
-.scene-card .card-share:active { transform: scale(.9); }
 
 /* ---------- import overlay content ---------- */
 .share-summary { margin-bottom: var(--s-4); }
@@ -48,16 +33,3 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .share-lightsel { min-width: 45%; }
-
-/* ---------- per-row Share affordance for the Effects (KRow) list ---------- */
-.krow-wrap { position: relative; }
-.krow-wrap .krow { padding-right: 52px; }
-.krow-share {
-  position: absolute; top: 0; right: 0; height: 100%; width: 48px;
-  display: grid; place-items: center;
-  border: 0; background: none; color: var(--text-muted);
-  font-size: 17px; cursor: pointer; z-index: 2; border-radius: var(--r-md);
-  transition: color var(--t-fast), background var(--t-fast);
-}
-.krow-share:hover { color: var(--text); background: rgba(255, 255, 255, .07); }
-.krow-share:active { transform: scale(.9); }

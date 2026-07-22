@@ -84,6 +84,7 @@ else
     @if (!_isNew)
     {
         <div class="btn-row" style="margin-top:0.7rem">
+            <button class="btn" @onclick="ExportPack" disabled="@_busy"><Icon Name="share" /> @L["share.export.btn"]</button>
             <ConfirmButton Disabled="_busy" OnConfirmed="DeleteConfirmed">@L["effectEditor.deleteBtn"]</ConfirmButton>
         </div>
         <p class="hint" style="margin-top:0.6rem">@L["effectEditor.deleteHint"]</p>
@@ -251,6 +252,9 @@ else
     private Task StopTest() => Api.StopLightFxTestAsync();
 
     private Task Cancel() => Vt.NavigateAsync("effects");
+
+    // Download a shareable pack for this Light FX (pure keyframes — no media, no dependencies).
+    private Task ExportPack() => Api.ExportPackAsync("lightfx", _edit.Id, L["share.export.done"]);
 
     private async Task DeleteConfirmed()
     {
