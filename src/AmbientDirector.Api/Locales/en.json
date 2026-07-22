@@ -308,6 +308,7 @@
     "settings.developer.title": "Developer",
     "settings.developer.mode": "Developer mode",
     "settings.developer.hint": "Surfaces the Logs tab — server logs plus a diagnostics panel. Stored on this device only.",
+    "settings.version": "Version {0}",
     "settings.provider.hue": "Philips Hue",
     "settings.provider.tuya": "the Tuya bulb",
     "settings.toast.spotifyConnected": "Spotify connected",

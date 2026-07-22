@@ -1,4 +1,3 @@
-using System.Reflection;
 using AmbientDirector.Api.Contracts;
 using AmbientDirector.Api.Services;
 
@@ -28,7 +27,7 @@ public static class DiagnosticsEndpoints
             var eventCount = (await events.GetAllAsync()).Count;
 
             return new DiagnosticsDto(
-                Version: AppVersion(),
+                Version: StartupInfo.AppVersion(),
                 Environment: env.EnvironmentName,
                 StartedAt: info.StartedAt,
                 LightProvider: settings.Current.Provider,
@@ -42,14 +41,6 @@ public static class DiagnosticsEndpoints
                 DatabasePath: info.DatabasePath,
                 SoundsPath: info.SoundsPath);
         });
-    }
-
-    private static string AppVersion()
-    {
-        var asm = typeof(Program).Assembly;
-        return asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-               ?? asm.GetName().Version?.ToString()
-               ?? "unknown";
     }
 }
 

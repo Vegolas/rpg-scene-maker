@@ -435,11 +435,11 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var (localUrl, lanUrl) = StartupInfo.PanelUrls(addresses, app.Configuration["Urls"]);
 
     app.Logger.LogInformation(
-        "Ambient Director is running.\n" +
+        "Ambient Director {Version} is running.\n" +
         "  On this PC:      {LocalUrl}\n" +
         "  On your network: {LanUrl}\n" +
         "  Close this window to stop the server.",
-        localUrl, lanUrl ?? "(no LAN address found — localhost only)");
+        StartupInfo.AppVersion(), localUrl, lanUrl ?? "(no LAN address found — localhost only)");
 
     // Auto-open the panel in the default browser for the double-click experience. Default ON only for the
     // installable single-file build, OFF under `dotnet run` and tests so they never pop a tab; an explicit

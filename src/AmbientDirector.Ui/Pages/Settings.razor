@@ -94,6 +94,12 @@ else
         </div>
         <p class="hint">@L["settings.developer.hint"]</p>
     </div>
+
+    @* Unobtrusive footer: which build is running (the +sha suffix from /diagnostics is trimmed here). *@
+    @if (_version is { } v)
+    {
+        <p class="hint" style="text-align:center;margin-top:1.5rem">@L.Format("settings.version", v)</p>
+    }
     }
     else if (_tab == SettingsTab.Lights)
     {
@@ -244,6 +250,9 @@ else
     private bool _showHueAdd;
     private GameSystemsDto? _systems;
     private bool _backingUp;
+    // The running build's version, shown as a small footer line. Trimmed of the +sha suffix that
+    // /diagnostics keeps; null when diagnostics is unavailable (then the line just doesn't render).
+    private string? _version;
 
     // Save the game-system choice immediately (like the language select). Success updates UiState so the
     // Encounters tab appears/disappears live; failure re-fetches so the keyed select snaps back.
@@ -282,6 +291,8 @@ else
         _tab = TabFromQuery();
         _apiKeyInput = await Api.GetApiKeyAsync();
         _systems = await Api.GetGameSystemsAsync();
+        var diag = await Api.GetDiagnosticsAsync();
+        _version = diag?.Version.Split('+')[0];
         var (config, error) = await Api.GetConfigAsync();
         if (config is null)
         {

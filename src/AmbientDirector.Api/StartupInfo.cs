@@ -1,14 +1,29 @@
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Reflection;
 
 namespace AmbientDirector.Api;
 
 /// <summary>
 /// Startup helpers for the friendly console experience of the installable Windows build (issue #75):
-/// the URLs shown in the launch banner and used for the browser auto-open.
+/// the URLs shown in the launch banner and used for the browser auto-open, plus the running build's
+/// version (issue #147) shown in the banner and returned by <c>GET /diagnostics</c>.
 /// </summary>
 public static class StartupInfo
 {
+    /// <summary>
+    /// The running build's version: the <see cref="AssemblyInformationalVersionAttribute"/> stamped by
+    /// <c>-p:Version=…</c> at publish (with a <c>+&lt;git-sha&gt;</c> suffix appended by the build), falling
+    /// back to the assembly version, then "unknown". Shown in the startup banner and by <c>GET /diagnostics</c>.
+    /// </summary>
+    public static string AppVersion()
+    {
+        var asm = typeof(StartupInfo).Assembly;
+        return asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+               ?? asm.GetName().Version?.ToString()
+               ?? "unknown";
+    }
+
     /// <summary>
     /// The panel URLs to show a user: the loopback URL to open on this PC, and a best-guess LAN URL to
     /// open from a tablet/phone on the same Wi-Fi (null when no private IPv4 is found). The port is taken

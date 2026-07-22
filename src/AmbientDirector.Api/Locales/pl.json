@@ -313,6 +313,7 @@
     "settings.developer.title": "Dla programistów",
     "settings.developer.mode": "Tryb programisty",
     "settings.developer.hint": "Udostępnia zakładkę Dzienniki — dzienniki serwera oraz panel diagnostyczny. Przechowywane tylko na tym urządzeniu.",
+    "settings.version": "Wersja {0}",
     "settings.provider.hue": "Philips Hue",
     "settings.provider.tuya": "żarówką Tuya",
     "settings.toast.spotifyConnected": "Połączono ze Spotify",
