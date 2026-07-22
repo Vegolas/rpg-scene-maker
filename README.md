@@ -56,6 +56,8 @@ Ambient Director is running.
   Close this window to stop the server.
 ```
 
+> **"Windows protected your PC"?** The exe is a self-published open-source build without a code-signing certificate, so Windows SmartScreen will likely show that warning the first time you run it. Click **More info → Run anyway** to start it.
+
 > **No release posted yet?** Until a `v*` tag is cut, run from source (above), or grab a ready-made build (win-x64 / linux-x64 / osx-arm64) from the latest [`publish` CI run](.github/workflows/publish.yml)'s artifacts.
 
 - **Your data** (scenes, settings, imported sounds/music, images) lives under `%LocalAppData%\AmbientDirector\`, separate from the app folder — so you can drop a newer build in place and keep everything.
@@ -274,8 +276,6 @@ https://github.com/user-attachments/assets/38f4f217-9fa5-43f2-8306-23a74364a963
 </details>
 
 ## Scenes
-
-
 
 Manage scenes from the panel's Scenes tab or with `PUT /scenes/{id}`:
 

@@ -1,0 +1,12 @@
+# Line-ending normalization. Pairs with .editorconfig (see CONTRIBUTING.md).
+# The repo is Windows-authored but CI builds/tests on Linux, so keep one
+# canonical form: text files are stored with LF in the repo and checked out
+# with the platform-native ending. Git auto-detects text vs. binary here.
+* text=auto
+
+# Binary assets tracked in this repo — never normalize or diff as text.
+# (Imported audio/images live under %LocalAppData%, not git, so no rules for them.)
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary
