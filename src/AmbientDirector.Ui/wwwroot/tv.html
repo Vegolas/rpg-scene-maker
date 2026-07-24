@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Ambient Director — TV</title>
+<!--
+  The player-facing /tv display, deliberately built as a FRAMEWORK-FREE static page (no Blazor WASM).
+  Old smart-TV browsers (LG webOS &lt;= 2023, Chromium &lt;= 94) cannot run the .NET WASM panel — the runtime
+  needs WASM reference-types/exception-handling (~Chromium 95) — so the shared table screen would hang on the
+  boot logo. This page is plain HTML + CSS + ES5 JavaScript that polls /tv/state (an OPEN, key-free endpoint)
+  every 2 s and renders the pushed content, so it boots on essentially any TV browser.
+
+  OLD-BROWSER COMPAT RULES (target ~Chromium 34+, i.e. LG webOS 2+/2015+): keep it boring.
+    - JS: ES5 only — var/function, string concatenation, XMLHttpRequest (not fetch), NO arrow functions,
+      template literals, async/await, optional chaining (?.) or nullish (??).
+    - CSS: NO CSS custom properties, container queries (cqh/cqw), aspect-ratio, grid, inset, flex gap, or
+      min()/max()/clamp(). Text/board sizing that the BoardCanvas.razor renderer does in `cqh` is done here in
+      `rem` instead, with the root font-size set to 1% of the live stage height in JS (so 1rem == 1cqh); a `cqw`
+      value becomes rem * 16/9. The 16:9 stage box and the fear skulls are sized in JS.
+  This mirrors what BoardCanvas.razor / _boards.scss / _party.scss / _fear.scss draw; keep the two in sync.
+-->
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #eef2f8;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Stage: full viewport, true black (a table TV should show the content and nothing else). */
+#stage { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+
+/* Crossfade layer — both the pushed <img> and a board wrapper carry .layer. */
+.layer {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  opacity: 0;
+  -webkit-transition: opacity 600ms ease;
+  transition: opacity 600ms ease;
+}
+.layer.on { opacity: 1; }
+
+/* A pushed image / handout: whole thing visible, letterboxed on black. */
+.layer-img img { width: 100%; height: 100%; -o-object-fit: contain; object-fit: contain; display: block; }
+
+/* A board layer: center the fixed 16:9 stage (sized in JS) on any TV shape. */
+.layer-board { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }
+
+/* The 16:9 board stage; width/height set in JS. All descendants scale in rem (1rem == 1% stage height). */
+.board { position: relative; overflow: hidden; background: #000; }
+.board-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; -o-object-fit: cover; object-fit: cover; }
+
+/* Absolutely-positioned element box; DOM order IS the paint/z-order (no z-index). */
+.el { position: absolute; overflow: hidden; }
+.el-img { width: 100%; height: 100%; -o-object-fit: contain; object-fit: contain; display: block; }
+.el-text {
+  width: 100%; height: 100%;
+  font-weight: 600; line-height: 1.15; white-space: pre-wrap; overflow: hidden;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+
+/* ---- party (hero) cards — mirrors _party.scss .bparty__* (cqh->rem, cqw->rem*1.7778) ---- */
+.bparty { width: 100%; height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; overflow: hidden; }
+.bparty__list { -webkit-flex: 1 1 auto; flex: 1 1 auto; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; min-height: 0; overflow: hidden; }
+.bparty__player {
+  -webkit-flex: 1 1 0; flex: 1 1 0; min-height: 0; overflow: hidden;
+  display: -webkit-flex; display: flex; -webkit-flex-direction: row; flex-direction: row; -webkit-align-items: stretch; align-items: stretch;
+  padding: 1.4rem 2.49rem; margin-bottom: 1.6rem;
+  background: #1C2129; border: 1px solid #2E3542; border-radius: 1.8rem;
+}
+.bparty__player:last-child { margin-bottom: 0; }
+.bparty__portrait {
+  -webkit-flex: 0 0 26%; flex: 0 0 26%; -webkit-align-self: stretch; align-self: stretch;
+  border-radius: 1.4rem; overflow: hidden; background: rgba(255,255,255,.06); margin-right: 2.84rem;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+}
+.bparty__portrait img { width: 100%; height: 100%; -o-object-fit: cover; object-fit: cover; display: block; }
+.bparty__initial { font-weight: 800; font-size: 7rem; color: rgba(255,255,255,.82); }
+.bparty__info { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
+.bparty__pname { font-weight: 800; font-size: 3rem; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1rem; }
+.bparty__crows { -webkit-flex: 1 1 auto; flex: 1 1 auto; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: space-around; justify-content: space-around; min-height: 0; }
+.bparty__crow, .benemies__crow { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; line-height: 1; margin-bottom: .8rem; }
+.bparty__crow:last-child, .benemies__crow:last-child { margin-bottom: 0; }
+.bparty__label { font-weight: 800; font-size: 2.1rem; letter-spacing: .05em; text-transform: uppercase; color: #8a94a6; -webkit-flex: 0 0 auto; flex: 0 0 auto; min-width: 4.5em; margin-right: 2.84rem; }
+.bparty__val { display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; }
+.bparty__num { font-weight: 700; font-size: 2.8rem; }
+.bparty__pips { display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+
+/* Plain dot pip (custom tracks + Fear). On-colour is set inline (no CSS var). */
+.bparty__pip {
+  width: 1.9rem; height: 1.9rem; border-radius: 50%; box-sizing: border-box;
+  background: #12151B; border: 1px solid #2E3542;
+  display: inline-block; vertical-align: middle; margin: 0 1.42rem .4rem 0;
+}
+/* Themed glyph pips (Daggerheart HP/Stress/Armor/Hope) drop the dot; the svg carries the shape (fill inline). */
+.bparty__pip--heart-broken, .bparty__pip--heart-dark, .bparty__pip--shield-broken, .bparty__pip--diamond { background: none; border: none; }
+.bparty__pip > svg { width: 100%; height: 100%; display: block; }
+
+/* ---- enemy cards — mirrors _party.scss .benemies__* ---- */
+.benemies { width: 100%; height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; overflow: hidden; }
+.benemies__card { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; padding: 1.4rem 2.49rem; margin-bottom: 1.6rem; background: #1C2129; border: 1px solid #2E3542; border-radius: 1.8rem; }
+.benemies__card:last-child { margin-bottom: 0; }
+.benemies__card--spotlight { border-color: #FF4D2E; }
+.benemies__namerow { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 1rem; }
+.benemies__namerow:last-child { margin-bottom: 0; }
+.benemies__portrait { -webkit-flex: 0 0 auto; flex: 0 0 auto; width: 6rem; height: 6rem; border-radius: 1rem; overflow: hidden; background: rgba(255,255,255,.06); margin-right: 2.13rem; }
+.benemies__portrait img { width: 100%; height: 100%; -o-object-fit: cover; object-fit: cover; display: block; }
+.benemies__name { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: 3.4rem; line-height: 1.1; color: #eef2f8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.benemies__card--spotlight .benemies__name { font-size: 4rem; }
+.benemies__chip { -webkit-flex: 0 0 auto; flex: 0 0 auto; margin-left: 1.78rem; padding: .4rem 1.78rem; background: #000; color: #FF4D2E; font-size: 1.6rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; border-radius: .8rem; }
+
+/* ---- fear skull track — mirrors _fear.scss .bfear ; skull box sizes set in JS ---- */
+.bfear { width: 100%; height: 100%; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; }
+.bfear__skull { -webkit-flex: 0 0 auto; flex: 0 0 auto; box-sizing: border-box; border-radius: 1.2rem; overflow: hidden; border: 1px solid #2E3542; background: #0b0d10; }
+.bfear__skull img {
+  width: 100%; height: 100%; -o-object-fit: cover; object-fit: cover; display: block;
+  -webkit-filter: grayscale(.85) brightness(.28); filter: grayscale(.85) brightness(.28);
+  opacity: .55;
+  -webkit-transition: opacity .45s ease, -webkit-filter .45s ease; transition: filter .45s ease, opacity .45s ease;
+}
+.bfear__skull.is-on { border-color: rgba(255,77,46,.55); box-shadow: 0 0 2.4rem rgba(255,77,46,.35); }
+.bfear__skull.is-on img { -webkit-filter: none; filter: none; opacity: 1; }
+
+/* A live-roster element with no data yet (panel offline) — stays empty rather than a broken box. */
+.party-empty { width: 100%; height: 100%; }
+
+/* Idle: near-black with a small dim wordmark (fixed px — independent of the board rem unit). */
+#idle { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; color: #343b47; }
+#idle svg { width: 44px; height: 44px; opacity: .55; fill: currentColor; margin-bottom: 14px; }
+#idle span { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .7; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="idle">
+    <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M192,32H64A32,32,0,0,0,32,64V192a32,32,0,0,0,32,32H192a32,32,0,0,0,32-32V64A32,32,0,0,0,192,32ZM92,176a12,12,0,1,1,12-12A12,12,0,0,1,92,176Zm0-72a12,12,0,1,1,12-12A12,12,0,0,1,92,104Zm36,36a12,12,0,1,1,12-12A12,12,0,0,1,128,140Zm36,36a12,12,0,1,1,12-12A12,12,0,0,1,164,176Zm0-72a12,12,0,1,1,12-12A12,12,0,0,1,164,104Z"/></svg>
+    <span>AMBIENT DIRECTOR</span>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var POLL_MS = 2000;
+  var PIPCAP = 24;                 // pips max the TV can read; mirrors the API / BoardCanvas cap
+  var CQW = 16 / 9;                // 1cqw == (16/9) cqh; our rem unit == 1cqh, so cqw values are pre-multiplied
+
+  var stage = null, idle = null;
+  var rev = 0;                     // last applied server revision (0 = nothing seen; server starts at 1)
+  var cur = null;                  // the currently shown layer element
+  var gen = 0;                     // bumped on every swap so a stale async reveal bails
+
+  /* ---- tiny helpers (ES5) ---- */
+  function esc(s) {
+    if (s === null || typeof s === "undefined") return "";
+    return ("" + s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function round3(v) { return Math.round(v * 1000) / 1000; }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function has(o, k) { return o && typeof o[k] !== "undefined" && o[k] !== null; }
+  function initial(name) {
+    name = ("" + (name || "")).replace(/^\s+/, "");
+    return name.length ? name.charAt(0).toUpperCase() : "?";
+  }
+  function addClass(el, c) { if ((" " + el.className + " ").indexOf(" " + c + " ") < 0) el.className = (el.className + " " + c).replace(/^\s+/, ""); }
+  function removeClass(el, c) { el.className = (" " + el.className + " ").replace(" " + c + " ", " ").replace(/^\s+|\s+$/g, ""); }
+  function later(fn, ms) { window.setTimeout(fn, ms); }
+
+  /* ---- counter glyphs (ported verbatim from BoardCanvas.razor) ---- */
+  var G_HEART = '<path d="M128,222 C128,222 26,158 26,90 C26,58 50,34 82,34 C104,34 120,48 128,64 C136,48 152,34 174,34 C206,34 230,58 230,90 C230,158 128,222 128,222 Z"/>';
+  var G_HEART_BROKEN = '<path fill-rule="evenodd" d="M128,222 C128,222 26,158 26,90 C26,58 50,34 82,34 C104,34 120,48 128,64 C136,48 152,34 174,34 C206,34 230,58 230,90 C230,158 128,222 128,222 Z M132,62 L112,116 L138,128 L114,182 L128,218 L142,182 L118,128 L144,116 L124,62 Z"/>';
+  var G_SHIELD_BROKEN = '<path fill-rule="evenodd" d="M128,26 C128,26 70,48 48,54 C48,120 80,190 128,226 C176,190 208,120 208,54 C186,48 128,26 128,26 Z M132,44 L112,110 L138,122 L114,178 L128,212 L142,178 L118,122 L144,110 L124,44 Z"/>';
+  var G_DIAMOND = '<rect x="70" y="70" width="116" height="116" rx="14" transform="rotate(45 128 128)"/>';
+  function glyphSvg(g) {
+    if (g === "heart-broken") return G_HEART_BROKEN;
+    if (g === "heart-dark") return G_HEART;
+    if (g === "shield-broken") return G_SHIELD_BROKEN;
+    if (g === "diamond") return G_DIAMOND;
+    return null;
+  }
+
+  /* A counter draws as pips when it says so, or (style unset) when it has a small, TV-renderable max. */
+  function isPips(c) {
+    return c.style === "pips" || (!has(c, "style") && has(c, "max") && c.max >= 1 && c.max <= PIPCAP);
+  }
+
+  function pipHtml(glyph, svg, on, color) {
+    if (svg) {
+      var fill = !on ? "#2b313c" : (glyph === "heart-dark" ? "#0b0d10" : color);
+      var st = "fill:" + fill;
+      if (on && glyph === "heart-dark") st += ";stroke:#7f8a9c;stroke-width:12";   // "black" heart needs a rim
+      return '<span class="bparty__pip bparty__pip--' + esc(glyph) + (on ? " is-on" : "") +
+             '"><svg viewBox="0 0 256 256" style="' + st + '">' + svg + "</svg></span>";
+    }
+    var style = on ? ' style="background:' + esc(color) + ";border-color:" + esc(color) + '"' : "";
+    return '<span class="bparty__pip' + (on ? " is-on" : "") + '"' + style + "></span>";
+  }
+
+  /* One counter's value. Enemies hide their MAX (issue #129): pips draw only the marked count, number is bare. */
+  function counterHtml(c, isEnemy) {
+    var out = '<span class="bparty__val">';
+    if (isPips(c)) {
+      var svg = glyphSvg(c.glyph);
+      var color = has(c, "color") ? c.color : "#cfd6e2";
+      out += '<span class="bparty__pips">';
+      if (isEnemy) {
+        var marked = clamp(c.value, 0, PIPCAP);
+        for (var i = 0; i < marked; i++) out += pipHtml(c.glyph, svg, true, color);
+      } else {
+        var pipMax = Math.min(has(c, "max") ? c.max : 0, PIPCAP);
+        var filled = clamp(c.value, 0, pipMax);
+        for (var j = 0; j < pipMax; j++) out += pipHtml(c.glyph, svg, j < filled, color);
+      }
+      out += "</span>";
+    } else if (isEnemy) {
+      out += '<span class="bparty__num">' + esc("" + c.value) + "</span>";
+    } else {
+      out += '<span class="bparty__num">' + esc(has(c, "max") ? (c.value + "/" + c.max) : ("" + c.value)) + "</span>";
+    }
+    return out + "</span>";
+  }
+
+  function crowsHtml(counters, isEnemy) {
+    if (!counters || !counters.length) return "";
+    var out = "";
+    for (var i = 0; i < counters.length; i++) {
+      var c = counters[i];
+      out += (isEnemy ? '<div class="benemies__crow">' : '<div class="bparty__crow">') +
+             '<span class="bparty__label">' + esc(c.label) + "</span>" + counterHtml(c, isEnemy) + "</div>";
+    }
+    return out;
+  }
+
+  function partyHtml(p) {
+    if (!p || !p.players) return '<div class="party-empty"></div>';
+    var out = '<div class="bparty"><div class="bparty__list">';
+    for (var i = 0; i < p.players.length; i++) {
+      var pl = p.players[i];
+      out += '<div class="bparty__player"><div class="bparty__portrait">';
+      out += has(pl, "portraitUrl") ? '<img src="' + esc(pl.portraitUrl) + '" alt="">'
+                                    : '<span class="bparty__initial">' + esc(initial(pl.name)) + "</span>";
+      out += "</div><div class=\"bparty__info\"><div class=\"bparty__pname\">" + esc(pl.name) + "</div>";
+      var crows = crowsHtml(pl.counters, false);
+      if (crows) out += '<div class="bparty__crows">' + crows + "</div>";
+      out += "</div></div>";
+    }
+    return out + "</div></div>";
+  }
+
+  function enemiesHtml(p) {
+    if (!p || !p.enemies || !p.enemies.length) return '<div class="party-empty"></div>';
+    var out = '<div class="benemies">';
+    for (var i = 0; i < p.enemies.length; i++) {
+      var e = p.enemies[i];
+      out += '<div class="benemies__card' + (e.spotlight ? " benemies__card--spotlight" : "") + '"><div class="benemies__namerow">';
+      if (has(e, "portraitUrl")) out += '<span class="benemies__portrait"><img src="' + esc(e.portraitUrl) + '" alt=""></span>';
+      out += '<span class="benemies__name">' + esc(e.name) + "</span>";
+      if (e.spotlight && has(e, "spotlightLabel")) out += '<span class="benemies__chip">' + esc(e.spotlightLabel) + "</span>";
+      out += "</div>";
+      var crows = crowsHtml(e.counters, true);
+      if (crows) out += '<div class="benemies__crows">' + crows + "</div>";
+      out += "</div>";
+    }
+    return out + "</div>";
+  }
+
+  function fearHtml(p) {
+    var fear = null, i;
+    if (p && p.counters) {
+      for (i = 0; i < p.counters.length; i++) {
+        if (p.counters[i].key && ("" + p.counters[i].key).toLowerCase() === "fear") { fear = p.counters[i]; break; }
+      }
+    }
+    if (!fear) return '<div class="party-empty"></div>';
+    var slots = clamp(has(fear, "max") ? fear.max : 12, 1, 12);
+    var filled = clamp(fear.value, 0, slots);
+    var out = '<div class="bfear">';
+    for (i = 0; i < slots; i++) {
+      out += '<div class="bfear__skull' + (i < filled ? " is-on" : "") + '"><img src="/img/fear/skull_' + (i + 1) + '.jpg" alt=""></div>';
+    }
+    return out + "</div>";
+  }
+
+  function elementHtml(el) {
+    var pos = "left:" + round3(el.x) + "%;top:" + round3(el.y) + "%;width:" + round3(el.w) + "%;height:" + round3(el.h) + "%";
+    var inner = "";
+    if (el.kind === "image") {
+      if (has(el, "url")) inner = '<img class="el-img" src="' + esc(el.url) + '" alt="">';
+    } else if (el.kind === "text") {
+      var sz = (has(el, "size") && el.size > 0) ? el.size : 5;      // percent of stage height (renderer default 5)
+      var align = has(el, "align") ? el.align : "left";
+      var color = has(el, "color") ? el.color : "#eef2f8";
+      inner = '<div class="el-text" style="font-size:' + round3(sz) + "rem;text-align:" + esc(align) + ";color:" + esc(color) + '">' + esc(el.text || "") + "</div>";
+    } else if (el.kind === "party") {
+      inner = partyHtml(el.party);
+    } else if (el.kind === "enemies") {
+      inner = enemiesHtml(el.party);
+    } else if (el.kind === "fear") {
+      inner = fearHtml(el.party);
+    }
+    return '<div class="el" style="' + pos + '">' + inner + "</div>";
+  }
+
+  /* ---- layer builders ---- */
+  function buildImage(url) {
+    var layer = document.createElement("div");
+    layer.className = "layer layer-img";
+    layer.setAttribute("data-kind", "image");
+    var img = document.createElement("img");
+    img.alt = "";
+    img.src = url;
+    layer.appendChild(img);
+    return layer;
+  }
+
+  function buildBoard(board) {
+    var layer = document.createElement("div");
+    layer.className = "layer layer-board";
+    layer.setAttribute("data-kind", "board");
+    var bd = document.createElement("div");
+    bd.className = "board";
+    bd.style.background = has(board, "backgroundColor") ? board.backgroundColor : "#000";
+    var html = "";
+    if (has(board, "backgroundUrl")) html += '<img class="board-bg" src="' + esc(board.backgroundUrl) + '" alt="">';
+    var els = board.elements || [];
+    for (var i = 0; i < els.length; i++) html += elementHtml(els[i]);
+    bd.innerHTML = html;
+    // A vanished file must not flash a broken-image glyph on the table TV — hide any image that fails.
+    var imgs = bd.getElementsByTagName("img");
+    for (var j = 0; j < imgs.length; j++) imgs[j].onerror = hideSelf;
+    layer.appendChild(bd);
+    return layer;
+  }
+  function hideSelf() { this.style.display = "none"; }
+
+  /* ---- sizing (replaces cqh/cqw + aspect-ratio, which old TVs lack) ---- */
+  function sizeBoardLayer(layer) {
+    var bd = layer.getElementsByClassName("board")[0];
+    if (!bd) return;
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var w = vw, h = Math.round(vw * 9 / 16);          // widest 16:9 box that fits the viewport
+    if (h > vh) { h = vh; w = Math.round(vh * 16 / 9); }
+    bd.style.width = w + "px";
+    bd.style.height = h + "px";
+    // 1rem == 1% of the stage height, so every rem value equals the renderer's matching cqh value.
+    document.documentElement.style.fontSize = (h / 100) + "px";
+    sizeFear(bd);
+  }
+  // Fear skulls keep the art's 239:326 portrait ratio, capped by both the slot width and the box height.
+  function sizeFear(bd) {
+    var tracks = bd.getElementsByClassName("bfear");
+    for (var t = 0; t < tracks.length; t++) {
+      var track = tracks[t];
+      var skulls = track.getElementsByClassName("bfear__skull");
+      var n = skulls.length;
+      if (!n) continue;
+      var boxW = track.clientWidth, boxH = track.clientHeight;
+      var gap = Math.max(2, Math.round(boxH * 0.03));
+      var perCol = (boxW - gap * (n - 1)) / n;
+      var sh = Math.min(boxH, perCol * 326 / 239);
+      var sw = sh * 239 / 326;
+      for (var i = 0; i < n; i++) {
+        skulls[i].style.width = Math.floor(sw) + "px";
+        skulls[i].style.height = Math.floor(sh) + "px";
+        skulls[i].style.marginLeft = (i ? gap : 0) + "px";
+      }
+    }
+  }
+  function sizeAll() {
+    var layers = stage.getElementsByClassName("layer-board");
+    for (var i = 0; i < layers.length; i++) sizeBoardLayer(layers[i]);
+  }
+
+  /* ---- crossfade swap ---- */
+  function setIdle(show) { idle.style.display = show ? "" : "none"; }
+
+  function showLayer(next) {
+    gen++;
+    var myGen = gen;
+    var prev = cur;
+    if (!next) {                                   // clear -> fade out, show idle
+      cur = null;
+      setIdle(true);
+      if (prev) { removeClass(prev, "on"); later(function () { drop(prev); }, 700); }
+      return;
+    }
+    cur = next;
+    setIdle(false);
+    stage.appendChild(next);
+    if (next.getAttribute("data-kind") === "board") sizeBoardLayer(next);
+
+    function reveal() {
+      if (myGen !== gen) return;                   // a newer push/clear took over
+      var _reflow = next.offsetHeight;             // force a reflow so the opacity transition runs
+      addClass(next, "on");
+      if (prev) { removeClass(prev, "on"); later(function () { drop(prev); }, 700); }
+    }
+    if (next.getAttribute("data-kind") === "image") {
+      var img = next.getElementsByTagName("img")[0];
+      if (img && !img.complete) {
+        img.onload = reveal;
+        img.onerror = function () { if (myGen === gen) { drop(next); cur = prev; } };
+      } else { reveal(); }
+    } else {
+      later(reveal, 30);                           // a board has no single load event; reveal after first paint
+    }
+  }
+  function drop(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+
+  /* ---- poll loop (mirrors Tv.razor: compare rev by inequality, it resets to 1 on a server restart) ---- */
+  function apply(state) {
+    var c = state.content;
+    if (!c) { showLayer(null); return; }
+    if (c.kind === "board" && c.board) showLayer(buildBoard(c.board));
+    else if (c.kind === "image" && c.url) showLayer(buildImage(c.url));
+    else showLayer(null);
+  }
+  function poll() {
+    getJson("/tv/state?rev=" + rev, function (ok, data) {
+      if (ok && data && typeof data.rev !== "undefined" && data.rev !== rev) {
+        rev = data.rev;
+        apply(data);
+      }
+      later(poll, POLL_MS);                        // always reschedule — an offline blip just retries next tick
+    });
+  }
+  function getJson(url, cb) {
+    var x;
+    try { x = new XMLHttpRequest(); } catch (e) { cb(false, null); return; }
+    x.open("GET", url, true);
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status >= 200 && x.status < 300) {
+        var d = null;
+        try { d = JSON.parse(x.responseText); } catch (e2) {}
+        cb(true, d);
+      } else { cb(false, null); }
+    };
+    try { x.send(); } catch (e3) { cb(false, null); }
+  }
+
+  /* Best-effort screen wake lock; unsupported TV browsers just ignore it. */
+  function keepAwake() {
+    if (!("wakeLock" in navigator)) return;
+    var sentinel = null;
+    function acquire() {
+      try { navigator.wakeLock.request("screen").then(function (s) { sentinel = s; }, function () {}); } catch (e) {}
+    }
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") acquire(); });
+    acquire();
+  }
+
+  function init() {
+    stage = document.getElementById("stage");
+    idle = document.getElementById("idle");
+    keepAwake();
+    window.addEventListener("resize", sizeAll);
+    poll();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
+</body>
+</html>

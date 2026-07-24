@@ -31,7 +31,7 @@ Two projects under `src/`; the solution file lives at
   It also **hosts** the Blazor WASM panel: it project-references the UI, serves it via
   `UseBlazorFrameworkFiles()`, and falls back non-API routes to `index.html`. So the panel's API base
   address is the same origin.
-- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Boards, Party, TV, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the **TV** page is the key-free player-facing display, see `TvState` below; **Boards** (pl "Tablice") is the composable-TV-content editor, see `BoardStore`; **Party** (pl "Drużyna") is the touch ± roster tracker (`/party`) + per-player editor (`/party/{id}`), see `PartyStore`; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
+- **AmbientDirector.Ui** — Blazor WASM control panel. Pages in `Pages/` (Scenes, Screens, Music, Lights, Sounds, Events, Effects, Boards, Party, Assistant, Settings, Logs — the Assistant tab is the BYOK chat, polling `/assistant/state`, and only appears in the nav once a provider key is configured; the key-free player-facing **`/tv`** display is NOT a Blazor page — it's a static, framework-free HTML page (`wwwroot/tv.html`) so it boots on old TV browsers, see `TvState` below (the nav "TV" tab is the GM's `/tv-remote`); **Boards** (pl "Tablice") is the composable-TV-content editor, see `BoardStore`; **Party** (pl "Drużyna") is the touch ± roster tracker (`/party`) + per-player editor (`/party/{id}`), see `PartyStore`; the first-run **onboarding wizard** is an overlay, [`OnboardingWizard.razor`](src/AmbientDirector.Ui/Components/OnboardingWizard.razor), not a nav tab);
   reusable components in `Components/`; wire DTOs and editor form models in `Contracts/`; shared
   constants/helpers in `Shared/` (Palette, SceneNaming, LightFormat, UiExtensions, Icons). All server calls go
   through [ApiClient.cs](src/AmbientDirector.Ui/Services/ApiClient.cs). **UI text is localized at runtime** by the
@@ -320,8 +320,12 @@ Running the API is enough to see the panel — it builds and serves the WASM ass
   screen never needs the admin key — the only key-free data is what the GM deliberately pushed:
   `/tv/content/board/{name}` serves **only file names the currently-shown board references** (plus a shown
   party board's live member portraits — see `PartyStore`; membership checked before any disk access, so it is
-  never a file-existence oracle; the general `/images` route stays gated). Nothing is mapped at bare `/tv` (like `/screens`) so the panel's `/tv` page falls through to
-  `index.html`.
+  never a file-existence oracle; the general `/images` route stays gated). The bare `/tv` path is served in
+  Program.cs as a **static, framework-free HTML page** (`wwwroot/tv.html`) — plain HTML+JS polling `/tv/state`,
+  no Blazor — so the player display boots on old smart-TV browsers (LG webOS) that can't run the WASM panel
+  (the .NET WASM runtime needs ~Chromium 95); it renders the same content model as `BoardCanvas` (kept in sync
+  by hand). It maps ahead of `MapFallbackToFile`, and stays outside the API-key gate so the table screen needs
+  no key.
 - **First-run onboarding (#75)** — a guided setup overlay the panel shows on a fresh install. State lives in a
   nullable `OnboardingDoneUtc` column on the single-row `LightingConfig`: `GET /setup/onboarding` returns `show`
   (= the flag is still null) plus per-step "already configured" hints, and **auto-completes for upgrades** (if

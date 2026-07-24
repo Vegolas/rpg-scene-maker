@@ -3,7 +3,8 @@
 @inject Localizer L
 
 @* First-run onboarding (issue #75): a full-screen overlay hosted by MainLayout — NOT a routed page, so
-   deep links never trap anyone in it, and the chrome-less /tv route (TvLayout) never shows it. Every
+   deep links never trap anyone in it, and the player-facing /tv display (a separate static page,
+   wwwroot/tv.html — outside this SPA) never shows it. Every
    step is skippable and the whole thing can be skipped from the header; each step reuses the same setup
    components as the Settings page, so nothing here duplicates setup logic.
 

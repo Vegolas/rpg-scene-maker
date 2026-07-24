@@ -425,6 +425,22 @@ app.MapShareEndpoints();
 // The in-process MCP server (streamable HTTP) — point Claude Code / Claude Desktop at this.
 app.MapMcp("/mcp");
 
+// The player-facing /tv display is a framework-free static page (wwwroot/tv.html): plain HTML+JS that polls
+// /tv/state, so it boots on old smart-TV browsers that can't run the Blazor WASM panel (LG webOS — the .NET
+// WASM runtime needs ~Chromium 95). Mapped explicitly so it wins over MapFallbackToFile; the rest of /tv/*
+// lives in TvEndpoints, and "/tv" stays outside the API-key gate (see IsProtectedPath) so the table screen
+// needs no key.
+app.MapGet("/tv", (IWebHostEnvironment env) =>
+{
+    // Resolve via the web-root FILE PROVIDER, not WebRootPath: the API project has no physical wwwroot (the UI's
+    // assets, tv.html included, come from the static-web-assets manifest), so WebRootPath is null here but the
+    // provider still finds the file — and it also works for the published build's physical wwwroot.
+    var file = env.WebRootFileProvider.GetFileInfo("tv.html");
+    return file.Exists
+        ? Results.File(file.CreateReadStream(), "text/html; charset=utf-8")
+        : Results.NotFound();
+});
+
 // Everything that isn't an API route is the Blazor control panel.
 app.MapFallbackToFile("index.html");
 

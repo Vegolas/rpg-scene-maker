@@ -21,8 +21,9 @@ public static class TvEndpoints
 
     public static void MapTvEndpoints(this WebApplication app)
     {
-        // Nothing is mapped at the bare "/tv" path: the Blazor panel's full-screen player display lives there,
-        // so a full-page load of /tv must fall through to index.html (same trick as /sounds and /screens).
+        // The bare "/tv" path is served in Program.cs as a static, framework-free HTML page (wwwroot/tv.html)
+        // so the player-facing display boots on old smart-TV browsers that can't run the Blazor WASM panel; the
+        // routes below are its data + the GM push commands.
         // Access control: /tv, /tv/state and the read-only /tv/content/* streams stay OUTSIDE the API-key gate
         // so players' shared screens never carry the admin key — the only key-free data is what the GM
         // deliberately pushed (an image, or a board/encounter and the images it references). The push commands
